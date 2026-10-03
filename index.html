@@ -49,6 +49,7 @@ button:hover{background:color-mix(in srgb,var(--gd) 22%,var(--s2))}
 .fi button{margin-left:auto}
 .tag{color:#000;background:var(--gd);padding:0 .5rem;font-weight:800;clip-path:var(--ch)}
 @container (min-width:560px){.fa{font-size:1.7rem}}
+.hl{box-shadow:inset 0 0 0 2px var(--gd)}
 .st{display:none;padding-top:.8rem}.open .st{display:block}
 .sr{display:grid;grid-template-columns:1fr auto 1fr;gap:.15rem .7rem;font-size:.9rem;padding:.3rem 0}
 .sr .lb{color:var(--mu);text-align:center}.sr span:last-of-type{text-align:right}
@@ -110,7 +111,7 @@ function whr(L,P){
  for(const f of L){
   const ia=mid(f.a.id),ib=mid(f.b.id);if(ia===ib)continue;
   const t=Date.parse(f.date)/YR,w=f.res==='draw'?.5:dom(f),sa=f.res==='a'?w:f.res==='b'?1-w:.5,m=f.title?1+P.title:1;
-  const na={t,r:0,gs:[],f:f.id,id:ia,dt:f.date},nb={t,r:0,gs:[],f:f.id,id:ib,dt:f.date};
+  const na={t,r:0,gs:[],f:f.id,id:ia,dt:f.date,ti:!!f.title},nb={t,r:0,gs:[],f:f.id,id:ib,dt:f.date,ti:!!f.title};
   na.gs.push({o:nb,s:sa,m});nb.gs.push({o:na,s:1-sa,m});
   for(const [id,n] of [[ia,na],[ib,nb]]){if(!N.has(id))N.set(id,[]);N.get(id).push(n)}
  }
@@ -128,9 +129,13 @@ function whr(L,P){
   return mx};
  const A=[...N.values()];
  for(let it=0;it<40;it++){let mx=0;for(const a of A)mx=Math.max(mx,solve(a));if(mx<2e-3)break}
- const rows=[...N].map(([id,a])=>{let w=0,l=0,d=0,pk=a[0];
-  for(const x of a){const s=x.gs[0].s;s>.5?w++:s<.5?l++:d++;if(x.r>pk.r)pk=x}
-  return{id,n:a.length,w,l,d,last:a.at(-1).dt,cur:1500+U*a.at(-1).r,pk:1500+U*pk.r,pkd:pk.dt}});
+ let sm=0,ct=0;for(const a of A)for(const x of a){sm+=x.r;ct++}
+ const mean=ct?sm/ct:0;
+ const rows=[...N].map(([id,a])=>{let w=0,l=0,d=0,pk=a[0];const c=[];
+  for(const x of a){const s=x.gs[0].s;s>.5?w++:s<.5?l++:d++;if(x.r>pk.r)pk=x;
+   c.push((x.ti?1+P.title:1)*Math.max(0,1/(1+Math.exp(-(x.r-mean)))-.5))}
+  c.sort((u,v)=>v-u);const car=c.reduce((u,v)=>u+v,0),pea=c.slice(0,5).reduce((u,v)=>u+v,0);
+  return{id,n:a.length,w,l,d,last:a.at(-1).dt,cur:1500+U*a.at(-1).r,pk:1500+U*pk.r,pkd:pk.dt,hs:100*(car+pea)/2}});
  return{rows,N};
 }
 /* Teste cego: ajusta com dados até 2 anos antes da última luta e prevê as lutas seguintes com as notas congeladas. */
@@ -173,13 +178,15 @@ function fightRow(f){
  <div class="fi"><span>${out}</span>${f.round?`<span>R${esc(f.round)} ${esc(f.time)}</span>`:''}<span>${esc(f.div)}</span>${f.title?'<span class="tag">Cinturão</span>':''}<button data-f="${f.id}">Estatísticas</button></div><div class="st"></div></article>`;
 }
 
-function vEvent(id){
+function vEvent(id,fid){
  const e=S.ev.find(x=>x.id===id);if(!e)return M(empty());
  const fs=S.fg.filter(f=>f.ev===id).sort((a,b)=>a.ord-b.ord);
  M(`<a class="mu" href="#/events">Todos os eventos</a><h1>${esc(e.name)}</h1><p class="mu" style="margin-top:-.6rem">${fmt(e.date)}, ${esc(e.location)}</p>${fs.map(fightRow).join('')||empty()}`);
  $('#m').onclick=ev=>{const b=ev.target.closest('button[data-f]');if(!b)return;
   const a=b.closest('.fight'),f=fs.find(x=>x.id===b.dataset.f),st=a.querySelector('.st');
   if(!st.innerHTML)st.innerHTML=statRows(f);a.classList.toggle('open')};
+ if(fid){const a=document.getElementById('f'+fid),f=fs.find(x=>x.id===fid);
+  if(a&&f){a.querySelector('.st').innerHTML=statRows(f);a.classList.add('open','hl');a.scrollIntoView({block:'center'})}}
 }
 
 function vRank(){
@@ -192,16 +199,18 @@ function vRank(){
  <details class="card"><summary>Como a nota é calculada</summary>
  <p><b>Base:</b> Whole-History Rating (Coulom, 2008), um modelo bayesiano que estima a nota de cada lutador <i>em cada luta</i>. A chance de vitória segue a curva de Bradley–Terry (1952) e Elo (1978): vencer um favorito rende pouco, vencer um azarão rende muito, e perder para um favorito custa pouco.</p>
  <p><b>Visão retrospectiva:</b> a nota de um lutador varia devagar ao longo do tempo (passeio aleatório, como em modelos dinâmicos de Glickman, 1999). Por isso resultados posteriores iluminam os anteriores. Se alguém era desconhecido, mas depois se mostra de elite, a vitória sobre ele passa a valer mais, mesmo ela tendo acontecido antes. O ranking "envelhece" cada luta com o que se sabe hoje.</p>
- <p><b>Atual e Histórico:</b> o Atual usa a nota na última luta e só lista quem lutou nos últimos anos escolhidos. O Histórico não penaliza inatividade e ordena pelo <b>pico</b> da carreira.</p>
+ <p><b>Atual:</b> usa a nota da última luta e lista só quem lutou nos últimos anos escolhidos.</p>
+ <p><b>Histórico:</b> pontuação no estilo JAWS, criada no beisebol (Jaffe, 2017). É a média entre o <b>valor de carreira</b> (soma, luta a luta, de quanto a nota do lutador superava a média da divisão, com peso extra em lutas de cinturão) e o <b>valor de pico</b> (as 5 melhores lutas). Assim, reinado longo e defesas de título contam, e uma sequência curta não passa uma carreira dominante. Só entram lutas do UFC: WEC, Pride e outros eventos ficam de fora.</p>
+ <p><b>Pontos da luta</b> (ficha do lutador): 40 × (resultado − chance prevista), com bônus de cinturão e de finalização para quem vence. Mostram o quanto o resultado surpreendeu o modelo: vencer um favorito rende pouco, vencer um azarão rende muito, e quem vence nunca perde pontos. A nota em si é recalculada com todo o histórico, então não é a soma desses pontos.</p>
  <p><b>Método e cinturão:</b> finalização conta como vitória cheia, decisão conta um pouco menos (unânime, majoritária, dividida), e luta de cinturão pesa mais. São ajustes de margem de vitória com valores escolhidos por mim, não calibrados.</p>
  <p><b>Validação:</b> o teste cego ajusta o modelo só com dados até 2 anos antes da última luta e tenta prever as lutas seguintes. Mexa nos parâmetros e veja se a precisão melhora e o log-loss cai.</p>
- <p><b>Referências:</b> Elo, A. (1978) <i>The Rating of Chessplayers, Past and Present</i>. Bradley &amp; Terry (1952) <i>Biometrika</i> 39. Glickman (1999) <i>Applied Statistics</i> 48(3). Coulom (2008) Whole-History Rating, <i>Computers and Games</i>, LNCS 5131. Kovalchik (2016) <i>J. Quantitative Analysis in Sports</i> 12(3).</p></details>`);
+ <p><b>Referências:</b> Elo, A. (1978) <i>The Rating of Chessplayers, Past and Present</i>. Bradley &amp; Terry (1952) <i>Biometrika</i> 39. Glickman (1999) <i>Applied Statistics</i> 48(3). Coulom (2008) Whole-History Rating, <i>Computers and Games</i>, LNCS 5131. Jaffe, J. (2017) <i>The Cooperstown Casebook</i> (JAWS). Kovalchik (2016) <i>J. Quantitative Analysis in Sports</i> 12(3).</p></details>`);
  $('#dv').value=S.div;$('#md').value=S.mode;
  const draw=()=>{const L=scope(),E=S.E=whr(L,P),v=holdout(L,P),hist=S.mode==='hist',cut=P.act?new Date(Date.now()-P.act*YR).toISOString().slice(0,10):'';
-  const r=E.rows.filter(x=>x.n>=P.min&&(hist||!cut||x.last>=cut)).map(x=>({...x,v:hist?x.pk:x.cur})).sort((a,b)=>b.v-a.v).slice(0,150);
+  const r=E.rows.filter(x=>x.n>=P.min&&(hist||!cut||x.last>=cut)).map(x=>({...x,v:hist?x.hs:x.cur})).sort((a,b)=>b.v-a.v).slice(0,150);
   $('#cal').textContent=v&&v.n?`Teste cego: com dados até ${fmt(v.cut)}, o favorito venceu em ${(v.ok/v.n*100).toFixed(1)}% de ${v.n.toLocaleString('pt-BR')} lutas seguintes, log-loss ${(v.ll/v.n).toFixed(3)} (menor é melhor; 0,693 equivale a chutar).`:'';
   const hi=r[0]?.v,lo=r.at(-1)?.v;
-  $('#rk').innerHTML=r.length?r.map((x,i)=>`<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i+1}</span></span><span class="nm">${esc(S.F.get(x.id)?.name||x.id)}<small>${x.w}-${x.l}-${x.d}, última luta em ${fmt(x.last)}</small><i class="mb"><b style="width:${hi===lo?100:(x.v-lo)/(hi-lo)*100}%"></b></i></span><span class="rt">${Math.round(x.v)}<small>${hist?`pico em ${fmt(x.pkd).slice(-8)}, atual ${Math.round(x.cur)}`:`pico ${Math.round(x.pk)}`}</small></span></a>`).join(''):empty()};
+  $('#rk').innerHTML=r.length?r.map((x,i)=>`<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i+1}</span></span><span class="nm">${esc(S.F.get(x.id)?.name||x.id)}<small>${x.w}-${x.l}-${x.d}, última luta em ${fmt(x.last)}</small><i class="mb"><b style="width:${hi===lo?100:(x.v-lo)/(hi-lo)*100}%"></b></i></span><span class="rt">${Math.round(x.v)}<small>${hist?`nota máxima ${Math.round(x.pk)} em ${x.pkd.slice(0,4)}`:`pico ${Math.round(x.pk)}`}</small></span></a>`).join(''):empty()};
  $('#dv').onchange=e=>{S.div=e.target.value;draw()};$('#md').onchange=e=>{S.mode=e.target.value;draw()};
  let tm;document.querySelectorAll('input[data-p]').forEach(i=>i.oninput=e=>{P[e.target.dataset.p]=+e.target.value||0;try{localStorage.sumulaP2=JSON.stringify(P)}catch{}clearTimeout(tm);tm=setTimeout(draw,400)});
  draw();
@@ -225,21 +234,23 @@ function vFighter(id){
  id=mid(id);const p=S.F.get(id);if(!p)return M(empty());
  const E=S.E||(S.E=whr(scope(),S.P)),RM=new Map(E.rows.map(x=>[x.id,x])),me=RM.get(id),N=E.N.get(id)||[],nm=new Map(N.map(n=>[n.f,n])),el=r=>Math.round(1500+U*r);
  const fs=S.fg.filter(f=>mid(f.a.id)===id||mid(f.b.id)===id).sort((a,b)=>b.date<a.date?-1:1),skip=['id','name','nick','record'];
- const hist=[...fs].reverse().map(f=>{const a=mid(f.a.id)===id,o=a?f.b:f.a,r=f.res==='draw'?'E':f.res==='nc'?'SR':(f.res===(a?'a':'b')?'V':'D'),n=nm.get(f.id);
-  let ex='<span class="mu sm">fora do escopo</span>',sub='';
-  if(n){const q=n.gs[0].o;ex=`<b>${el(n.r)}</b>`;sub=`, chance ${Math.round(100/(1+Math.exp(q.r-n.r)))}%, rival na época ${el(q.r)}, pico do rival ${Math.round(RM.get(q.id).pk)}`}
-  return `<div class="h"><span class="mu">${fmt(f.date)}</span><span><b class="${r==='V'?'up':r==='D'?'dn':''}">${r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a><br><span class="mu sm">${esc(f.method)} ${f.round?'R'+esc(f.round):''}, ${esc(f.div)}${f.title?', cinturão':''}${sub}</span></span>${ex}</div>`}).join('');
+ const hist=[...fs].reverse().map(f=>{const a=mid(f.a.id)===id,o=a?f.b:f.a,r=f.res==='draw'?'E':f.res==='nc'?'SR':(f.res===(a?'a':'b')?'V':'D'),n=nm.get(f.id),lk=`#/event/${f.ev}/${f.id}`;
+  let ex=`<span class="mu sm">${f.res==='nc'?'sem pontos':'fora do escopo'}</span>`,sub='';
+  if(n){const q=n.gs[0].o,pc=1/(1+Math.exp(q.r-n.r)),m=f.title?1+S.P.title:1,dl=r==='V'?40*m*dom(f)*(1-pc):r==='D'?-40*m*pc:40*m*(.5-pc);
+   ex=`<span style="text-align:right"><b class="${dl>=0?'up':'dn'}">${dl>=0?'+':''}${dl.toFixed(1)}</b><br><span class="mu sm">nota ${el(n.r)}</span></span>`;
+   sub=`, chance ${Math.round(pc*100)}%, rival na época ${el(q.r)}, pico do rival ${Math.round(RM.get(q.id).pk)}`}
+  return `<div class="h"><a class="mu" href="${lk}" style="text-decoration:underline">${fmt(f.date)}</a><span><b class="${r==='V'?'up':r==='D'?'dn':''}">${r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a><br><span class="mu sm">${esc(f.method)} ${f.round?'R'+esc(f.round):''}, ${esc(f.div)}${f.title?', cinturão':''}${sub}</span><br><a class="sm" style="color:var(--gd)" href="${lk}">Ver luta e estatísticas</a></span>${ex}</div>`}).join('');
  M(`<a class="mu" href="#/fighters">Buscar lutadores</a>
  <div class="hero"><span class="ring big"><span>${esc(ini(p.name))}</span></span><div><h1>${esc(p.name)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}</span></div></div>
- ${me?`<div class="card" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">Nota atual, ${S.div==='ALL'?'geral':esc(S.div)}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">pico ${Math.round(me.pk)} em ${fmt(me.pkd)}<br>${me.w}-${me.l}-${me.d} no escopo</span></div>${spark(N.map(n=>({a:el(n.r),rd:0})))}</div>`:''}
+ ${me?`<div class="card" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">Nota atual, ${S.div==='ALL'?'geral':esc(S.div)}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">nota máxima ${Math.round(me.pk)} em ${me.pkd.slice(0,4)}<br>pontuação histórica ${Math.round(me.hs)}<br>${me.w}-${me.l}-${me.d} no escopo</span></div>${spark(N.map(n=>({a:el(n.r),rd:0})))}</div>`:''}
  <h2>Ficha</h2><dl class="card bio">${Object.entries(p).filter(([k])=>!skip.includes(k)).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
- <h2>Histórico</h2><p class="mu sm">Em cada luta: chance de vitória estimada com o que se sabe hoje, nota de cada lado na época, pico do rival, e a nota do lutador depois da luta (à direita).</p>${hist||empty()}`);
+ <h2>Histórico</h2><p class="mu sm">Em cada luta: pontos ganhos ou perdidos (à direita, com a nota depois da luta), chance estimada de vitória, nota dos dois na época e pico do rival. Toque na data ou em "Ver luta" para abrir a luta com todas as estatísticas.</p>${hist||empty()}`);
 }
 
 function route(){
- const [,p,id]=location.hash.split('/'),k=p||'events';
+ const [,p,id,fid]=location.hash.split('/'),k=p||'events';
  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===(k==='event'?'events':k==='fighter'?'fighters':k)));
- const run=()=>{$('#m').onclick=null;({events:vEvents,event:vEvent,ranking:vRank,fighters:vFighters,fighter:vFighter}[k]||vEvents)(decodeURIComponent(id||''));scrollTo(0,0)};
+ const run=()=>{$('#m').onclick=null;scrollTo(0,0);({events:vEvents,event:vEvent,ranking:vRank,fighters:vFighters,fighter:vFighter}[k]||vEvents)(decodeURIComponent(id||''),fid)};
  document.startViewTransition&&!matchMedia('(prefers-reduced-motion:reduce)').matches?document.startViewTransition(run):run();
 }
 init();
