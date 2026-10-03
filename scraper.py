@@ -268,7 +268,7 @@ def validate(events, fights, fighters):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-minutes", type=float, default=300)
-    ap.add_argument("--refresh", type=int, default=2,
+    ap.add_argument("--refresh", type=int, default=3,
                     help="reprocessa os N eventos mais recentes")
     args = ap.parse_args()
     t0 = time.time()
@@ -305,20 +305,34 @@ def main():
             break
         try:
             urls = event_fight_urls(e["id"])
+            ids = [uid(u) for u in urls]
             new = {}
             for i, u in enumerate(urls):
-                fid = uid(u)
+                fid = ids[i]
                 if fid in fights and e["id"] not in recent:
                     continue
                 f = parse_fight(u, e, i)
                 if f:
                     new[fid] = f
-            fights.update(new)
-            events[e["id"]] = {**e, "n": len(urls)}
-            done.add(e["id"])
-            if e["id"] in recent:
-                touched |= {x for f in new.values() for x in (f["a"]["id"], f["b"]["id"])}
-            print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: {len(new)} lutas")
+            resolved = set(new) | {x for x in ids if x in fights and e["id"] not in recent}
+            age = (date.today() - date.fromisoformat(e["date"])).days
+            # Evento só entra na base quando TODAS as lutas têm resultado
+            # (ou, se passou de 3 dias, quando pelo menos algumas têm).
+            complete = bool(ids) and (len(resolved) == len(ids) or (age >= 3 and resolved))
+            if complete:
+                fights.update(new)
+                events[e["id"]] = {**e, "n": len(urls)}
+                done.add(e["id"])
+                if e["id"] in recent:
+                    touched |= {x for f in new.values() for x in (f["a"]["id"], f["b"]["id"])}
+                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: {len(new)} lutas")
+            else:
+                for k in [k for k, f in fights.items() if f["ev"] == e["id"]]:
+                    del fights[k]
+                events.pop(e["id"], None)
+                done.discard(e["id"])
+                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: ainda não terminou, ignorado por enquanto "
+                      f"({len(resolved)}/{len(ids)} lutas com resultado)")
         except Exception as ex:  # um evento com erro não derruba a execução
             print(f"ERRO em {e['name']}: {ex}")
         if n % 5 == 0:
