@@ -115,7 +115,7 @@ function glicko(){
   age(A,f.date);age(B,f.date);
   const w=f.res==='draw'?.5:dom(f),sa=f.res==='a'?w:f.res==='b'?1-w:.5,m=f.title?1+P.title:1,pa=A.r,pb=B.r,ua=step(A,B,sa),ub=step(B,A,1-sa);
   if(A.n>=3&&B.n>=3&&f.res!=='draw'){const pw=f.res==='a'?ua.e:ub.e;ev.n++;ev.ok+=pw>.5;ev.ll-=Math.log(Math.max(pw,1e-6))}
-  for(const [X,u,s,po] of [[A,ua,sa,pb],[B,ub,1-sa,pa]]){const d=u.dr*m,b=X.r;X.r+=d;X.rd=u.rd;X.n++;X.last=f.date;s>.5?X.w++:s<.5?X.l++:X.d++;
+  for(const [X,u,s,po] of [[A,ua,sa,pb],[B,ub,1-sa,pa]]){const b=X.r,d=s>.5?Math.max(u.dr*m,0):s<.5?Math.min(u.dr*m,0):u.dr*m;X.r+=d;X.rd=u.rd;X.n++;X.last=f.date;s>.5?X.w++:s<.5?X.l++:X.d++;
    H.get(X.id).set(f.id,{e:u.e,s,b,o:po,d,a:X.r,rd:X.rd})}
  }
  const today=new Date().toISOString().slice(0,10);
@@ -169,7 +169,7 @@ function vRank(){
  <p class="mu sm" id="cal"></p><div id="rk"></div>
  <details class="card"><summary>Como a nota é calculada</summary>
  <p><b>Base:</b> sistema Glicko (Glickman, 1999). Cada lutador tem uma nota <b>r</b> e uma incerteza <b>RD</b>. A chance esperada de vitória usa a curva logística de Bradley–Terry (1952) e Elo (1978), e a incerteza do adversário reduz o peso do resultado.</p>
- <p><b>A balança:</b> vencer um favorito rende pouco e vencer um azarão rende muito. Perder para um favorito custa pouco, e perder para um azarão custa muito. Vencer quem tem nota alta e bem estabelecida vale mais do que vencer quem tem poucas lutas.</p>
+ <p><b>A balança:</b> vencer um favorito rende pouco e vencer um azarão rende muito. Perder para um favorito custa pouco, e perder para um azarão custa muito. Vencer quem tem nota alta e bem estabelecida vale mais do que vencer quem tem poucas lutas. Quem vence nunca perde pontos, e quem perde nunca ganha.</p>
  <p><b>Incerteza:</b> a RD diminui a cada luta e volta a crescer com a inatividade (Glickman, 2001, Glicko-2). O ranking ordena por <b>r − z·RD</b>, um limite inferior conservador, na mesma lógica do μ−3σ do TrueSkill (Herbrich, Minka e Graepel, 2006). Quem tem poucas lutas ou está parado há anos sobe menos.</p>
  <p><b>Método e cinturão:</b> finalizações valem vitória cheia, decisões valem um pouco menos (unânime, majoritária, dividida), e lutas de cinturão ampliam a variação. É um ajuste de margem de vitória, no espírito das variantes de Elo para esportes, mas com valores escolhidos por mim e não calibrados.</p>
  <p><b>Validação:</b> a linha acima das posições testa o modelo de forma sequencial. Cada luta é prevista só com o que se sabia antes dela, então ajustar os parâmetros e ver a precisão e o log-loss melhorarem é um jeito honesto de calibrar.</p>
