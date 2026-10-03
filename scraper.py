@@ -17,6 +17,7 @@ from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 BASE = "http://ufcstats.com"
 OUT = Path("data")
@@ -37,15 +38,58 @@ S.headers.update({
 DATE_RE = re.compile(r"([A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})")
 
 
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+CHALLENGE = "Checking your browser"  # página de verificação anti-robô do site
+_ctx = _page = None
+_solved = 0
+
+
+def _start():
+    """Abre um Chromium invisível; o site exige um navegador real."""
+    global _ctx, _page
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(headless=True,
+                                 args=["--disable-blink-features=AutomationControlled"])
+    _ctx = browser.new_context(user_agent=UA, locale="en-US",
+                               viewport={"width": 1280, "height": 800})
+    _page = _ctx.new_page()
+
+
+def _solve(url):
+    """Abre a página no navegador e espera a verificação terminar."""
+    global _solved
+    _page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    for _ in range(90):
+        time.sleep(1)
+        try:
+            html = _page.content()
+        except Exception:  # a página está recarregando
+            continue
+        if CHALLENGE not in html:
+            _solved += 1
+            if _solved <= 3:
+                print(f"Verificação do site resolvida ({_solved}).")
+            return html
+    return ""
+
+
 def get(url, tries=4):
+    if _ctx is None:
+        _start()
     for i in range(tries):
         try:
-            r = S.get(url, timeout=30)
-            if r.status_code == 200:
+            html = None
+            r = _ctx.request.get(url, timeout=30000)  # rápido, usa os cookies do navegador
+            if r.status == 200:
+                html = r.text()
+            if html is None or CHALLENGE in html:
+                html = _solve(url)
+            if html and CHALLENGE not in html:
                 time.sleep(DELAY)
-                return BeautifulSoup(r.text, "lxml")
-        except requests.RequestException:
-            pass
+                return BeautifulSoup(html, "lxml")
+        except Exception as ex:
+            print(f"aviso: tentativa {i + 1} falhou em {url}: {str(ex)[:120]}")
         time.sleep(3 * (i + 1))
     raise RuntimeError(f"falha ao baixar {url}")
 
