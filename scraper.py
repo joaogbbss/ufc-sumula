@@ -29,7 +29,12 @@ DIVS = ["Women's Strawweight", "Women's Flyweight", "Women's Bantamweight",
         "Middleweight", "Heavyweight", "Catch Weight", "Open Weight"]
 
 S = requests.Session()
-S.headers["User-Agent"] = "Mozilla/5.0 (arquivo pessoal de estatisticas UFC)"
+S.headers.update({
+    "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+})
+DATE_RE = re.compile(r"([A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})")
 
 
 def get(url, tries=4):
@@ -64,7 +69,7 @@ def save(name, obj):
 
 
 def parse_date(t):
-    for fmt in ("%B %d, %Y", "%b. %d, %Y"):
+    for fmt in ("%B %d, %Y", "%b. %d, %Y", "%b %d, %Y"):
         try:
             return datetime.strptime(t, fmt).date().isoformat()
         except ValueError:
@@ -81,21 +86,33 @@ def division(title):
 
 def list_events():
     soup = get(f"{BASE}/statistics/events/completed?page=all")
-    out = []
-    for row in soup.select("tr.b-statistics__table-row"):
-        a = row.select_one("a.b-link")
-        if not a:
+    out, seen = [], set()
+    for a in soup.select('a[href*="event-details"]'):
+        eid = uid(a["href"])
+        row = a.find_parent("tr") or a.parent
+        m = DATE_RE.search(txt(row))
+        if eid in seen or not m:
             continue
+        seen.add(eid)
         loc = row.select_one("td.b-statistics__table-col_style_big-top-padding")
-        out.append({"id": uid(a["href"]), "name": txt(a),
-                    "date": parse_date(txt(row.select_one("span.b-statistics__date"))),
+        if not loc:
+            tds = row.select("td")
+            loc = tds[-1] if tds else None
+        out.append({"id": eid, "name": txt(a), "date": parse_date(m.group(1)),
                     "location": txt(loc)})
+    if not out:
+        print("DIAGNOSTICO: titulo =", txt(soup.title), "| links na pagina =", len(soup.select("a")),
+              "| tamanho =", len(str(soup)))
+        print("INICIO DA PAGINA:", re.sub(r"\s+", " ", str(soup))[:800])
     return [e for e in out if re.fullmatch(r"\d{4}-\d\d-\d\d", e["date"])]
 
 
 def event_fight_urls(eid):
     soup = get(f"{BASE}/event-details/{eid}")
-    return [r["data-link"] for r in soup.select("tr.b-fight-details__table-row[data-link]")]
+    urls = [r["data-link"] for r in soup.select("[data-link*='fight-details']")]
+    if not urls:
+        urls = list(dict.fromkeys(a["href"] for a in soup.select("a[href*='fight-details']")))
+    return urls
 
 
 def parse_tables(s):
@@ -231,6 +248,8 @@ def main():
 
     today = date.today().isoformat()
     listed = sorted((e for e in list_events() if e["date"] <= today), key=lambda e: e["date"])
+    if not listed:
+        raise SystemExit("ERRO: nenhum evento encontrado no ufcstats.com (veja o DIAGNOSTICO acima).")
     recent = {e["id"] for e in listed[-args.refresh:]}
     todo = [e for e in reversed(listed) if e["id"] not in done or e["id"] in recent]
     print(f"{len(listed)} eventos no site, {len(todo)} para processar")
