@@ -83,8 +83,8 @@ footer{max-width:980px;margin:auto;padding:0 clamp(1rem,4vw,2rem) 1.5rem;font-si
 <script>
 const $=s=>document.querySelector(s),M=h=>$('#m').innerHTML=h;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const S={ev:[],fg:[],F:new Map(),ov:{merges:{},div:{},exclude:[]},meta:{},P:{fin:1,title:.25,z:1,yrs:4,min:3,act:0},div:'ALL',E:null};
-try{Object.assign(S.P,JSON.parse(localStorage.sumulaP||'{}'))}catch{}
+const S={ev:[],fg:[],F:new Map(),ov:{merges:{},div:{},exclude:[]},meta:{},P:{vol:80,fin:1,title:.25,min:3,act:2},mode:'cur',div:'ALL',E:null};
+try{Object.assign(S.P,JSON.parse(localStorage.sumulaP2||'{}'))}catch{}
 const mid=id=>S.ov.merges[id]||id,fmt=d=>new Date(d+'T00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
 const name=x=>S.F.get(mid(x.id))?.name||x.name,ini=n=>n.split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 const empty=()=>`<p class="empty">${S.ev.length?'Nada encontrado.':'Ainda não há dados. No GitHub, abra Actions, escolha "Atualizar base UFC" e clique em Run workflow.'}</p>`;
@@ -100,27 +100,48 @@ async function init(){
  addEventListener('hashchange',route);route();
 }
 
-/* Ranking Glicko (Glickman, 1999): nota r + incerteza RD, atualizado luta a luta. */
-const Q=Math.LN10/400,RD0=300,RDMIN=45,YR=31557600000,G=rd=>1/Math.sqrt(1+3*Q*Q*rd*rd/Math.PI**2);
+/* Whole-History Rating (Coulom, 2008): estima a força de cada lutador em cada luta usando TODO o histórico, antes e depois dela. */
+const U=400/Math.LN10,YR=31557600000;
 function dom(f){const m=f.method||'';if(/^(ko|tko|sub)/i.test(m))return 1;
  return 1-(/dq|split/i.test(m)?.3:/major/i.test(m)?.2:/decision/i.test(m)?.1:0)*S.P.fin}
-function glicko(){
- const P=S.P,c2=(RD0**2-RDMIN**2)/Math.max(P.yrs,.5),R=new Map(),H=new Map(),ev={n:0,ok:0,ll:0};
- const g=id=>{if(!R.has(id)){R.set(id,{id,r:1500,rd:RD0,w:0,l:0,d:0,n:0,last:''});H.set(id,new Map())}return R.get(id)};
- const age=(x,t)=>{if(x.last)x.rd=Math.min(RD0,Math.hypot(x.rd,Math.sqrt(c2*Math.max(0,(Date.parse(t)-Date.parse(x.last))/YR))))};
- const step=(X,Y,s)=>{const q=G(Y.rd),e=1/(1+Math.exp(-Q*q*(X.r-Y.r))),pre=1/X.rd**2+Q*Q*q*q*e*(1-e);return{e,dr:Q/pre*q*(s-e),rd:Math.max(RDMIN,Math.sqrt(1/pre))}};
- const L=S.fg.filter(f=>f.res!=='nc'&&(S.div==='ALL'||f.div===S.div)).sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:(y.ord||0)-(x.ord||0));
+const scope=()=>S.fg.filter(f=>f.res!=='nc'&&(S.div==='ALL'||f.div===S.div)).sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:(y.ord||0)-(x.ord||0));
+function whr(L,P){
+ const w2=(P.vol/U)**2,tau2=6.25,N=new Map();
  for(const f of L){
-  const A=g(mid(f.a.id)),B=g(mid(f.b.id));if(A===B)continue;
-  age(A,f.date);age(B,f.date);
-  const w=f.res==='draw'?.5:dom(f),sa=f.res==='a'?w:f.res==='b'?1-w:.5,m=f.title?1+P.title:1,pa=A.r,pb=B.r,ua=step(A,B,sa),ub=step(B,A,1-sa);
-  if(A.n>=3&&B.n>=3&&f.res!=='draw'){const pw=f.res==='a'?ua.e:ub.e;ev.n++;ev.ok+=pw>.5;ev.ll-=Math.log(Math.max(pw,1e-6))}
-  for(const [X,u,s,po] of [[A,ua,sa,pb],[B,ub,1-sa,pa]]){const b=X.r,d=s>.5?Math.max(u.dr*m,0):s<.5?Math.min(u.dr*m,0):u.dr*m;X.r+=d;X.rd=u.rd;X.n++;X.last=f.date;s>.5?X.w++:s<.5?X.l++:X.d++;
-   H.get(X.id).set(f.id,{e:u.e,s,b,o:po,d,a:X.r,rd:X.rd})}
+  const ia=mid(f.a.id),ib=mid(f.b.id);if(ia===ib)continue;
+  const t=Date.parse(f.date)/YR,w=f.res==='draw'?.5:dom(f),sa=f.res==='a'?w:f.res==='b'?1-w:.5,m=f.title?1+P.title:1;
+  const na={t,r:0,gs:[],f:f.id,id:ia,dt:f.date},nb={t,r:0,gs:[],f:f.id,id:ib,dt:f.date};
+  na.gs.push({o:nb,s:sa,m});nb.gs.push({o:na,s:1-sa,m});
+  for(const [id,n] of [[ia,na],[ib,nb]]){if(!N.has(id))N.set(id,[]);N.get(id).push(n)}
  }
- const today=new Date().toISOString().slice(0,10);
- const rows=[...R.values()].map(x=>{const y={...x};age(y,today);y.sc=y.r-P.z*y.rd;return y});
- return{rows,H,ev};
+ const solve=a=>{
+  const n=a.length,d=new Array(n),e=new Array(n),g=new Array(n);let mx=0;
+  for(let i=0;i<n;i++){
+   const x=a[i];let gi=0,di=0;
+   for(const k of x.gs){const p=1/(1+Math.exp(k.o.r-x.r));gi+=k.m*(k.s-p);di+=k.m*p*(1-p)}
+   if(i===0){gi-=x.r/tau2;di+=1/tau2}else{const v=w2*Math.max(x.t-a[i-1].t,.05);gi-=(x.r-a[i-1].r)/v;di+=1/v;e[i-1]=-1/v}
+   if(i<n-1){const v=w2*Math.max(a[i+1].t-x.t,.05);gi+=(a[i+1].r-x.r)/v;di+=1/v}
+   d[i]=di;g[i]=gi}
+  for(let i=1;i<n;i++){const f=e[i-1]/d[i-1];d[i]-=f*e[i-1];g[i]-=f*g[i-1]}
+  g[n-1]/=d[n-1];for(let i=n-2;i>=0;i--)g[i]=(g[i]-e[i]*g[i+1])/d[i];
+  for(let i=0;i<n;i++){const st=Math.max(-2,Math.min(2,g[i]));a[i].r+=st;mx=Math.max(mx,Math.abs(st))}
+  return mx};
+ const A=[...N.values()];
+ for(let it=0;it<40;it++){let mx=0;for(const a of A)mx=Math.max(mx,solve(a));if(mx<2e-3)break}
+ const rows=[...N].map(([id,a])=>{let w=0,l=0,d=0,pk=a[0];
+  for(const x of a){const s=x.gs[0].s;s>.5?w++:s<.5?l++:d++;if(x.r>pk.r)pk=x}
+  return{id,n:a.length,w,l,d,last:a.at(-1).dt,cur:1500+U*a.at(-1).r,pk:1500+U*pk.r,pkd:pk.dt}});
+ return{rows,N};
+}
+/* Teste cego: ajusta com dados até 2 anos antes da última luta e prevê as lutas seguintes com as notas congeladas. */
+function holdout(L,P){
+ if(!L.length)return null;
+ const cut=new Date(Date.parse(L.at(-1).date)-2*YR).toISOString().slice(0,10),cur=new Map(whr(L.filter(f=>f.date<cut),P).rows.map(x=>[x.id,x]));
+ let n=0,ok=0,ll=0;
+ for(const f of L){if(f.date<cut||f.res==='draw')continue;
+  const A=cur.get(mid(f.a.id)),B=cur.get(mid(f.b.id));if(!A||!B||A.n<3||B.n<3)continue;
+  const p=1/(1+Math.exp(-(A.cur-B.cur)/U)),pw=f.res==='a'?p:1-p;n++;ok+=pw>.5;ll-=Math.log(Math.max(pw,1e-6))}
+ return{n,ok,ll,cut};
 }
 
 function vEvents(){
@@ -163,25 +184,26 @@ function vEvent(id){
 
 function vRank(){
  const divs=[...new Set(S.fg.map(f=>f.div))].sort(),P=S.P;
- const C=[['z','Cautela com a incerteza (z)',.25],['fin','Peso do método de vitória (0 a 1)',.1],['title','Bônus de cinturão',.05],['yrs','Anos parado até incerteza máxima',1],['min','Mínimo de lutas',1],['act','Ativo nos últimos anos (0 = todos)',1]];
- M(`<h1>Rankings</h1><div class="ctl"><label>Divisão<select id="dv"><option value="ALL">Geral (todas as lutas)</option>${divs.map(d=>`<option>${esc(d)}</option>`).join('')}</select></label>
+ const C=[['vol','Volatilidade (pontos por √ano)',5],['fin','Peso do método de vitória (0 a 1)',.1],['title','Bônus de cinturão',.05],['min','Mínimo de lutas',1],['act','Ativo nos últimos anos (só na visão Atual)',1]];
+ M(`<h1>Rankings</h1><div class="ctl"><label>Visão<select id="md"><option value="cur">Atual (lutadores ativos)</option><option value="hist">Histórico (pico da carreira)</option></select></label>
+ <label>Divisão<select id="dv"><option value="ALL">Geral (todas as lutas)</option>${divs.map(d=>`<option>${esc(d)}</option>`).join('')}</select></label>
  ${C.map(([k,l,s])=>`<label>${l}<input data-p="${k}" type="number" step="${s}" min="0" value="${P[k]}"></label>`).join('')}</div>
  <p class="mu sm" id="cal"></p><div id="rk"></div>
  <details class="card"><summary>Como a nota é calculada</summary>
- <p><b>Base:</b> sistema Glicko (Glickman, 1999). Cada lutador tem uma nota <b>r</b> e uma incerteza <b>RD</b>. A chance esperada de vitória usa a curva logística de Bradley–Terry (1952) e Elo (1978), e a incerteza do adversário reduz o peso do resultado.</p>
- <p><b>A balança:</b> vencer um favorito rende pouco e vencer um azarão rende muito. Perder para um favorito custa pouco, e perder para um azarão custa muito. Vencer quem tem nota alta e bem estabelecida vale mais do que vencer quem tem poucas lutas. Quem vence nunca perde pontos, e quem perde nunca ganha.</p>
- <p><b>Incerteza:</b> a RD diminui a cada luta e volta a crescer com a inatividade (Glickman, 2001, Glicko-2). O ranking ordena por <b>r − z·RD</b>, um limite inferior conservador, na mesma lógica do μ−3σ do TrueSkill (Herbrich, Minka e Graepel, 2006). Quem tem poucas lutas ou está parado há anos sobe menos.</p>
- <p><b>Método e cinturão:</b> finalizações valem vitória cheia, decisões valem um pouco menos (unânime, majoritária, dividida), e lutas de cinturão ampliam a variação. É um ajuste de margem de vitória, no espírito das variantes de Elo para esportes, mas com valores escolhidos por mim e não calibrados.</p>
- <p><b>Validação:</b> a linha acima das posições testa o modelo de forma sequencial. Cada luta é prevista só com o que se sabia antes dela, então ajustar os parâmetros e ver a precisão e o log-loss melhorarem é um jeito honesto de calibrar.</p>
- <p><b>Referências:</b> Elo, A. (1978) <i>The Rating of Chessplayers, Past and Present</i>. Bradley &amp; Terry (1952) <i>Biometrika</i> 39. Glickman (1999) <i>Applied Statistics</i> 48(3). Glickman (2001) <i>J. Applied Statistics</i> 28(6). Herbrich, Minka &amp; Graepel (2006) TrueSkill, <i>NIPS</i> 19. Kovalchik (2016) <i>J. Quantitative Analysis in Sports</i> 12(3).</p></details>`);
- $('#dv').value=S.div;
- const draw=()=>{const E=S.E=glicko(),cut=P.act?new Date(Date.now()-P.act*YR).toISOString().slice(0,10):'';
-  const r=E.rows.filter(x=>x.n>=P.min&&(!cut||x.last>=cut)).sort((a,b)=>b.sc-a.sc).slice(0,150);
-  const v=E.ev;$('#cal').textContent=v.n?`Validação sequencial: o favorito venceu em ${(v.ok/v.n*100).toFixed(1)}% de ${v.n.toLocaleString('pt-BR')} lutas, log-loss ${(v.ll/v.n).toFixed(3)} (menor é melhor; 0,693 equivale a chutar).`:'';
-  const hi=r[0]?.sc,lo=r.at(-1)?.sc;
-  $('#rk').innerHTML=r.length?r.map((x,i)=>`<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i+1}</span></span><span class="nm">${esc(S.F.get(x.id)?.name||x.id)}<small>${x.w}-${x.l}-${x.d}, última luta em ${fmt(x.last)}</small><i class="mb"><b style="width:${hi===lo?100:(x.sc-lo)/(hi-lo)*100}%"></b></i></span><span class="rt">${Math.round(x.sc)}<small>${Math.round(x.r)} ± ${Math.round(x.rd)}</small></span></a>`).join(''):empty()};
- $('#dv').onchange=e=>{S.div=e.target.value;draw()};
- document.querySelectorAll('input[data-p]').forEach(i=>i.oninput=e=>{P[e.target.dataset.p]=+e.target.value||0;try{localStorage.sumulaP=JSON.stringify(P)}catch{}draw()});
+ <p><b>Base:</b> Whole-History Rating (Coulom, 2008), um modelo bayesiano que estima a nota de cada lutador <i>em cada luta</i>. A chance de vitória segue a curva de Bradley–Terry (1952) e Elo (1978): vencer um favorito rende pouco, vencer um azarão rende muito, e perder para um favorito custa pouco.</p>
+ <p><b>Visão retrospectiva:</b> a nota de um lutador varia devagar ao longo do tempo (passeio aleatório, como em modelos dinâmicos de Glickman, 1999). Por isso resultados posteriores iluminam os anteriores. Se alguém era desconhecido, mas depois se mostra de elite, a vitória sobre ele passa a valer mais, mesmo ela tendo acontecido antes. O ranking "envelhece" cada luta com o que se sabe hoje.</p>
+ <p><b>Atual e Histórico:</b> o Atual usa a nota na última luta e só lista quem lutou nos últimos anos escolhidos. O Histórico não penaliza inatividade e ordena pelo <b>pico</b> da carreira.</p>
+ <p><b>Método e cinturão:</b> finalização conta como vitória cheia, decisão conta um pouco menos (unânime, majoritária, dividida), e luta de cinturão pesa mais. São ajustes de margem de vitória com valores escolhidos por mim, não calibrados.</p>
+ <p><b>Validação:</b> o teste cego ajusta o modelo só com dados até 2 anos antes da última luta e tenta prever as lutas seguintes. Mexa nos parâmetros e veja se a precisão melhora e o log-loss cai.</p>
+ <p><b>Referências:</b> Elo, A. (1978) <i>The Rating of Chessplayers, Past and Present</i>. Bradley &amp; Terry (1952) <i>Biometrika</i> 39. Glickman (1999) <i>Applied Statistics</i> 48(3). Coulom (2008) Whole-History Rating, <i>Computers and Games</i>, LNCS 5131. Kovalchik (2016) <i>J. Quantitative Analysis in Sports</i> 12(3).</p></details>`);
+ $('#dv').value=S.div;$('#md').value=S.mode;
+ const draw=()=>{const L=scope(),E=S.E=whr(L,P),v=holdout(L,P),hist=S.mode==='hist',cut=P.act?new Date(Date.now()-P.act*YR).toISOString().slice(0,10):'';
+  const r=E.rows.filter(x=>x.n>=P.min&&(hist||!cut||x.last>=cut)).map(x=>({...x,v:hist?x.pk:x.cur})).sort((a,b)=>b.v-a.v).slice(0,150);
+  $('#cal').textContent=v&&v.n?`Teste cego: com dados até ${fmt(v.cut)}, o favorito venceu em ${(v.ok/v.n*100).toFixed(1)}% de ${v.n.toLocaleString('pt-BR')} lutas seguintes, log-loss ${(v.ll/v.n).toFixed(3)} (menor é melhor; 0,693 equivale a chutar).`:'';
+  const hi=r[0]?.v,lo=r.at(-1)?.v;
+  $('#rk').innerHTML=r.length?r.map((x,i)=>`<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i+1}</span></span><span class="nm">${esc(S.F.get(x.id)?.name||x.id)}<small>${x.w}-${x.l}-${x.d}, última luta em ${fmt(x.last)}</small><i class="mb"><b style="width:${hi===lo?100:(x.v-lo)/(hi-lo)*100}%"></b></i></span><span class="rt">${Math.round(x.v)}<small>${hist?`pico em ${fmt(x.pkd).slice(-8)}, atual ${Math.round(x.cur)}`:`pico ${Math.round(x.pk)}`}</small></span></a>`).join(''):empty()};
+ $('#dv').onchange=e=>{S.div=e.target.value;draw()};$('#md').onchange=e=>{S.mode=e.target.value;draw()};
+ let tm;document.querySelectorAll('input[data-p]').forEach(i=>i.oninput=e=>{P[e.target.dataset.p]=+e.target.value||0;try{localStorage.sumulaP2=JSON.stringify(P)}catch{}clearTimeout(tm);tm=setTimeout(draw,400)});
  draw();
 }
 
@@ -201,17 +223,17 @@ function spark(h){
 
 function vFighter(id){
  id=mid(id);const p=S.F.get(id);if(!p)return M(empty());
- const E=S.E||(S.E=glicko()),H=E.H.get(id)||new Map(),me=E.rows.find(x=>x.id===id);
- const fs=S.fg.filter(f=>mid(f.a.id)===id||mid(f.b.id)===id).sort((a,b)=>b.date<a.date?-1:1);
- const skip=['id','name','nick','record'],ser=fs.map(f=>H.get(f.id)).filter(Boolean);
- const hist=[...fs].reverse().map(f=>{const a=mid(f.a.id)===id,o=a?f.b:f.a,r=f.res==='draw'?'E':f.res==='nc'?'SR':(f.res===(a?'a':'b')?'V':'D'),h=H.get(f.id);
-  const d=h?`<span class="${h.d>=0?'up':'dn'}">${h.d>=0?'+':''}${h.d.toFixed(1)}</span>`:'<span class="mu sm">fora do escopo</span>';
-  return `<div class="h"><span class="mu">${fmt(f.date)}</span><span><b class="${r==='V'?'up':r==='D'?'dn':''}">${r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a><br><span class="mu sm">${esc(f.method)} ${f.round?'R'+esc(f.round):''}, ${esc(f.div)}${f.title?', cinturão':''}${h?`, chance prevista ${Math.round(h.e*100)}% (rival ${Math.round(h.o)})`:''}</span></span>${d}</div>`}).join('');
+ const E=S.E||(S.E=whr(scope(),S.P)),RM=new Map(E.rows.map(x=>[x.id,x])),me=RM.get(id),N=E.N.get(id)||[],nm=new Map(N.map(n=>[n.f,n])),el=r=>Math.round(1500+U*r);
+ const fs=S.fg.filter(f=>mid(f.a.id)===id||mid(f.b.id)===id).sort((a,b)=>b.date<a.date?-1:1),skip=['id','name','nick','record'];
+ const hist=[...fs].reverse().map(f=>{const a=mid(f.a.id)===id,o=a?f.b:f.a,r=f.res==='draw'?'E':f.res==='nc'?'SR':(f.res===(a?'a':'b')?'V':'D'),n=nm.get(f.id);
+  let ex='<span class="mu sm">fora do escopo</span>',sub='';
+  if(n){const q=n.gs[0].o;ex=`<b>${el(n.r)}</b>`;sub=`, chance ${Math.round(100/(1+Math.exp(q.r-n.r)))}%, rival na época ${el(q.r)}, pico do rival ${Math.round(RM.get(q.id).pk)}`}
+  return `<div class="h"><span class="mu">${fmt(f.date)}</span><span><b class="${r==='V'?'up':r==='D'?'dn':''}">${r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a><br><span class="mu sm">${esc(f.method)} ${f.round?'R'+esc(f.round):''}, ${esc(f.div)}${f.title?', cinturão':''}${sub}</span></span>${ex}</div>`}).join('');
  M(`<a class="mu" href="#/fighters">Buscar lutadores</a>
  <div class="hero"><span class="ring big"><span>${esc(ini(p.name))}</span></span><div><h1>${esc(p.name)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}</span></div></div>
- ${me?`<div class="card" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">Nota ${S.div==='ALL'?'geral':esc(S.div)}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.sc)}</div></div><span class="mu sm" style="text-align:right">r ${Math.round(me.r)} ± ${Math.round(me.rd)}<br>${me.w}-${me.l}-${me.d} no escopo</span></div>${spark(ser)}</div>`:''}
+ ${me?`<div class="card" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">Nota atual, ${S.div==='ALL'?'geral':esc(S.div)}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">pico ${Math.round(me.pk)} em ${fmt(me.pkd)}<br>${me.w}-${me.l}-${me.d} no escopo</span></div>${spark(N.map(n=>({a:el(n.r),rd:0})))}</div>`:''}
  <h2>Ficha</h2><dl class="card bio">${Object.entries(p).filter(([k])=>!skip.includes(k)).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
- <h2>Histórico</h2><p class="mu sm">Pontos ganhos ou perdidos em cada luta, no ranking selecionado em Rankings.</p>${hist||empty()}`);
+ <h2>Histórico</h2><p class="mu sm">Em cada luta: chance de vitória estimada com o que se sabe hoje, nota de cada lado na época, pico do rival, e a nota do lutador depois da luta (à direita).</p>${hist||empty()}`);
 }
 
 function route(){
