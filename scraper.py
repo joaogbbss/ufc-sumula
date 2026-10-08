@@ -233,10 +233,40 @@ def parse_fighter(fid):
     return d
 
 
+def upcoming(limit=3):
+    """Próximos eventos (cards completos), para o app registrar previsões antes das lutas."""
+    soup = get(f"{BASE}/statistics/events/upcoming")
+    evs, seen = [], set()
+    for a in soup.select('a[href*="event-details"]'):
+        eid = uid(a["href"])
+        row = a.find_parent("tr") or a.parent
+        m = DATE_RE.search(txt(row))
+        if eid in seen or not m:
+            continue
+        seen.add(eid)
+        tds = row.select("td")
+        evs.append({"id": eid, "name": txt(a), "date": parse_date(m.group(1)),
+                    "location": txt(tds[-1]) if tds else ""})
+    today = date.today().isoformat()
+    evs = sorted((e for e in evs if re.fullmatch(r"\d{4}-\d\d-\d\d", e["date"]) and e["date"] >= today),
+                 key=lambda e: e["date"])[:limit]
+    for e in evs:
+        s = get(f"{BASE}/event-details/{e['id']}")
+        e["fights"] = []
+        for tr in s.select("tr"):
+            fl = tr.select("a[href*='fighter-details']")
+            if len(fl) >= 2:
+                cells = " ".join(txt(td) for td in tr.select("td"))
+                e["fights"].append({"a": {"id": uid(fl[0]["href"]), "name": txt(fl[0])},
+                                    "b": {"id": uid(fl[1]["href"]), "name": txt(fl[1])},
+                                    "div": division(cells), "title": "title" in cells.lower()})
+    return evs
+
+
 # ---------- validação ----------
 
-def validate(events, fights, fighters):
-    issues, used = [], set()
+def validate(events, fights, fighters, extra=()):
+    issues, used = [], set(extra)
     for f in fights.values():
         a, b = f["a"]["id"], f["b"]["id"]
         used |= {a, b}
@@ -338,7 +368,16 @@ def main():
         if n % 5 == 0:
             persist()
 
-    need = {x for f in fights.values() for x in (f["a"]["id"], f["b"]["id"])}
+    up, upids, up_ok = [], set(), False
+    try:
+        up = upcoming()
+        upids = {f[s]["id"] for e in up for f in e["fights"] for s in "ab"}
+        up_ok = True
+        print(f"Próximos eventos: {len(up)} ({sum(len(e['fights']) for e in up)} lutas)")
+    except Exception as ex:  # falha aqui não derruba a execução
+        print(f"aviso: próximos eventos não carregados: {ex}")
+
+    need = {x for f in fights.values() for x in (f["a"]["id"], f["b"]["id"])} | upids
     pending = [x for x in need if x not in fighters] + [x for x in touched if x in fighters]
     for k, fid in enumerate(pending, 1):
         if not has_time():
@@ -352,7 +391,9 @@ def main():
             persist()
 
     persist()
-    issues = validate(events, fights, fighters)
+    if up_ok:
+        save("upcoming.json", {"updated": meta["updated"], "events": up})
+    issues = validate(events, fights, fighters, upids)
     save("validation.json", {"updated": meta["updated"], "count": len(issues), "issues": issues})
     print(f"Pronto: {len(events)} eventos, {len(fights)} lutas, {len(fighters)} lutadores, "
           f"{len(issues)} avisos de validação.")

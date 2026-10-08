@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#090a0d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Súmula UFC</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpolygon points='12,1 28,1 39,12 39,28 28,39 12,39 1,28 1,12' fill='%23090a0d' stroke='%23f5c518' stroke-width='3'/%3E%3Cpolygon points='14,9 26,9 31,14 31,26 26,31 14,31 9,26 9,14' fill='%23f5c518'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -80,6 +82,7 @@ details p,details li{font-size:.9rem;color:var(--mu)}details b{color:var(--tx)}
 .pb{display:flex;height:2.4rem;margin:.7rem 0;font:800 1.3rem var(--d)}.pb i{display:flex;align-items:center;padding:0 .7rem;font-style:normal;color:#000;min-width:3rem}
 .tb{display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr;gap:.3rem .6rem;padding:.4rem 0;border-bottom:1px solid var(--ln);font-size:.88rem}
 .tb.best{color:var(--gd)}.tb.hd{color:var(--mu);font-size:.75rem}
+.pk.on{background:var(--gd);color:#000}
 .empty{padding:2rem 0;color:var(--mu)}
 footer{max-width:980px;margin:auto;padding:0 clamp(1rem,4vw,2rem) 1.5rem;font-size:.8rem;color:var(--mu)}
 @media(min-width:760px){body{padding-bottom:0}nav{position:static;border:0;background:none;backdrop-filter:none;padding:0;gap:.3rem}nav a{flex:none;padding:.4rem 1rem;box-shadow:none}nav a.on{background:var(--gd);color:#000;clip-path:var(--ch);box-shadow:none}}
@@ -93,7 +96,7 @@ footer{max-width:980px;margin:auto;padding:0 clamp(1rem,4vw,2rem) 1.5rem;font-si
 <script>
 const $=s=>document.querySelector(s),M=h=>$('#m').innerHTML=h;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const S={ev:[],fg:[],F:new Map(),ov:{merges:{},div:{},exclude:[]},meta:{},P:{vol:80,fin:1,title:.25,tw:1,min:3,act:2},mode:'cur',div:'ALL',pt:false,sim:{a:'',b:'',m:'cur',d:'ALL'},ps:{},cache:new Map(),lg:null,me:{ph:{},fav:{},note:{}}};
+const S={ev:[],fg:[],F:new Map(),ov:{merges:{},div:{},exclude:[]},meta:{},P:{vol:80,fin:1,title:.25,tw:1,min:3,act:2},mode:'cur',div:'ALL',pt:false,sim:{a:'',b:'',m:'cur',d:'ALL'},ps:{},cache:new Map(),lg:null,me:{ph:{},fav:{},note:{},log:{}},up:[],simLast:null};
 try{Object.assign(S.P,JSON.parse(localStorage.sumulaP3||'{}'))}catch{}
 try{Object.assign(S.me,JSON.parse(localStorage.sumulaMe||'{}'))}catch{}
 try{S.pt=localStorage.sumulaLang==='pt'}catch{}
@@ -109,11 +112,12 @@ const YR=31557600000,U=400/Math.LN10;
 
 async function init(){
  const g=async n=>{try{const r=await fetch('data/'+n+'.json',{cache:'no-cache'});return r.ok?r.json():null}catch{return null}};
- const [ev,fg,fi,ov,meta]=await Promise.all(['events','fights','fighters','overrides','meta'].map(g));
+ const [ev,fg,fi,ov,meta,up]=await Promise.all(['events','fights','fighters','overrides','meta','upcoming'].map(g));
  if(ov)S.ov={merges:{},div:{},exclude:[],...ov};
- S.ev=ev||[];S.meta=meta||{};(fi||[]).forEach(f=>S.F.set(f.id,f));
+ S.ev=ev||[];S.meta=meta||{};S.up=(up&&up.events)||[];(fi||[]).forEach(f=>S.F.set(f.id,f));
  S.fg=(fg||[]).filter(f=>!S.ov.exclude.includes(f.id)).map(f=>({...f,div:S.ov.div[f.id]||f.div}));
  $('#lg').onclick=()=>{S.pt=!S.pt;try{localStorage.sumulaLang=S.pt?'pt':'en'}catch{}route()};
+ if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
  addEventListener('hashchange',route);route();
 }
 
@@ -123,12 +127,13 @@ function dom(f){const m=f.method||'';if(/^(ko|tko|sub)/i.test(m))return 1;
 const scope=(d=S.div)=>S.fg.filter(f=>f.res!=='nc'&&(d==='ALL'||f.div===d)).sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:(y.ord||0)-(x.ord||0));
 const TG=(t,won)=>!t?'':({conq:won?T('won the belt','conquistou o cinturão'):T('lost the belt','perdeu o cinturão'),vago:won?T('won the vacant belt','conquistou o cinturão vago'):T('fought for the vacant belt','disputou o cinturão vago'),def:won?T('defended the belt','defendeu o cinturão'):T('fought for the belt','disputou o cinturão'),int:won?T('won the interim belt','conquistou o interino'):T('fought for the interim belt','disputou o interino')})[t];
 function whr(L,P){
- const w2=(P.vol/U)**2,tau2=6.25,N=new Map(),tag=new Map(),ch=new Map(),cnt=new Map();
+ const w2=(P.vol/U)**2,tau2=6.25,N=new Map(),tag=new Map(),ch=new Map(),cnt=new Map(),rg=[],op=new Map();
  for(const f of L){if(!f.title||(f.res!=='a'&&f.res!=='b'))continue;
   const W=mid(f[f.res].id),Lo=mid(f[f.res==='a'?'b':'a'].id),c=cnt.get(W)||{cq:0,df:0,iv:0};cnt.set(W,c);
   if(/interim/i.test(f.tt||'')){tag.set(f.id,'int');c.iv++;continue}
   const cur=ch.get(f.div);
-  if(cur===W){tag.set(f.id,'def');c.df++}else{tag.set(f.id,cur===Lo?'conq':'vago');c.cq++;ch.set(f.div,W)}}
+  const o=op.get(f.div);
+  if(cur===W){tag.set(f.id,'def');c.df++;if(o){o.def++;o.last=f.date}}else{tag.set(f.id,cur===Lo?'conq':'vago');c.cq++;ch.set(f.div,W);if(o)o.end=f.date;const n={id:W,div:f.div,start:f.date,last:f.date,end:null,def:0};op.set(f.div,n);rg.push(n)}}
  for(const f of L){
   const ia=mid(f.a.id),ib=mid(f.b.id);if(ia===ib)continue;
   const t=Date.parse(f.date)/YR,w=f.res==='draw'?.5:dom(f),sa=f.res==='a'?w:f.res==='b'?1-w:.5,m=f.title?1+P.title:1,ip=/interim/i.test(f.tt||''),ti=!!f.title;
@@ -158,9 +163,9 @@ function whr(L,P){
    s>.5?w++:s<.5?l++:d++;if(x.r>pk.r)pk=x;
    v+=(s>.5?s*(1-pf):s<.5?-pf:.5-pf)*(x.ti?(x.ip?1+P.tw/2:1+P.tw):1)}
   return{id,n:a.length,w,l,d,last:a.at(-1).dt,cur:1500+U*a.at(-1).r,pk:1500+U*pk.r,pkd:pk.dt,hs:10*v,pn:pk,ln:a.at(-1),...(cnt.get(id)||{cq:0,df:0,iv:0})}});
- return{rows,N,tag,RM:new Map(rows.map(x=>[x.id,x]))};
+ return{rows,N,tag,rg,RM:new Map(rows.map(x=>[x.id,x]))};
 }
-function getE(d){const k=d+'|'+JSON.stringify(S.P);if(!S.cache.has(k)){if(S.cache.size>6)S.cache.clear();S.cache.set(k,whr(scope(d),S.P))}return S.cache.get(k)}
+function getE(d){const k=d+'|'+JSON.stringify(S.P);if(!S.cache.has(k)){if(S.cache.size>20)S.cache.clear();S.cache.set(k,whr(scope(d),S.P))}return S.cache.get(k)}
 function holdout(L,P){
  if(!L.length)return null;
  const cut=new Date(Date.parse(L.at(-1).date)-2*YR).toISOString().slice(0,10),cur=new Map(whr(L.filter(f=>f.date<cut),P).rows.map(x=>[x.id,x]));
@@ -255,14 +260,98 @@ function lab(){
  best.p.forEach((p,i)=>{const b=Math.min(9,Math.floor(p*10));bins[b].s+=p;bins[b].y+=ys[i];bins[b].n++});
  return S.lab={key,cut,M:MS,best:best.n,bins,mF,mE,n:te.length,ntr:tr.length}}
 
+/* ---------- Extras: prediction log, P4P, reigns, upsets, head-to-head, tournament, share card ---------- */
+const STD=['Strawweight','Flyweight','Bantamweight','Featherweight','Lightweight','Welterweight','Middleweight','Light Heavyweight','Heavyweight',"Women's Strawweight","Women's Flyweight","Women's Bantamweight","Women's Featherweight"];
+const lastName=n=>String(n||'').trim().split(/\s+/).pop();
+function probs(ia,ib){
+ const R=lab();if(!R||R.none)return null;
+ const E=getE('ALL'),a=rt(ia,E,'cur'),b=rt(ib,E,'cur'),st=pre().st,A=st.get(ia),B=st.get(ib);if(!a||!b||!A||!B)return null;
+ const t=new Date().toISOString().slice(0,10),fa=feat(A,ia,t),fb=feat(B,ib,t),x=fa.map((v,i)=>v==null||fb[i]==null?0:v-fb[i]),s2=a.v+b.v;
+ const pW=sg((a.mu-b.mu)/Math.sqrt(1+Math.PI*s2/8)),pS=predLR(R.mF,{x}),pE=predLR(R.mE,{x});
+ return{pE,pW,pS,pB:(pW+pS)/2,best:R.best}}
+const pbest=o=>({Elo:o.pE,WHR:o.pW,Stats:o.pS,Blend:o.pB})[o.best];
+function drawUp(){
+ const el=$('#up');if(!el)return;const today=new Date().toISOString().slice(0,10);let dirty=false;
+ el.innerHTML=S.up.map(e=>`<h2>${esc(e.name)}</h2><p class="mu sm" style="margin-top:-.4rem">${fmt(e.date)}, ${esc(e.location)}</p>`+e.fights.map(f=>{
+  const ia=mid(f.a.id),ib=mid(f.b.id),k=`${e.id}:${ia}:${ib}`,pr=probs(ia,ib);let L=S.me.log[k];
+  if(pr&&today<=e.date&&!(L&&L.t)){L=S.me.log[k]={...(L||{}),t:Date.now(),date:e.date,a:ia,b:ib,pE:pr.pE,pW:pr.pW,pS:pr.pS,pB:pr.pB,best:pr.best};dirty=true}
+  const pk=L?.pick,pb=pr?pbest(pr):0;
+  return `<div class="card fight"><div class="fx"><a class="fa" href="#/fighter/${ia}">${esc(f.a.name)}</a><span class="ring"><span>VS</span></span><a class="fa" href="#/fighter/${ib}">${esc(f.b.name)}</a></div>
+  <div class="fi"><span>${esc(f.div)}</span>${f.title?`<span class="tag">${T('Title','Cinturão')}</span>`:''}${pr?`<span>★ ${pr.best}: <b style="color:var(--gd)">${pc(pb)}</b> / <b style="color:var(--cb)">${pc(1-pb)}</b></span><span>Elo ${pc(pr.pE)}, WHR ${pc(pr.pW)}, ${T('Stats','Estat.')} ${pc(pr.pS)}</span>`:`<span>${T('no rating yet','sem nota ainda')}</span>`}
+  <span style="margin-left:auto"><button class="pk${pk==='a'?' on':''}" data-pick="${k}:a">${esc(lastName(f.a.name))}</button> <button class="pk${pk==='b'?' on':''}" data-pick="${k}:b">${esc(lastName(f.b.name))}</button></span></div></div>`}).join('')).join('');
+ if(dirty)saveMe()}
+function scoreHtml(){
+ const rs=[];let pend=0;
+ for(const L of Object.values(S.me.log)){if(!L.a)continue;const t=Date.parse(L.date);
+  const f=S.fg.find(f=>f.res!=='nc'&&f.res!=='draw'&&Math.abs(Date.parse(f.date)-t)<=3*864e5&&((mid(f.a.id)===L.a&&mid(f.b.id)===L.b)||(mid(f.a.id)===L.b&&mid(f.b.id)===L.a)));
+  if(!f){pend++;continue}rs.push({L,y:(mid(f.a.id)===L.a)===(f.res==='a')?1:0})}
+ let h=`<p class="mu sm">${T('Predictions are frozen the first time you open an upcoming card, before the event, and scored when the result arrives. Your picks are scored too.','As previsões são congeladas na primeira vez que você abre um card futuro, antes do evento, e pontuadas quando o resultado chega. Seus palpites também são pontuados.')}</p>`;
+ if(!rs.length)return h+`<p class="mu sm">${T('No resolved predictions yet','Nenhuma previsão resolvida ainda')}. ${pend} ${T('pending','pendentes')}.</p>`;
+ const row=(n,ps,ys)=>{const e=evl(ps,ys);return `<div class="tb"><span>${n}</span><span>${ys.length}</span><span>${pc(e.acc)}</span><span>${e.ll.toFixed(3)}</span></div>`};
+ const wp=rs.filter(r=>r.L.pE!=null);
+ h+=`<div class="tb hd"><span>${T('Who','Quem')}</span><span>n</span><span>${T('Accuracy','Acerto')}</span><span>Log-loss</span></div>`;
+ if(wp.length)for(const [n,k] of [['Elo','pE'],['WHR','pW'],[T('Stats','Estatísticas'),'pS'],[T('Blend','Combinado'),'pB']])h+=row(n,wp.map(r=>r.L[k]),wp.map(r=>r.y));
+ const mine=rs.filter(r=>r.L.pick);
+ if(mine.length){const ok=mine.filter(r=>(r.L.pick==='a')===(r.y===1)).length,bw=mine.filter(r=>r.L.pE!=null);
+  h+=`<div class="tb best"><span>${T('You','Você')}</span><span>${mine.length}</span><span>${pc(ok/mine.length)}</span><span>—</span></div>`;
+  if(bw.length){const ok2=bw.filter(r=>((pbest({...r.L}))>.5)===(r.y===1)).length;h+=`<div class="tb"><span>${T('Best model, same fights','Melhor modelo, mesmas lutas')}</span><span>${bw.length}</span><span>${pc(ok2/bw.length)}</span><span></span></div>`}}
+ return h+`<p class="mu sm">${pend} ${T('still pending','ainda pendentes')}.</p>`}
+function p4p(hist){
+ const P=S.P,cut=P.act?new Date(Date.now()-P.act*YR).toISOString().slice(0,10):'',m=new Map();
+ for(const d of STD){const rs=getE(d).rows.filter(x=>x.n>=P.min&&(hist||!cut||x.last>=cut));if(rs.length<8)continue;
+  const v=x=>hist?x.hs:x.cur,mu=rs.reduce((a,x)=>a+v(x),0)/rs.length,sd=Math.sqrt(rs.reduce((a,x)=>a+(v(x)-mu)**2,0)/rs.length)||1;
+  for(const x of rs){const o=m.get(x.id);if(!o||x.n>o.n)m.set(x.id,{...x,v:(v(x)-mu)/sd,div:d})}}
+ return [...m.values()]}
+function runT(ids,d,hist){
+ const E=getE(d),R=ids.map(id=>rt(id,E,hist?'peak':'cur'));if(R.some(x=>!x))return;
+ const N=20000,w=Array(8).fill(0),fin=Array(8).fill(0),gs=()=>Math.sqrt(-2*Math.log(Math.random()+1e-12))*Math.cos(2*Math.PI*Math.random()),ord=[0,7,3,4,1,6,2,5];
+ for(let n=0;n<N;n++){const r=R.map(x=>x.mu+Math.sqrt(x.v)*gs());let al=ord;
+  while(al.length>1){const nx=[];for(let i=0;i<al.length;i+=2)nx.push(Math.random()<sg(r[al[i]]-r[al[i+1]])?al[i]:al[i+1]);if(nx.length===2)nx.forEach(k=>fin[k]++);al=nx}w[al[0]]++}
+ $('#t8o').innerHTML=`<div class="card" style="padding:.8rem 1.1rem;margin-top:.7rem">${ids.map((id,i)=>[i,id]).sort((a,b)=>w[b[0]]-w[a[0]]).map(([i,id])=>`<div class="sr" style="grid-template-columns:1fr auto auto"><span>${esc(S.F.get(id)?.name||id)}</span><b style="color:var(--gd)">${pc(w[i]/N)}</b><span class="mu">${T('final','final')} ${pc(fin[i]/N)}</span></div>`).join('')}<p class="mu sm">${T('20,000 simulated tournaments: ratings are drawn from their uncertainty each time; seeds 1v8, 4v5, 2v7, 3v6. Probabilities, not predictions.','20.000 torneios simulados: as notas são sorteadas dentro da incerteza a cada vez; chaves 1v8, 4v5, 2v7, 3v6. Probabilidades, não previsões.')}</p></div>`}
+function h2hHtml(q){
+ const ia=q.a,ib=q.b,has=(f,id)=>mid(f.a.id)===id||mid(f.b.id)===id,res=(f,id)=>f.res==='draw'?'D':f.res==='nc'?'NC':((mid(f.a.id)===id)===(f.res==='a')?'W':'L');
+ const direct=S.fg.filter(f=>has(f,ia)&&has(f,ib)).sort((x,y)=>x.date<y.date?-1:1);
+ const opp=id=>{const m=new Map();for(const f of S.fg)if(has(f,id)&&f.res!=='nc'){const o=mid(f.a.id)===id?mid(f.b.id):mid(f.a.id);if(o!==ia&&o!==ib){if(!m.has(o))m.set(o,[]);m.get(o).push(res(f,id))}}return m};
+ const oa=opp(ia),ob=opp(ib),com=[...oa.keys()].filter(k=>ob.has(k)).slice(0,8);
+ if(!direct.length&&!com.length)return '';
+ return `<h2>${T('Head-to-head and common opponents','Confronto direto e adversários em comum')}</h2><div class="card" style="padding:.8rem 1.1rem">
+  ${direct.map(f=>`<p style="margin:.3rem 0"><a style="color:var(--gd)" href="#/event/${f.ev}/${f.id}">${fmt(f.date)}</a> ${esc(S.F.get(ia)?.name)} ${res(f,ia)==='W'?T('won','venceu'):res(f,ia)==='L'?T('lost','perdeu'):T('drew','empatou')}, ${esc(f.method)} ${f.round?'R'+esc(f.round):''}</p>`).join('')}
+  ${com.map(k=>`<div class="sr"><span style="color:var(--gd)">${oa.get(k).join(' ')}</span><span class="lb">${esc(S.F.get(k)?.name||k)}</span><span style="color:var(--cb)">${ob.get(k).join(' ')}</span></div>`).join('')}
+  <p class="mu sm">${T('Weak evidence: styles, eras and weight classes differ ("MMA math"). It is shown for context and is not used in any probability.','Evidência fraca: estilos, épocas e categorias diferem ("matemática do MMA"). Serve de contexto e não entra em nenhuma probabilidade.')}</p></div>`}
+function extraLab(){
+ const E=getE('ALL'),now=Date.now(),byId=new Map(S.fg.map(f=>[f.id,f]));
+ const rg=E.rg.map(r=>{const end=r.end||(now-Date.parse(r.last)>2*YR?r.last:null);return{...r,e:end,d:((end?Date.parse(end):now)-Date.parse(r.start))/864e5}}).sort((a,b)=>b.d-a.d).slice(0,10);
+ const up=[];for(const [id,a] of E.N)for(const n of a){const g=n.gs[0];if(g.s>.5&&E.RM.get(id).n>=3&&E.RM.get(g.o.id).n>=3)up.push({n,g,p:1/(1+Math.exp(g.o.r-n.r))})}
+ up.sort((x,y)=>x.p-y.p);
+ return `<h2>${T('Longest title reigns','Reinados mais longos')}</h2><div class="card" style="padding:.6rem 1.1rem"><div class="tb hd"><span>${T('Champion','Campeão')}</span><span>${T('Period','Período')}</span><span>${T('Days','Dias')}</span><span>${T('Defenses','Defesas')}</span></div>
+ ${rg.map(r=>`<div class="tb"><span><a href="#/fighter/${r.id}">${esc(S.F.get(r.id)?.name||r.id)}</a><br><span class="mu sm">${esc(r.div)}</span></span><span>${r.start.slice(0,4)}–${r.e?r.e.slice(0,4):T('now','hoje')}</span><span>${Math.round(r.d)}</span><span>${r.def}</span></div>`).join('')}
+ <p class="mu sm">${T('Reigns are inferred from title-fight results; a champion who vacated is closed at the last title activity.','Os reinados são deduzidos dos resultados das lutas de título; quem deixou o cinturão vago é encerrado na última atividade de título.')}</p></div>
+ <h2>${T('Biggest upsets','Maiores zebras')}</h2><div class="card" style="padding:.6rem 1.1rem">${up.slice(0,10).map(u=>{const f=byId.get(u.n.f);return `<div class="h" style="grid-template-columns:1fr auto"><span><a href="#/event/${f?.ev}/${u.n.f}"><b>${esc(S.F.get(u.n.id)?.name||u.n.id)}</b></a> ${T('beat','venceu')} ${esc(S.F.get(u.g.o.id)?.name||u.g.o.id)}<br><span class="mu sm">${fmt(u.n.dt)}, ${esc(f?.method||'')}</span></span><b class="up">${pc(u.p)}</b></div>`}).join('')}<p class="mu sm">${T('Pre-fight win chance of the winner according to the WHR rating (with hindsight). Only fighters with 3+ fights.','Chance de vitória do vencedor antes da luta segundo o WHR (com visão retrospectiva). Só lutadores com 3+ lutas.')}</p></div>
+ <h2>${T('Prediction log and scorecard','Registro de previsões e placar')}</h2><div class="card" style="padding:.8rem 1.1rem">${scoreHtml()}</div>`}
+function shareCard(){
+ const o=S.simLast;if(!o)return;const c=document.createElement('canvas');c.width=1080;c.height=1350;const x=c.getContext('2d'),F='"Big Shoulders Display",Impact,"Arial Narrow",sans-serif';
+ x.fillStyle='#090a0d';x.fillRect(0,0,1080,1350);x.strokeStyle='rgba(255,255,255,.045)';x.lineWidth=1;
+ for(let i=-1350;i<1080;i+=40){x.beginPath();x.moveTo(i,0);x.lineTo(i+1350,1350);x.stroke();x.beginPath();x.moveTo(i+1350,0);x.lineTo(i,1350);x.stroke()}
+ x.strokeStyle='#f5c518';x.lineWidth=8;x.beginPath();for(let i=0;i<8;i++){const a=Math.PI/8+i*Math.PI/4,px=540+640*Math.cos(a),py=675+640*Math.sin(a);i?x.lineTo(px,py):x.moveTo(px,py)}x.closePath();x.stroke();
+ x.textAlign='center';x.fillStyle='#f5c518';x.font=`900 54px ${F}`;x.fillText('SÚMULA UFC',540,170);
+ const fit=(t,y,col,px)=>{let z=px;x.font=`900 ${z}px ${F}`;while(x.measureText(t).width>860&&z>40){z-=4;x.font=`900 ${z}px ${F}`}x.fillStyle=col;x.fillText(t,540,y)};
+ fit(o.A.name.toUpperCase(),420,'#f5c518',120);x.fillStyle='#8b94a5';x.font=`800 50px ${F}`;x.fillText('VS',540,520);fit(o.B.name.toUpperCase(),640,'#6c8cff',120);
+ x.font=`900 190px ${F}`;x.fillStyle='#f5c518';x.textAlign='left';x.fillText((o.p*100).toFixed(0)+'%',130,900);x.fillStyle='#6c8cff';x.textAlign='right';x.fillText(((1-o.p)*100).toFixed(0)+'%',950,900);
+ x.fillStyle='#f5c518';x.fillRect(130,950,820*o.p,26);x.fillStyle='#6c8cff';x.fillRect(130+820*o.p,950,820*(1-o.p),26);
+ x.textAlign='center';x.fillStyle='#8b94a5';x.font='500 34px Archivo,Arial,sans-serif';x.fillText(`${T('90% interval for','Intervalo de 90% para')} ${lastName(o.A.name)}: ${(o.lo*100).toFixed(0)}–${(o.hi*100).toFixed(0)}%`,540,1040);
+ x.fillText(o.m==='peak'?T('Career peak','Pico da carreira'):T('Current form','Momento atual'),540,1090);x.fillText(new Date().toLocaleDateString(S.pt?'pt-BR':'en-US'),540,1140);
+ c.toBlob(b=>{const f=new File([b],'sumula.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f],title:'Súmula UFC'}).catch(()=>{});else{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='sumula.png';a.click()}})}
+
 /* ---------- Views ---------- */
 function vEvents(){
- M(`<h1>${T('Events','Eventos')}</h1><input id="q" type="search" placeholder="${T('Search event, city or year','Buscar evento, cidade ou ano')}" aria-label="search"><div id="l" style="margin-top:1rem"></div>`);
+ M(`<h1>${T('Events','Eventos')}</h1>${S.up.length?`<div id="up"><p class="mu">${T('Computing predictions…','Calculando previsões…')}</p></div><h2>${T('Past events','Eventos passados')}</h2>`:''}<input id="q" type="search" placeholder="${T('Search event, city or year','Buscar evento, cidade ou ano')}" aria-label="search"><div id="l" style="margin-top:1rem"></div>`);
  const draw=()=>{const q=$('#q').value.toLowerCase();
   const r=S.ev.filter(e=>(e.name+' '+e.location+' '+e.date).toLowerCase().includes(q));
   $('#l').innerHTML=r.length?r.map(e=>{const d=new Date(e.date+'T00:00');
    return `<a class="card ev" href="#/event/${e.id}"><b class="day">${d.getDate()}</b><span class="en">${esc(e.name)}</span><span class="mu sm">${d.toLocaleDateString(S.pt?'pt-BR':'en-US',{month:'short',year:'numeric'})}, ${esc(e.location)}</span></a>`}).join(''):empty()};
  $('#q').oninput=draw;draw();
+ if(S.up.length){setTimeout(drawUp,30);
+  $('#m').onclick=e=>{const b=e.target.closest('[data-pick]');if(!b)return;const [ev,ia,ib,sd]=b.dataset.pick.split(':'),k=`${ev}:${ia}:${ib}`,E=S.up.find(x=>x.id===ev),L=S.me.log[k]||(S.me.log[k]={date:E?.date,a:ia,b:ib});L.pick=L.pick===sd?null:sd;saveMe();drawUp()}}
 }
 
 function statRows(f){
@@ -300,22 +389,24 @@ function vRank(){
  const divs=[...new Set(S.fg.map(f=>f.div))].sort(),P=S.P;
  const C=[['vol',T('Volatility (points per √year)','Volatilidade (pontos por √ano)'),5],['fin',T('Method-of-victory weight (0 to 1)','Peso do método de vitória (0 a 1)'),.1],['title',T('Title bonus in the rating','Bônus de cinturão na nota'),.05],['tw',T('Title weight in All-time','Peso do cinturão no histórico'),.25],['min',T('Minimum fights','Mínimo de lutas'),1],['act',T('Active in the last N years (Current view)','Ativo nos últimos anos (visão Atual)'),1]];
  M(`<h1>${T('Rankings','Rankings')}</h1><div class="ctl"><label>${T('View','Visão')}<select id="md"><option value="cur">${T('Current (active fighters)','Atual (lutadores ativos)')}</option><option value="hist">${T('All-time (career résumé)','Histórico (campanha da carreira)')}</option></select></label>
- <label>${T('Division','Divisão')}<select id="dv"><option value="ALL">${T('General (all fights)','Geral (todas as lutas)')}</option>${divs.map(d=>`<option>${esc(d)}</option>`).join('')}</select></label>
+ <label>${T('Division','Divisão')}<select id="dv"><option value="ALL">${T('General (all fights)','Geral (todas as lutas)')}</option><option value="P4P">${T('Pound-for-pound (z-score by division)','Pound-for-pound (z-score por divisão)')}</option>${divs.map(d=>`<option>${esc(d)}</option>`).join('')}</select></label>
  ${C.map(([k,l,s])=>`<label>${l}<input data-p="${k}" type="number" step="${s}" min="0" value="${P[k]}"></label>`).join('')}</div>
- <p class="mu sm" id="cal"></p><div id="rk"></div>
+ <p class="mu sm" id="cal"></p><div id="rk"></div><div id="tn8"></div>
  <details class="card"><summary>${T('How the numbers are calculated','Como os números são calculados')}</summary>
  <p><b>${T('Strength','Força')}:</b> ${T('Whole-History Rating (Coulom, 2008) estimates each fighter\'s rating at every fight using the entire history, before and after it, so a win over someone who later became elite is worth more. Win chance follows the Bradley–Terry/Elo logistic curve (1952, 1978); ratings drift slowly over time like a random walk (Glickman, 1999). Beating a favorite pays little, beating an underdog pays a lot.','O Whole-History Rating (Coulom, 2008) estima a nota de cada lutador em cada luta usando todo o histórico, antes e depois dela, então uma vitória sobre quem depois virou elite vale mais. A chance de vitória segue a curva logística de Bradley–Terry/Elo (1952, 1978), e a nota varia devagar no tempo como um passeio aleatório (Glickman, 1999). Vencer um favorito rende pouco, vencer um azarão rende muito.')}</p>
  <p><b>${T('Current','Atual')}:</b> ${T('rating at the last fight, only fighters active in the last N years.','nota na última luta, só de quem lutou nos últimos N anos.')}</p>
  <p><b>${T('All-time','Histórico')}:</b> ${T('ranks résumés, not strength. A win is worth 1 − p and a loss −p, where p is the chance that a reference elite fighter (top 15% of the division) would beat that same opponent at that time. Title fights count double (interim 1.5×). Belt wins and defenses are inferred from title-fight results (Colley, 2002; Langville & Meyer, 2012).','ordena campanhas, não força. Vitória vale 1 − p e derrota −p, onde p é a chance de um lutador de elite de referência (top 15% da divisão) vencer aquele rival na época. Lutas de cinturão pesam o dobro (interino, 1,5×). Conquistas e defesas de cinturão são deduzidas dos resultados das lutas de título (Colley, 2002; Langville & Meyer, 2012).')}</p>
  <p><b>${T('Fight points','Pontos da luta')}:</b> ${T('40 × (result − win chance), with title and finish bonuses for the winner. It shows how surprising the result was; the rating itself is recomputed from the full history.','40 × (resultado − chance prevista), com bônus de cinturão e de finalização para quem vence. Mostra o quanto o resultado surpreendeu; a nota é recalculada com todo o histórico.')}</p>
+ <p><b>Pound-for-pound:</b> ${T('each division is rated on its own and every fighter gets a z-score: how many standard deviations above the average of his division (active fighters in Current, résumé in All-time). It compares position within each division, not absolute strength between weights.','cada divisão é avaliada separadamente e cada lutador recebe um z-score: quantos desvios-padrão ele está acima da média da divisão (ativos no Atual, campanha no Histórico). Compara a posição dentro de cada divisão, não a força absoluta entre pesos.')}</p>
  <p><b>${T('Blind test','Teste cego')}:</b> ${T('the model is fitted with data up to 2 years before the last fight and predicts the fights after it. Tune the parameters and watch accuracy and log-loss.','o modelo é ajustado com dados até 2 anos antes da última luta e prevê as lutas seguintes. Ajuste os parâmetros e veja precisão e log-loss.')}</p>
  <p><b>${T('References','Referências')}:</b> Elo (1978) <i>The Rating of Chessplayers</i>. Bradley &amp; Terry (1952) <i>Biometrika</i> 39. Glickman (1999) <i>Applied Statistics</i> 48(3). Coulom (2008) <i>Computers and Games</i>, LNCS 5131. Colley (2002) <i>Colley's Bias Free College Football Ranking Method</i>. Langville &amp; Meyer (2012) <i>Who's #1?</i> Govan, Langville &amp; Meyer (2009) <i>J. Quant. Anal. Sports</i> 5(1). Kovalchik (2016) <i>J. Quant. Anal. Sports</i> 12(3).</p></details>`);
  $('#dv').value=S.div;$('#md').value=S.mode;
- const draw=()=>{const L=scope(),E=getE(S.div),v=holdout(L,P),hist=S.mode==='hist',cut=P.act?new Date(Date.now()-P.act*YR).toISOString().slice(0,10):'';
-  const r=E.rows.filter(x=>x.n>=P.min&&(hist||!cut||x.last>=cut)).map(x=>({...x,v:hist?x.hs:x.cur})).sort((a,b)=>b.v-a.v).slice(0,150);
+ const draw=()=>{const p4=S.div==='P4P',dv=p4?'ALL':S.div,L=scope(dv),E=getE(dv),v=holdout(L,P),hist=S.mode==='hist',cut=P.act?new Date(Date.now()-P.act*YR).toISOString().slice(0,10):'';
+  const r=(p4?p4p(hist):E.rows.filter(x=>x.n>=P.min&&(hist||!cut||x.last>=cut)).map(x=>({...x,v:hist?x.hs:x.cur}))).sort((a,b)=>b.v-a.v).slice(0,150);
   $('#cal').textContent=v&&v.n?T(`Blind test: with data up to ${fmt(v.cut)}, the favorite won ${(v.ok/v.n*100).toFixed(1)}% of ${v.n.toLocaleString('en-US')} later fights, log-loss ${(v.ll/v.n).toFixed(3)} (lower is better; 0.693 = coin flip).`,`Teste cego: com dados até ${fmt(v.cut)}, o favorito venceu em ${(v.ok/v.n*100).toFixed(1)}% de ${v.n.toLocaleString('pt-BR')} lutas seguintes, log-loss ${(v.ll/v.n).toFixed(3)} (menor é melhor; 0,693 equivale a chutar).`):'';
   const hi=r[0]?.v,lo=r.at(-1)?.v;
-  $('#rk').innerHTML=r.length?r.map((x,i)=>`<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i+1}</span></span><span class="nm">${S.me.fav[x.id]?'★ ':''}${esc(S.F.get(x.id)?.name||x.id)}<small>${x.w}-${x.l}-${x.d}, ${T('last fight','última luta')} ${fmt(x.last)}</small><i class="mb"><b style="width:${hi===lo?100:(x.v-lo)/(hi-lo)*100}%"></b></i></span><span class="rt">${Math.round(x.v)}<small>${hist?`${T('peak rating','nota máxima')} ${Math.round(x.pk)} ${T('in','em')} ${x.pkd.slice(0,4)}${x.cq+x.df?`<br>${T('belt','cinturão')}: ${x.cq} ${T('won','conq.')}, ${x.df} ${T('def.','def.')}`:''}`:`${T('peak','pico')} ${Math.round(x.pk)}`}</small></span></a>`).join(''):empty()};
+  $('#rk').innerHTML=r.length?r.map((x,i)=>`<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i+1}</span></span><span class="nm">${S.me.fav[x.id]?'★ ':''}${esc(S.F.get(x.id)?.name||x.id)}<small>${x.w}-${x.l}-${x.d}, ${T('last fight','última luta')} ${fmt(x.last)}</small><i class="mb"><b style="width:${hi===lo?100:(x.v-lo)/(hi-lo)*100}%"></b></i></span><span class="rt">${p4?x.v.toFixed(2)+'σ':Math.round(x.v)}<small>${p4?esc(x.div):hist?`${T('peak rating','nota máxima')} ${Math.round(x.pk)} ${T('in','em')} ${x.pkd.slice(0,4)}${x.cq+x.df?`<br>${T('belt','cinturão')}: ${x.cq} ${T('won','conq.')}, ${x.df} ${T('def.','def.')}`:''}`:`${T('peak','pico')} ${Math.round(x.pk)}`}</small></span></a>`).join(''):empty();
+  $('#tn8').innerHTML=r.length>=8?`<button id="t8" style="margin-top:.4rem">${T('Simulate an 8-fighter tournament (top 8 of this list)','Simular um torneio de 8 (top 8 desta lista)')}</button><div id="t8o"></div>`:'';const bt=$('#t8');if(bt)bt.onclick=()=>runT(r.slice(0,8).map(x=>x.id),dv,hist)};
  $('#dv').onchange=e=>{S.div=e.target.value;draw()};$('#md').onchange=e=>{S.mode=e.target.value;draw()};
  let tm;document.querySelectorAll('input[data-p]').forEach(i=>i.oninput=e=>{P[e.target.dataset.p]=+e.target.value||0;try{localStorage.sumulaP3=JSON.stringify(P)}catch{}clearTimeout(tm);tm=setTimeout(draw,400)});
  draw();
@@ -331,7 +422,7 @@ function vFighters(){
   $('#l').innerHTML=r.length?r.map(row).join(''):`<p class="empty">${q?T('No fighter found.','Nenhum lutador encontrado.'):T('Type a name to search. Your favorites (★) show up here.','Digite um nome para buscar. Seus favoritos (★) aparecem aqui.')}</p>`};
  $('#q').oninput=draw;draw();
  $('#ex').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S.me)],{type:'application/json'}));a.download='sumula-backup.json';a.click()};
- $('#im').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);S.me={ph:{...S.me.ph,...d.ph},fav:{...S.me.fav,...d.fav},note:{...S.me.note,...d.note}};saveMe();draw()}catch{alert(T('Invalid file.','Arquivo inválido.'))}})};
+ $('#im').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);S.me={ph:{...S.me.ph,...d.ph},fav:{...S.me.fav,...d.fav},note:{...S.me.note,...d.note},log:{...S.me.log,...d.log}};saveMe();draw()}catch{alert(T('Invalid file.','Arquivo inválido.'))}})};
 }
 
 function spark(h){
@@ -355,11 +446,16 @@ function vFighter(id){
    ex=`<span style="text-align:right"><b class="${dl>=0?'up':'dn'}">${dl>=0?'+':''}${dl.toFixed(1)}</b><br><span class="mu sm">${T('rating','nota')} ${el(n.r)}</span></span>`;
    sub=`, ${T('win chance','chance')} ${Math.round(pc*100)}%, ${T('opponent then','rival na época')} ${el(q.r)}, ${T('opponent peak','pico do rival')} ${Math.round(E.RM.get(q.id).pk)}`}
   return `<div class="h"><a class="mu" href="${lk}" style="text-decoration:underline">${fmt(f.date)}</a><span><b class="${r==='W'?'up':r==='L'?'dn':''}">${S.pt?{W:'V',L:'D',D:'E',NC:'SR'}[r]:r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a><br><span class="mu sm">${esc(f.method)} ${f.round?'R'+esc(f.round):''}, ${esc(f.div)}${f.title?', '+(TG(E.tag.get(f.id),r==='W')||T('title fight','cinturão')):''}${sub}</span><br><a class="sm" style="color:var(--gd)" href="${lk}">${T('View fight and stats','Ver luta e estatísticas')}</a></span>${ex}</div>`}).join('');
+ const wl=[];for(const f of fs){const n=nm.get(f.id);if(!n||f.res==='nc')continue;const a=mid(f.a.id)===id;wl.push({f,r:f.res==='draw'?'D':(f.res===(a?'a':'b')?'W':'L'),o:a?f.b:f.a,q:n.gs[0].o.r})}
+ const bw=wl.filter(x=>x.r==='W').sort((x,y)=>y.q-x.q).slice(0,3),wr=wl.filter(x=>x.r==='L').sort((x,y)=>x.q-y.q)[0],sos=wl.length?wl.reduce((a,x)=>a+x.q,0)/wl.length:null;
+ const li=(x,c)=>`<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/event/${x.f.ev}/${x.f.id}" style="color:${c}"><b>${esc(name(x.o))}</b></a><span class="mu">${fmt(x.f.date)}</span><span>${el(x.q)}</span></div>`;
+ const resume=wl.length?`<div class="card" style="padding:.8rem 1.1rem"><b>${T('Résumé highlights','Destaques da campanha')}</b>${bw.length?`<p class="mu sm" style="margin:.5rem 0 0">${T('Best wins (opponent rating then)','Melhores vitórias (nota do rival na época)')}</p>${bw.map(x=>li(x,'var(--win)')).join('')}`:''}${wr?`<p class="mu sm" style="margin:.5rem 0 0">${T('Worst loss','Pior derrota')}</p>${li(wr,'var(--loss)')}`:''}${sos!=null?`<p class="mu sm" style="margin:.6rem 0 0">${T('Strength of schedule: average opponent rating','Força do calendário: nota média dos rivais')} <b style="color:var(--tx)">${el(sos)}</b></p>`:''}</div>`:'';
  M(`<a class="mu" href="#/fighters">${T('Search fighters','Buscar lutadores')}</a>
  <div class="hero">${av(id,p.name,'big')}<div><h1>${S.me.fav[id]?'★ ':''}${esc(p.name)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}</span></div></div>
  <div class="acts"><button id="fv">${S.me.fav[id]?T('★ Favorite','★ Favorito'):T('☆ Add to favorites','☆ Favoritar')}</button><label class="btn">${T('Photo','Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id]?`<button id="rp">${T('Remove photo','Remover foto')}</button>`:''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight','Simular luta')}</a></div>
  <label class="ctl" style="display:grid"><span class="mu sm">${T('Rating scope','Escopo da nota')}</span><select id="ps">${opts.map(o=>`<option value="${esc(o)}"${o===d?' selected':''}>${o==='ALL'?T('General (all fights)','Geral (todas as lutas)'):esc(o)}</option>`).join('')}</select></label>
  ${me?`<div class="card" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">${T('Current rating','Nota atual')}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">${T('peak rating','nota máxima')} ${Math.round(me.pk)} ${T('in','em')} ${me.pkd.slice(0,4)}<br>${T('all-time score','pontuação histórica')} ${Math.round(me.hs)}${me.cq+me.df+me.iv?`<br>${T('belt','cinturão')}: ${me.cq} ${T('won','conq.')}, ${me.df} ${T('def.','def.')}${me.iv?`, ${me.iv} ${T('interim','interino')}`:''}`:''}<br>${me.w}-${me.l}-${me.d}</span></div>${spark(N.map(n=>({a:el(n.r)})))}</div>`:''}
+ ${resume}
  <h2>${T('Analysis','Análise')}</h2>${analysis(id)}
  <h2>${T('My notes','Minhas anotações')}</h2><textarea id="nt" placeholder="${T('Write anything about this fighter…','Escreva o que quiser sobre este lutador…')}">${esc(S.me.note[id]||'')}</textarea>
  <h2>${T('Profile','Ficha')}</h2><dl class="card bio">${Object.entries(p).filter(([k])=>!skip.includes(k)).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
@@ -394,7 +490,9 @@ function simOut(q){
   <div class="sr"><span style="color:var(--gd)">${esc(A.name)}</span><span></span><span style="color:var(--cb)">${esc(B.name)}</span></div>
   <p class="mu sm">${T('90% interval for A','Intervalo de 90% para A')}: ${pc(lo)} – ${pc(hi)}. ${T('Ratings','Notas')}: ${el(ra)} ± ${sd(ra)} ${T('vs','vs')} ${el(rb)} ± ${sd(rb)} (${q.m==='peak'?T('career peak','pico da carreira'):T('current form, with uncertainty growing while inactive','momento atual, com incerteza crescendo na inatividade')}).${da!==db?` ${T('Different main divisions: the rating comparison is indirect.','Divisões principais diferentes: a comparação de notas é indireta.')}`:''}</p></div>
   <h2>${T('Tale of the tape','Comparativo')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Record','Cartel'),esc(A.record),esc(B.record))}${sr(T('Height','Altura'),esc(A.Height||'-'),esc(B.Height||'-'))}${sr(T('Reach','Envergadura'),esc(A.Reach||'-'),esc(B.Reach||'-'))}${sr(T('Stance','Base'),esc(A.STANCE||'-'),esc(B.STANCE||'-'))}${sr(T('Age','Idade'),age(A.DOB),age(B.DOB))}${sr(T('Main division','Divisão principal'),esc(da),esc(db))}${sr(T('Fights used','Lutas usadas'),oa.n,ob.n)}</div>`;
- h+=models(q,p);
+ S.simLast={A,B,p,lo,hi,m:q.m};
+ h+=`<div class="acts" style="margin-top:.6rem"><button id="shr">${T('Share card','Cartão para compartilhar')}</button></div>`;
+ h+=models(q,p);h+=h2hHtml(q);
  if(!xa||!xb)return h+`<p class="empty">${T('Not enough fight stats in the database.','Sem estatísticas de luta suficientes na base.')}</p>`;
  h+=`<h2>${T('Striking and grappling profile','Perfil de trocação e solo')}</h2><div class="card" style="padding:.8rem 1.1rem">
   ${sr(T('Sig. strikes landed / min','Golpes sig. acertados / min'),f1(xa.sl),f1(xb.sl),xa.sl,xb.sl)}${sr(T('Sig. strikes absorbed / min','Golpes sig. recebidos / min'),f1(xa.ab),f1(xb.ab),xa.ab,xb.ab)}
@@ -419,7 +517,7 @@ function vSim(a,b){
  <label>${T('Rating scope','Escopo da nota')}<select id="sd"><option value="ALL">${T('General (all fights)','Geral (todas as lutas)')}</option>${divs.map(d=>`<option>${esc(d)}</option>`).join('')}</select></label></div>${pick(q,'a')}${pick(q,'b')}<div id="out"></div>`);
  $('#sm').value=q.m;$('#sd').value=q.d;
  $('#sm').onchange=e=>{q.m=e.target.value;vSim()};$('#sd').onchange=e=>{q.d=e.target.value;vSim()};
- $('#out').innerHTML=simOut(q);
+ $('#out').innerHTML=simOut(q);const sb=$('#shr');if(sb)sb.onclick=shareCard;
  $('#m').oninput=e=>{const i=e.target.closest('[data-q]');if(!i)return;const s=i.dataset.q,t=i.value.toLowerCase().trim();
   $('#r'+s).innerHTML=t?[...S.F.values()].filter(f=>(f.name+' '+f.nick).toLowerCase().includes(t)).slice(0,6).map(f=>`<button data-pk="${s}:${f.id}"><span>${esc(f.name)}</span><span class="mu">${esc(f.record)}</span></button>`).join(''):''};
  $('#m').onclick=e=>{const k=e.target.closest('[data-pk]'),c=e.target.closest('[data-clr]');
@@ -465,6 +563,7 @@ function labHtml(R){
  ${co.map(c=>`<div class="tb"><span>${FN[c.j][S.pt?1:0]}</span><span>${Math.exp(c.b).toFixed(2)}</span><span>${c.lo.toFixed(2)} – ${c.hi.toFixed(2)}</span><span class="${c.lo>1?'up':c.hi<1?'dn':'mu'}">${c.lo>1?T('more helps','mais ajuda'):c.hi<1?T('more hurts','mais atrapalha'):T('no evidence','sem evidência')}</span></div>`).join('')}
  <p class="mu sm">${T('Ridge logistic regression (λ = 1) on pre-fight differences, scaled by one standard deviation. The interval is widened (Bonferroni) because 10 variables are tested at once, so isolated weak effects are not flagged by luck. An interval that includes 1.00 means the data show no reliable effect of that variable after accounting for the others.','Regressão logística com regularização ridge (λ = 1) sobre diferenças de antes da luta, em desvios-padrão. O intervalo é ampliado (Bonferroni) porque 10 variáveis são testadas ao mesmo tempo, então efeitos fracos isolados não aparecem por sorte. Intervalo que inclui 1,00 significa que os dados não mostram efeito confiável daquela variável depois de considerar as outras.')}</p></div>
  <h2>${T('Auto-tune','Autoajuste')}</h2><div class="card" style="padding:.8rem 1.1rem"><p class="mu sm">${T('Tries 15 combinations of volatility and method-of-victory weight and picks the one with the lowest blind-test log-loss for the WHR rating. Takes a few seconds.','Testa 15 combinações de volatilidade e peso do método de vitória e escolhe a de menor log-loss no teste cego do rating WHR. Leva alguns segundos.')}</p><button id="tb">${T('Run auto-tune','Rodar autoajuste')}</button><div id="tn" class="mu sm" style="margin-top:.6rem"></div></div>
+ ${extraLab()}
  <details class="card"><summary>${T('References','Referências')}</summary><p>Brier (1950) <i>Monthly Weather Review</i> 78(1). Guo, Pleiss, Sun &amp; Weinberger (2017) <i>On Calibration of Modern Neural Networks</i>, ICML. Hoerl &amp; Kennard (1970) <i>Technometrics</i> 12(1). Coulom (2008) <i>Computers and Games</i>, LNCS 5131. Elo (1978). Bradley &amp; Terry (1952).</p></details>`}
 function tune(){
  const out=$('#tn'),jobs=[40,60,80,110,150].flatMap(v=>[0,.5,1].map(f=>[v,f])),res=[],L=scope('ALL'),keep={vol:S.P.vol,fin:S.P.fin};let i=0;
