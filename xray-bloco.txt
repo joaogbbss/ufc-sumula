@@ -1,0 +1,152 @@
+BLOCO "RAIO-X / LABORATÓRIO ESTATÍSTICO" PARA COLAR NO index.html
+==================================================================
+Módulo acoplável: só ADICIONA código. Nenhuma função, classe ou layout existente é removido ou renomeado.
+Ele se registra sozinho no roteador (window.XT = botão do menu, window.XV = rota #/xray).
+(O index.html que acompanha este arquivo já vem com tudo colado. Use este texto só se preferir colar à mão.)
+
+--------------------------------------------------------------------------------------------------
+PASSO A: CSS
+Onde: dentro do <style> do <head>, logo ANTES da linha  </style>
+--------------------------------------------------------------------------------------------------
+/* ===== Raio-X / Laboratório Estatístico (módulo acoplável) ===== */
+.seg{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1rem}.seg button.on{background:var(--gd);color:#000}
+.xs{display:grid;grid-template-columns:1fr;gap:.6rem}
+@media(min-width:620px){.xs{grid-template-columns:1fr 1fr}}
+.stk{display:flex;height:10px;margin:.5rem 0}.stk i{display:block}
+.xg{display:flex;flex-wrap:wrap;gap:.2rem .9rem;font-size:.85rem;color:var(--mu)}.xg b{color:var(--tx)}
+@media(max-width:480px){nav a{font-size:.95rem;letter-spacing:.02em}} /* cabe 6 abas no celular */
+
+--------------------------------------------------------------------------------------------------
+PASSO B: JAVASCRIPT
+Onde: no fim do <script>, logo ANTES da linha  init();
+--------------------------------------------------------------------------------------------------
+/* ======== MÓDULO RAIO-X / LABORATÓRIO ESTATÍSTICO (acoplável: remover este bloco não afeta o resto do app) ======== */
+(function(){
+ const BASE=1500,X={d:null,err:false,tab:'xray',a:'',b:'',div:'ALL',min:5,act:3,msig:400,rk:'elo',ds:'ko',ca:'Lightweight',cb:'Heavyweight'};
+ const nm=id=>S.F.get(id)?.name||id,f1=v=>v==null?'—':v.toFixed(1),f2=v=>v==null?'—':v.toFixed(2),sum=a=>a.reduce((x,y)=>x+y,0),fr=id=>X.d&&X.d.fighters[mid(id)];
+ const dvs=()=>Object.keys(X.d.divisions).filter(k=>k!=='ALL').sort(),YRMS=31557600000;
+ async function ld(){if(X.d||X.err)return;try{const r=await fetch('data/analytics.json',{cache:'no-cache'});if(!r.ok)throw new Error('x');X.d=await r.json()}catch{X.err=true}}
+
+ /* ---- cálculo do confronto: tudo vem pronto do analytics.json, aqui só há contas leves ---- */
+ function mu(a,b){
+  const A=fr(a),B=fr(b),sh=f=>BASE+(f.e-BASE)*f.n/(f.n+3),ea=sh(A),eb=sh(B),p=1/(1+10**((eb-ea)/400)),L=X.d.league;
+  const dv=A.div===B.div?A.div:'ALL',bm=X.d.divisions[dv]||X.d.divisions.ALL;
+  const mp=(at,df)=>{const k=5,sw=sum(at.w),sl=sum(df.l),lg=L.k100||1,
+   v=bm.m.map((s,i)=>{s=Math.max(s,.01);return((at.w[i]+k*s)/(sw+k))*((df.l[i]+k*s)/(sl+k))/s}),
+   tilt=Math.min(1.35,Math.max(.75,Math.sqrt((at.dli||100)/100)*Math.sqrt((df.kas||lg)/lg))); /* heurística: pegada x queixo do rival inclina só o KO */
+   v[0]*=tilt;const z=sum(v);return v.map(x=>x/z)};
+  return{a,b,A,B,ea,eb,p,dv,ma:mp(A,B),mb:mp(B,A)}}
+ function verdict(m){
+  const {A,B,p}=m,an=nm(m.a),bn=nm(m.b),L=X.d.league,fav=p>=.5?[an,p]:[bn,1-p],mx=fav[1],o=[],now=Date.now();
+  o.push(mx<.55?T(`Near coin flip: ${pc(p)} for ${an} against ${pc(1-p)} for ${bn}.`,`Confronto praticamente equilibrado: ${pc(p)} para ${an} contra ${pc(1-p)} para ${bn}.`)
+   :T(`${fav[0]} is the favorite (${pc(mx)}), with ${mx<.65?'a slight':mx<.8?'a clear':'a big'} edge in ELO.`,`${fav[0]} é o favorito (${pc(mx)}), com vantagem ${mx<.65?'ligeira':mx<.8?'clara':'grande'} no ELO.`));
+  if(A.opp&&B.opp&&Math.abs(A.opp-B.opp)>=40){const s=A.opp>B.opp?[an,A,bn,B]:[bn,B,an,A];
+   o.push(T(`${s[0]} faced tougher opposition (average rival ELO ${Math.round(s[1].opp)} vs ${Math.round(s[3].opp)}), so that record carries more weight.`,`${s[0]} enfrentou rivais mais fortes (ELO médio ${Math.round(s[1].opp)} contra ${Math.round(s[3].opp)}), então esse cartel pesa mais.`))}
+  const pw=(f,n)=>f.sl>=400&&f.ss?T(`${n} lands a knockdown about every ${Math.round(f.ss)} significant strikes (UFC average: one every ${Math.round(L.spk)}); DLI ${f.dli}.`,`${n} acerta um knockdown a cada ${Math.round(f.ss)} golpes significativos, em média (média da UFC: 1 a cada ${Math.round(L.spk)}); DLI ${f.dli}.`)
+   :T(`${n}: too few recorded strikes to judge power.`,`${n}: poucos golpes registrados para julgar a pegada.`);
+  o.push(pw(A,an));o.push(pw(B,bn));
+  for(const [f,n] of [[A,an],[B,bn]])if(f.sa>=400&&f.kas!=null){const r=f.kas/L.k100;
+   if(r>1.3)o.push(T(`${n} has a vulnerable chin: gets knocked down ${((r-1)*100).toFixed(0)}% more often than average per strike absorbed.`,`${n} tem o queixo vulnerável: cai ${((r-1)*100).toFixed(0)}% mais que a média por golpe recebido.`));
+   else if(r<.7)o.push(T(`${n} has been hard to drop: knockdowns suffered are well below average.`,`${n} tem sido difícil de derrubar: sofre bem menos knockdowns que a média.`))}
+  const fl=f=>sum(f.l)?(f.l[0]+f.l[1])/sum(f.l):null;
+  if(A.fin!=null&&fl(B)!=null)o.push(T(`${an} finishes ${p0f(A.fin)} of his wins; ${bn} has lost ${p0f(fl(B))} of his defeats by finish.`,`${an} finaliza ${p0f(A.fin)} das vitórias; ${bn} perdeu ${p0f(fl(B))} das derrotas por finalização.`));
+  if(B.fin!=null&&fl(A)!=null)o.push(T(`${bn} finishes ${p0f(B.fin)} of his wins; ${an} has lost ${p0f(fl(A))} of his defeats by finish.`,`${bn} finaliza ${p0f(B.fin)} das vitórias; ${an} perdeu ${p0f(fl(A))} das derrotas por finalização.`));
+  const w=[];
+  for(const [f,n] of [[A,an],[B,bn]]){if(f.n<5)w.push(T(`${n} has only ${f.n} fights: less reliable.`,`${n} tem só ${f.n} lutas: estimativa menos confiável.`));
+   if(f.last&&(now-Date.parse(f.last))/864e5>548)w.push(T(`${n} last fought on ${fmt(f.last)}: long layoff.`,`${n} lutou pela última vez em ${fmt(f.last)}: longa inatividade.`))}
+  if(A.div!==B.div)w.push(T(`Different main divisions (${A.div} vs ${B.div}): ELO comparison is indirect.`,`Divisões principais diferentes (${A.div} vs ${B.div}): a comparação de ELO é indireta.`));
+  return `<p>${o.join('</p><p>')}</p>${w.length?`<p class="dn sm">${w.join(' ')}</p>`:''}<p class="mu sm">${T('This is a probability, not a prediction. ELO measures record and opposition; injuries, camp and style matchups are not in the data. The winner odds come from ELO alone; lethality and finishing only shape HOW the fight tends to end (a transparent heuristic, not validated).','Isto é probabilidade, não previsão. O ELO mede cartel e nível de oposição; lesões, preparação e estilos não estão nos dados. A chance de vitória vem só do ELO; letalidade e finalização apenas moldam COMO a luta tende a acabar (heurística transparente, não validada).')}</p>`}
+ const p0f=v=>(v*100).toFixed(0)+'%';
+
+ /* ---- telas ---- */
+ const slot=s=>{const id=X[s],p=S.F.get(id);return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${s==='a'?T('Fighter A','Lutador A'):T('Fighter B','Lutador B')}</div>${p?`<div class="sel">${av(id,p.name,'sm')}<b>${esc(p.name)}</b><button data-xc="${s}">×</button></div>`:`<input data-xq="${s}" type="search" placeholder="${T('Search a fighter…','Buscar lutador…')}"><div class="res" id="xr${s}"></div>`}</div>`};
+ function tMatch(){
+  let h=`<div class="xs">${slot('a')}${slot('b')}</div>`;
+  const A=fr(X.a),B=fr(X.b);
+  if(!A||!B)return h+`<p class="empty">${X.a&&!A||X.b&&!B?T('One of the fighters has no fights in the analytics file.','Um dos lutadores não tem lutas no arquivo de análises.'):T('Pick two fighters to see the X-ray.','Escolha dois lutadores para ver o Raio-X.')}</p>`;
+  if(X.a===X.b)return h+`<p class="empty">${T('Pick two different fighters.','Escolha dois lutadores diferentes.')}</p>`;
+  const m=mu(X.a,X.b),{p}=m,kn=[ 'KO/TKO',T('Submission','Finalização'),T('Decision / other','Decisão / outros')],L=X.d.league;
+  const oa=[m.ma[0],m.ma[1],m.ma[2]+m.ma[3]].map(x=>x*p),ob=[m.mb[0],m.mb[1],m.mb[2]+m.mb[3]].map(x=>x*(1-p));
+  const rec=f=>`${sum(f.w)}-${sum(f.l)}-${f.d}`;
+  h+=`<h2>${T('Win probability','Probabilidade de vitória')}</h2><div class="card" style="padding:1rem 1.1rem"><div class="pb"><i style="flex:${p};background:var(--gd)">${pc(p)}</i><i style="flex:${1-p};background:var(--cb)">${pc(1-p)}</i></div>
+   <div class="sr"><span style="color:var(--gd)">${esc(nm(X.a))}</span><span></span><span style="color:var(--cb)">${esc(nm(X.b))}</span></div>
+   <p class="mu sm">${T('From the opposition-adjusted ELO','Calculada pelo ELO ajustado ao nível de oposição')}: ${Math.round(m.ea)} vs ${Math.round(m.eb)} (${T('small samples are pulled toward 1500','amostras pequenas são puxadas para 1500')}).</p></div>
+   <h2>${T('X-ray of the indices','Raio-X dos índices')}</h2><div class="card" style="padding:.8rem 1.1rem">
+   ${sr(T('ELO now','ELO atual'),Math.round(A.e),Math.round(B.e))}${sr(T('ELO peak','ELO máximo'),Math.round(A.pk),Math.round(B.pk))}${sr(T('Average rival ELO','ELO médio dos rivais'),f1(A.opp),f1(B.opp))}${sr(T('Best 3 wins (rival ELO)','3 melhores vitórias (ELO do rival)'),f1(A.qw),f1(B.qw))}
+   ${sr('DLI',A.dli??'—',B.dli??'—',A.dli||0,B.dli||0)}${sr(T('Knockdowns / 100 strikes','Knockdowns / 100 golpes'),f2(A.ks),f2(B.ks),A.ks||0,B.ks||0)}${sr(T('Strikes per knockdown','Golpes por knockdown'),A.ss?Math.round(A.ss):'—',B.ss?Math.round(B.ss):'—')}
+   ${sr(T('Chin: KD suffered / 100 absorbed (lower is better)','Queixo: KD sofridos / 100 recebidos (menor é melhor)'),f2(A.kas),f2(B.kas))}${sr(T('Finish rate in wins','Taxa de finalização nas vitórias'),A.fin==null?'—':p0f(A.fin),B.fin==null?'—':p0f(B.fin),A.fin||0,B.fin||0)}${sr(T('Record (W-L-D)','Cartel (V-D-E)'),rec(A),rec(B))}${sr(T('Fights','Lutas'),A.n,B.n)}
+   <p class="mu sm">${T(`UFC average: 1 knockdown per ${Math.round(L.spk)} significant strikes (${f2(L.k100)} per 100); DLI 100 = average.`,`Média da UFC: 1 knockdown a cada ${Math.round(L.spk)} golpes significativos (${f2(L.k100)} por 100); DLI 100 = média.`)}</p></div>
+   <h2>${T('How it should end','Como deve terminar')}</h2><div class="card" style="padding:.8rem 1.1rem">${kn.map((k,i)=>sr(k,pc(oa[i]),pc(ob[i]),oa[i],ob[i])).join('')}
+   <p class="mu sm">${T('Goes the distance (decision)','Vai para a decisão')}: ${pc(oa[2]+ob[2])}. ${T('Method odds blend how each fighter wins with how the opponent loses, smoothed toward the','As chances por método combinam como cada um vence com como o rival perde, suavizadas para a média de')} ${m.dv==='ALL'?T('UFC','toda a UFC'):esc(m.dv)}.</p></div>
+   <h2>${T('Verdict in plain language','Parecer em linguagem simples')}</h2><div class="card" style="padding:.8rem 1.1rem">${verdict(m)}</div>`;
+  return h}
+ const tRank=()=>`<div class="seg"><button data-xrk="elo" class="${X.rk==='elo'?'on':''}">ELO</button><button data-xrk="dli" class="${X.rk==='dli'?'on':''}">${T('Power punchers (DLI)','Pegadores (DLI)')}</button></div>
+  <div class="ctl"><label>${T('Division','Divisão')}<select data-xf="div"><option value="ALL"${X.div==='ALL'?' selected':''}>${T('All divisions','Todas as divisões')}</option>${dvs().map(d=>`<option${d===X.div?' selected':''}>${esc(d)}</option>`).join('')}</select></label>
+  <label>${T('Minimum fights','Mínimo de lutas')}<input data-xf="min" type="number" min="1" value="${X.min}"></label>
+  <label>${T('Active in the last N years (0 = all)','Ativo nos últimos N anos (0 = todos)')}<input data-xf="act" type="number" min="0" value="${X.act}"></label>
+  ${X.rk==='dli'?`<label>${T('Minimum significant strikes','Mínimo de golpes significativos')}<input data-xf="msig" type="number" min="0" step="100" value="${X.msig}"></label>`:''}</div>
+  <p class="mu sm">${X.rk==='elo'?T('Record strength weighted by opposition and by how the fights ended. 1500 = average fighter; above ~1700 = elite.','Força do cartel ponderada pela oposição e pelo desfecho das lutas. 1500 = lutador médio; acima de ~1700 = elite.'):T('Real power per strike, not volume. Small samples are shrunk toward the UFC average, so one lucky knockdown does not make a puncher. DLI 100 = UFC average.','Pegada real por golpe, não volume. Amostras pequenas são puxadas para a média da UFC, então um knockdown de sorte não faz um pegador. DLI 100 = média da UFC.')}</p><div id="xl"></div>`;
+ function fillRank(){
+  const cut=X.act?new Date(Date.now()-X.act*YRMS).toISOString().slice(0,10):'',dl=X.rk==='dli';
+  const r=Object.entries(X.d.fighters).filter(([i,f])=>(X.div==='ALL'||f.div===X.div)&&f.n>=X.min&&(!cut||f.last>=cut)&&(!dl||((f.sl||0)>=X.msig&&f.dli!=null))).sort((x,y)=>dl?y[1].dli-x[1].dli:y[1].e-x[1].e).slice(0,60);
+  $('#xl').innerHTML=r.length?r.map(([id,f],i)=>`<a class="card rk" href="#/fighter/${id}"><span class="ring"><span>${i+1}</span></span><span class="nm">${S.me.fav[id]?'★ ':''}${esc(nm(id))}<small>${dl?`${f.kd} KD ${T('in','em')} ${f.sl.toLocaleString(S.pt?'pt-BR':'en-US')} ${T('strikes','golpes')}, ${T('1 KD per','1 KD a cada')} ${Math.round(f.ss)} ${T('strikes','golpes')}`:`${sum(f.w)}-${sum(f.l)}-${f.d}, ${T('avg rival','rival médio')} ${Math.round(f.opp||0)}`}</small></span><span class="rt">${dl?f.dli:Math.round(f.e)}<small>${dl?f2(f.ks)+' KD/100':T('peak','máx')+' '+Math.round(f.pk)}</small></span></a>`).join(''):`<p class="empty">${T('No fighter matches these filters.','Nenhum lutador com esses filtros.')}</p>`}
+ function tDiv(){
+  const D=X.d.divisions,cols={ko:d=>d.m[0],sub:d=>d.m[1],dec:d=>d.m[2],r1:d=>d.r1,min:d=>d.min||0,kd:d=>d.kd||0,n:d=>d.n},ks=dvs().sort((a,b)=>cols[X.ds](D[b])-cols[X.ds](D[a])),C=['var(--gd)','var(--cb)','var(--mu)','var(--ln)'],KN=['KO/TKO',T('Sub','Final.'),T('Dec','Dec.'),T('Other','Outro')];
+  const card=(k,d)=>`<div class="card" style="padding:.8rem 1.1rem"><div style="display:flex;justify-content:space-between"><b>${k==='ALL'?T('All UFC','Toda a UFC'):esc(k)}</b><span class="mu sm">${d.n.toLocaleString(S.pt?'pt-BR':'en-US')} ${T('fights','lutas')}${d.n<40?' ('+T('small sample','amostra pequena')+')':''}</span></div>
+   <div class="stk">${d.m.map((v,i)=>`<i style="flex:${v};background:${C[i]}"></i>`).join('')}</div><div class="xg">${d.m.map((v,i)=>`<span>${KN[i]} <b>${p0f(v)}</b></span>`).join('')}</div>
+   <div class="xg" style="margin-top:.3rem"><span>${T('R1 finishes','Finaliz. no R1')} <b>${p0f(d.r1)}</b></span><span>${T('avg time','duração média')} <b>${f1(d.min)} min</b></span><span>KD/${T('fight','luta')} <b>${f2(d.kd)}</b></span><span>${T('sig. strikes/fight','golpes sig./luta')} <b>${f1(d.sl)}</b></span><span>${T('takedowns/fight','quedas/luta')} <b>${f2(d.td)}</b></span></div></div>`;
+  const a=D[X.ca],b=D[X.cb],opt=v=>dvs().map(d=>`<option${d===v?' selected':''}>${esc(d)}</option>`).join('');
+  return `<p class="mu sm">${T('Historical outcome patterns by weight class (draws and no contests excluded). Bars: KO/TKO, submission, decision, other.','Padrões históricos de desfecho por categoria (empates e lutas sem resultado excluídos). Barras: KO/TKO, finalização, decisão, outros.')}</p>
+   <div class="ctl"><label>${T('Sort by','Ordenar por')}<select data-xf="ds">${[['ko','% KO/TKO'],['sub',T('% Submission','% Finalização')],['dec',T('% Decision','% Decisão')],['r1',T('R1 finishes','Finalizações no R1')],['min',T('Average time','Duração média')],['kd','KD / '+T('fight','luta')],['n',T('Number of fights','Nº de lutas')]].map(([v,l])=>`<option value="${v}"${v===X.ds?' selected':''}>${l}</option>`).join('')}</select></label></div>
+   ${card('ALL',D.ALL)}${ks.map(k=>card(k,D[k])).join('')}
+   <h2>${T('Compare two divisions','Comparar duas divisões')}</h2><div class="ctl"><label>A<select data-xf="ca">${opt(X.ca)}</select></label><label>B<select data-xf="cb">${opt(X.cb)}</select></label></div>
+   ${a&&b?`<div class="card" style="padding:.8rem 1.1rem">${[['KO/TKO',x=>p0f(x.m[0]),x=>x.m[0]],[T('Submission','Finalização'),x=>p0f(x.m[1]),x=>x.m[1]],[T('Decision','Decisão'),x=>p0f(x.m[2]),x=>x.m[2]],[T('R1 finishes','Finaliz. no R1'),x=>p0f(x.r1),x=>x.r1],[T('Average time (min)','Duração média (min)'),x=>f1(x.min),x=>x.min||0],['KD / '+T('fight','luta'),x=>f2(x.kd),x=>x.kd||0],[T('Sig. strikes / fight','Golpes sig. / luta'),x=>f1(x.sl),x=>x.sl||0]].map(([l,fm,v])=>sr(l,fm(a),fm(b),v(a),v(b))).join('')}</div>`:''}`}
+ const gloss=()=>`<details class="card"><summary>${T('Plain-language glossary','Glossário em linguagem simples')}</summary>
+  <p><b>ELO:</b> ${T('a rating that rises when a fighter wins and falls when he loses. Beating a strong rival pays a lot, beating a weak one pays little, and a first-round KO counts more than a split decision. 1500 = average fighter.','nota que sobe quando o lutador vence e cai quando perde. Vencer um rival forte rende muito, vencer um fraco rende pouco, e um KO no 1º round vale mais que uma decisão dividida. 1500 = lutador médio.')}</p>
+  <p><b>${T('Average rival ELO','ELO médio dos rivais')}:</b> ${T('how tough his opponents were, on average, before each fight.','o quanto os adversários eram fortes, em média, antes de cada luta.')}</p>
+  <p><b>DLI:</b> ${T('Damage and Lethality Index. 100 = UFC average; 150 = lands knockdowns 50% more often per strike. It separates empty volume from real impact.','Índice de Dano e Letalidade. 100 = média da UFC; 150 = acerta knockdowns 50% mais vezes por golpe. Separa volume vazio de impacto real.')}</p>
+  <p><b>${T('Knockdowns / 100 strikes','Knockdowns / 100 golpes')}:</b> ${T('knockdowns per 100 significant strikes landed. "Strikes per knockdown" is the same idea inverted.','knockdowns a cada 100 golpes significativos acertados. "Golpes por knockdown" é a mesma ideia ao contrário.')}</p>
+  <p><b>${T('Chin','Queixo')}:</b> ${T('knockdowns suffered per 100 strikes absorbed. Lower is better.','knockdowns sofridos a cada 100 golpes recebidos. Menor é melhor.')}</p>
+  <p><b>${T('Finish rate','Taxa de finalização')}:</b> ${T('share of wins that ended by KO/TKO or submission.','parcela das vitórias que terminaram por KO/TKO ou finalização.')}</p>
+  <p class="mu">${T('Small samples are pulled toward the average, so a lucky streak does not look like elite power.','Amostras pequenas são puxadas para a média, então uma sequência de sorte não parece pegada de elite.')}</p></details>`;
+ function draw(){
+  const el=$('#xr');if(!el)return;
+  if(X.err||!X.d){el.innerHTML=`<p class="empty">${T('analytics.json not found. Run the workflow "Atualizar base UFC" once so analytics.py generates it.','analytics.json não encontrado. Rode o workflow "Atualizar base UFC" uma vez para o analytics.py gerá-lo.')}</p>`;return}
+  const tb=(k,l)=>`<button data-xt="${k}" class="${X.tab===k?'on':''}">${l}</button>`;
+  el.innerHTML=gloss()+`<div class="seg" style="margin-top:.8rem">${tb('xray',T('X-Ray: matchup','Raio-X: confronto'))}${tb('rank',T('Analytic rankings','Rankings analíticos'))}${tb('div',T('Outcomes by division','Desfechos por divisão'))}</div>`+({xray:tMatch,rank:tRank,div:tDiv}[X.tab])()+`<p class="mu sm" style="margin-top:1rem">${T('Analytics generated','Análises geradas em')} ${new Date(X.d.generated).toLocaleString(S.pt?'pt-BR':'en-US')}.</p>`;
+  if(X.tab==='rank')fillRank();
+  const m=$('#m');
+  m.onclick=e=>{const t=e.target.closest('[data-xt],[data-xp],[data-xc],[data-xrk]');if(!t)return;const d=t.dataset;
+   if(d.xt){X.tab=d.xt;draw()}else if(d.xp){const [s,id]=d.xp.split(':');X[s]=id;draw()}else if(d.xc){X[d.xc]='';draw()}else if(d.xrk){X.rk=d.xrk;draw()}};
+  m.oninput=e=>{const q=e.target.closest('[data-xq]');
+   if(q){const s=q.dataset.xq,t=q.value.toLowerCase().trim(),r=$('#xr'+s);if(r)r.innerHTML=t?[...S.F.values()].filter(f=>X.d.fighters[f.id]&&(f.name+' '+f.nick).toLowerCase().includes(t)).slice(0,6).map(f=>`<button data-xp="${s}:${f.id}"><span>${esc(f.name)}</span><span class="mu">${esc(f.record)}</span></button>`).join(''):'';return}
+   const f=e.target.closest('[data-xf]');if(!f)return;const k=f.dataset.xf;X[k]=f.type==='number'?(+f.value||0):f.value;if(X.tab==='rank')fillRank();else draw()};
+ }
+ async function vXray(a,b){
+  if(a)X.a=mid(a);if(b)X.b=mid(b);
+  M(`<h1>${T('Statistics Lab','Laboratório Estatístico')}</h1><div id="xr"><p class="mu">${T('Loading analytics…','Carregando análises…')}</p></div>`);
+  await ld();draw()}
+ window.XT=()=>[['xray',T('X-Ray','Raio-X')]];   /* entrada de menu */
+ window.XV={xray:vXray};                          /* rota #/xray (ou #/xray/IDA/IDB) */
+})();
+
+--------------------------------------------------------------------------------------------------
+PASSO C: o novo botão de navegação (DUAS inserções de uma linha, dentro da função route())
+--------------------------------------------------------------------------------------------------
+C1) Procure (aparece uma única vez):
+        ['lab','Lab']]
+    e troque por:
+        ['lab','Lab'],...(window.XT?XT():[])]
+
+C2) Procure (aparece uma única vez):
+        lab:vLab}[k]
+    e troque por:
+        lab:vLab,...(window.XV||{})}[k]
+
+Essas duas linhas só espalham, para dentro das listas já existentes, o que o módulo registrou.
+Se o bloco B não estiver colado, window.XT e window.XV não existem e o resultado é idêntico ao app de antes.
+
+--------------------------------------------------------------------------------------------------
+COMO DESFAZER
+--------------------------------------------------------------------------------------------------
+Apague os blocos A e B e reverta C1 e C2 (ou volte o index.html anterior). Nada mais depende deles.
