@@ -2,8 +2,8 @@ name: Atualizar base UFC
 
 on:
   schedule:
-        - cron: "0 9 * * *"
-  workflow_dispatch:
+    - cron: "0 9 * * *"   # todos os dias, 9h UTC (só busca o que é novo)
+  workflow_dispatch:          # botão "Run workflow" para a carga inicial
 
 permissions:
   contents: write
@@ -20,6 +20,9 @@ jobs:
       - run: pip install requests beautifulsoup4 lxml playwright
       - run: playwright install --with-deps chromium
       - run: python scraper.py --max-minutes 320
+      - name: Gerar análises (data/analytics.json)
+        run: python analytics.py
+        continue-on-error: true   # se falhar, os dados do scraper ainda são salvos
       - name: Salvar dados no repositório
         if: always()
         run: |
