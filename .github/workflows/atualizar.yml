@@ -1,3 +1,6 @@
+name: Gerar análises (data/analytics.json)
+        run: python analytics.py
+        continue-on-error: true   # se falhar, os dados do scraper ainda são salvos
 name: Atualizar base UFC
 
 on:
