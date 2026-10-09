@@ -124,6 +124,7 @@ async function init(){
  S.ev=ev||[];S.meta=meta||{};S.up=(up&&up.events)||[];(fi||[]).forEach(f=>S.F.set(f.id,f));
  S.fg=(fg||[]).filter(f=>!S.ov.exclude.includes(f.id)).map(f=>({...f,div:S.ov.div[f.id]||f.div}));
  $('#lg').onclick=()=>{S.pt=!S.pt;try{localStorage.sumulaLang=S.pt?'pt':'en'}catch{}route()};
+ if(window.XLOAD)await XLOAD();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
  addEventListener('hashchange',route);route();
 }
@@ -334,7 +335,7 @@ function extraLab(){
  ${rg.map(r=>`<div class="tb"><span><a href="#/fighter/${r.id}">${esc(S.F.get(r.id)?.name||r.id)}</a><br><span class="mu sm">${esc(r.div)}</span></span><span>${r.start.slice(0,4)}–${r.e?r.e.slice(0,4):T('now','hoje')}</span><span>${Math.round(r.d)}</span><span>${r.def}</span></div>`).join('')}
  <p class="mu sm">${T('Reigns are inferred from title-fight results; a champion who vacated is closed at the last title activity.','Os reinados são deduzidos dos resultados das lutas de título; quem deixou o cinturão vago é encerrado na última atividade de título.')}</p></div>
  <h2>${T('Biggest upsets','Maiores zebras')}</h2><div class="card" style="padding:.6rem 1.1rem">${up.slice(0,10).map(u=>{const f=byId.get(u.n.f);return `<div class="h" style="grid-template-columns:1fr auto"><span><a href="#/event/${f?.ev}/${u.n.f}"><b>${esc(S.F.get(u.n.id)?.name||u.n.id)}</b></a> ${T('beat','venceu')} ${esc(S.F.get(u.g.o.id)?.name||u.g.o.id)}<br><span class="mu sm">${fmt(u.n.dt)}, ${esc(f?.method||'')}</span></span><b class="up">${pc(u.p)}</b></div>`}).join('')}<p class="mu sm">${T('Pre-fight win chance of the winner according to the WHR rating (with hindsight). Only fighters with 3+ fights.','Chance de vitória do vencedor antes da luta segundo o WHR (com visão retrospectiva). Só lutadores com 3+ lutas.')}</p></div>
- <h2>${T('Prediction log and scorecard','Registro de previsões e placar')}</h2><div class="card" style="padding:.8rem 1.1rem">${scoreHtml()}</div>`}
+ <h2>${T('Prediction log and scorecard','Registro de previsões e placar')}</h2><div class="card" style="padding:.8rem 1.1rem">${scoreHtml()}</div>`+(window.XL?XL():'')}
 function shareCard(){
  const o=S.simLast;if(!o)return;const c=document.createElement('canvas');c.width=1080;c.height=1350;const x=c.getContext('2d'),F='"Big Shoulders Display",Impact,"Arial Narrow",sans-serif';
  x.fillStyle='#090a0d';x.fillRect(0,0,1080,1350);x.strokeStyle='rgba(255,255,255,.045)';x.lineWidth=1;
@@ -371,14 +372,14 @@ function statRows(f){
   if(src)for(const k of keys)if(src.a?.[k]!==undefined)h+=row(lb(k),src.a[k],src.b[k]);
  const rt=f.rounds?.totals||[];
  if(rt.length)h+=`<h2>${T('Significant strikes by round','Golpes significativos por round')}</h2>`+rt.map((r,i)=>row('Round '+(i+1),r.a?.['Sig. str.']??'-',r.b?.['Sig. str.']??'-')).join('');
- return h+(f.detail?`<p class="mu sm">${esc(f.detail)}</p>`:'');
+ return (window.XS?XS(f):'')+h+(f.detail?`<p class="mu sm">${esc(f.detail)}</p>`:'');
 }
 
 function fightRow(f){
  const w=s=>f.res==='draw'||f.res==='nc'?'':(f.res===s?'w':'l'),side=s=>`<a class="fa ${w(s)}" href="#/fighter/${mid(f[s].id)}">${esc(name(f[s]))}</a>`;
  const out=f.res==='draw'?T('Draw','Empate'):f.res==='nc'?T('No contest','Sem resultado'):esc(f.method);
  return `<article class="card fight" id="f${f.id}"><div class="fx">${side('a')}<span class="ring"><span>VS</span></span>${side('b')}</div>
- <div class="fi"><span>${out}</span>${f.round?`<span>R${esc(f.round)} ${esc(f.time)}</span>`:''}<span>${esc(f.div)}</span>${f.title?`<span class="tag">${T('Title','Cinturão')}</span>`:''}<button data-f="${f.id}">${T('Stats','Estatísticas')}</button></div><div class="st"></div></article>`;
+ <div class="fi"><span>${out}</span>${f.round?`<span>R${esc(f.round)} ${esc(f.time)}</span>`:''}<span>${esc(f.div)}</span>${f.title?`<span class="tag">${T('Title','Cinturão')}</span>`:''}${window.XB?XB(f):''}<button data-f="${f.id}">${T('Stats','Estatísticas')}</button></div><div class="st"></div></article>`;
 }
 
 function vEvent(id,fid){
@@ -462,7 +463,7 @@ function vFighter(id){
  <div class="acts"><button id="fv">${S.me.fav[id]?T('★ Favorite','★ Favorito'):T('☆ Add to favorites','☆ Favoritar')}</button><label class="btn">${T('Photo','Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id]?`<button id="rp">${T('Remove photo','Remover foto')}</button>`:''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight','Simular luta')}</a></div>
  <label class="ctl" style="display:grid"><span class="mu sm">${T('Rating scope','Escopo da nota')}</span><select id="ps">${opts.map(o=>`<option value="${esc(o)}"${o===d?' selected':''}>${o==='ALL'?T('General (all fights)','Geral (todas as lutas)'):esc(o)}</option>`).join('')}</select></label>
  ${me?`<div class="card" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">${T('Current rating','Nota atual')}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">${T('peak rating','nota máxima')} ${Math.round(me.pk)} ${T('in','em')} ${me.pkd.slice(0,4)}<br>${T('all-time score','pontuação histórica')} ${Math.round(me.hs)}${me.cq+me.df+me.iv?`<br>${T('belt','cinturão')}: ${me.cq} ${T('won','conq.')}, ${me.df} ${T('def.','def.')}${me.iv?`, ${me.iv} ${T('interim','interino')}`:''}`:''}<br>${me.w}-${me.l}-${me.d}</span></div>${spark(N.map(n=>({a:el(n.r)})))}</div>`:''}
- ${resume}
+ ${resume}${window.XP?XP(id):''}
  <h2>${T('Analysis','Análise')}</h2>${analysis(id)}
  <h2>${T('My notes','Minhas anotações')}</h2><textarea id="nt" placeholder="${T('Write anything about this fighter…','Escreva o que quiser sobre este lutador…')}">${esc(S.me.note[id]||'')}</textarea>
  <h2>${T('Profile','Ficha')}</h2><dl class="card bio">${Object.entries(p).filter(([k])=>!skip.includes(k)).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
@@ -701,6 +702,59 @@ function route(){
   await ld();draw()}
  window.XT=()=>[['xray',T('X-Ray','Raio-X')]];   /* entrada de menu */
  window.XV={xray:vXray};                          /* rota #/xray (ou #/xray/IDA/IDB) */
+})();
+/* ======== MÓDULO CHECAGEM DE DECISÕES ("ROUBO?") (acoplável: remover este bloco não afeta o resto do app) ======== */
+(function(){
+ const R={d:null,m:null,idx:null};
+ const COL=['var(--win)','var(--mu)','var(--gd)','var(--loss)'],lbl=()=>[T('Stats agree','Números concordam'),T('Close fight','Luta apertada'),T('Questionable','Questionável'),T('Possible robbery','Possível roubo')];
+ const kindN=k=>({u:T('unanimous','unânime'),s:T('split','dividida'),m:T('majority','majoritária')})[k]||'';
+ window.XLOAD=async()=>{if(R.d)return;try{const r=await fetch('data/decisions.json',{cache:'no-cache'});if(r.ok){const j=await r.json();R.d=j.fights;R.m=j.model}}catch{}};
+ const byId=()=>R.idx||(R.idx=new Map(S.fg.map(f=>[f.id,f])));
+ /* selo na lista de lutas */
+ window.XB=f=>{const d=R.d&&R.d[f.id];if(!d)return'';const c=d[1];
+  return c>=2?`<span class="tag" style="background:${COL[c]};color:#000">${lbl()[c]}</span>`:`<span class="mu sm">${c===0?'✓ ':''}${lbl()[c]}</span>`};
+ /* painel dentro das estatísticas da luta */
+ window.XS=f=>{
+  const d=R.d&&R.d[f.id];if(!d)return'';
+  const [po,c,k,sc,rs]=d,w=f.res==='a'?'a':'b',l=w==='a'?'b':'a',wn=name(f[w]),ln=name(f[l]),rr=f.rounds?.totals||[],n=rs.length,wr=rs.filter(x=>x>.15).length,lr=rs.filter(x=>x<-.15).length;
+  const side=(r,s)=>r&&r[s]?`${num(r[s]['Sig. str.'])} sig, ${num(r[s].Td)} TD${num(r[s].KD)?`, ${num(r[s].KD)} KD`:''}${r[s].Ctrl&&r[s].Ctrl!=='0:00'?`, ${esc(r[s].Ctrl)}`:''}`:'—';
+  const rows=rs.length&&rr.length===rs.length?rs.map((x,i)=>`<div class="sr"><span style="color:var(--gd)">${side(rr[i],w)}</span><span class="lb" style="color:${x>.15?'var(--win)':x<-.15?'var(--loss)':'var(--mu)'}">R${i+1} ${x>.15?'▸ '+esc(lastName(wn)):x<-.15?'▸ '+esc(lastName(ln)):T('even','parelho')}</span><span style="color:var(--cb)">${side(rr[i],l)}</span></div>`).join(''):'';
+  const v=[T(`The numbers back the result: ${wn} led ${wr} of ${n||'the'} rounds on the stats (${pc(po)} consistent).`,`Os números sustentam o resultado: ${wn} liderou ${wr} de ${n||'todos os'} rounds nas estatísticas (${pc(po)} de coerência).`),
+   T(`Close on the numbers: the stats give ${wn} only ${pc(po)}. Either side could have won.`,`Luta apertada nos números: as estatísticas dão só ${pc(po)} para ${wn}. Qualquer lado poderia ter vencido.`),
+   T(`The numbers lean to ${ln} (${pc(1-po)}). The official result is questionable.`,`Os números pendem para ${ln} (${pc(1-po)}). O resultado oficial é questionável.`),
+   T(`Possible robbery: the numbers clearly favored ${ln} (${pc(1-po)}), yet ${wn} got the decision.`,`Possível roubo: os números favoreciam ${ln} com folga (${pc(1-po)}), mas a decisão foi para ${wn}.`)][c];
+  return `<div class="card" style="padding:.8rem 1.1rem;margin-bottom:.8rem"><div style="display:flex;justify-content:space-between;gap:.6rem;align-items:center"><b>${T('Decision check','Checagem da decisão')}</b><span class="tag" style="background:${COL[c]};color:#000">${lbl()[c]}</span></div>
+   <p class="mu sm" style="margin:.4rem 0">${T('Decision','Decisão')} ${kindN(k)}${sc?`. ${T('Judges (winner first)','Juízes (vencedor primeiro)')}: ${esc(sc.replace(/,/g,', '))}`:''}.</p>
+   <div class="pb"><i style="flex:${po};background:var(--gd)">${pc(po)}</i><i style="flex:${1-po};background:var(--cb)">${pc(1-po)}</i></div>
+   <div class="sr"><span style="color:var(--gd)">${esc(wn)} (${T('official winner','vencedor oficial')})</span><span></span><span style="color:var(--cb)">${esc(ln)}</span></div>
+   <p class="mu sm">${T('Chance that the official result matches the stats (model that never saw this fight).','Chance de o resultado oficial bater com as estatísticas (modelo que nunca viu esta luta).')}</p>
+   ${rows?`<div style="margin-top:.4rem">${rows}</div><p class="mu sm">${T(`By the numbers: ${wn} won ${wr} round(s), ${ln} won ${lr}.`,`Pelos números: ${wn} levou ${wr} round(s), ${ln} levou ${lr}.`)}</p>`:`<p class="mu sm">${T('No round-by-round stats for this fight; fight totals were used.','Sem estatísticas round a round nesta luta; foram usados os totais.')}</p>`}
+   <p>${v}${k==='s'&&c>=2?' '+T('The split decision shows the judges themselves disagreed.','A decisão dividida mostra que os próprios juízes divergiram.'):''}</p>
+   <p class="mu sm">${T('Stats do not see damage quality, cage control, effective aggression or 10-8 rounds. This is a statistical indicator, not a verdict.','As estatísticas não enxergam qualidade do dano, controle de gaiola, agressividade efetiva nem rounds 10-8. É um indicador estatístico, não um veredito.')}</p></div>`};
+ /* seção no Lab */
+ window.XL=()=>{
+  const h2=`<h2>${T('Decision check: possible robberies','Checagem de decisões: possíveis roubos')}</h2>`;
+  if(!R.d)return h2+`<div class="card" style="padding:.8rem 1.1rem"><p class="mu sm">${T('decisions.json not found. Run the workflow "Atualizar base UFC" once so analytics.py generates it.','decisions.json não encontrado. Rode o workflow "Atualizar base UFC" uma vez para o analytics.py gerá-lo.')}</p></div>`;
+  const m=R.m,tot=m.classes.reduce((a,b)=>a+b,0),by=k=>m.acc_by[k]?`${(m.acc_by[k][0]*100).toFixed(0)}% (${m.acc_by[k][1]})`:'—';
+  const top=Object.entries(R.d).filter(([i,d])=>d[1]===3).sort((a,b)=>a[1][0]-b[1][0]).slice(0,15);
+  const G={strike:T('Strikes (significant, total, rounds led)','Golpes (significativos, totais, rounds liderados)'),grap:T('Takedowns and control','Quedas e controle'),sub:T('Submission attempts','Finalizações tentadas'),kd:'Knockdowns'},mx=Math.max(.001,...Object.values(m.imp));
+  return h2+`<div class="card" style="padding:.8rem 1.1rem"><p class="mu sm">${T(`The model learns what the official results reward and scores each decision with a version that never saw it (${m.folds}-fold cross-validation). It agrees with the official winner in <b>${(m.acc*100).toFixed(1)}%</b> of ${m.n.toLocaleString('en-US')} decisions: unanimous ${by('unanimous')}, majority ${by('majority')}, split ${by('split')}. The lower agreement in splits is expected: judges themselves disagree there.`,`O modelo aprende o que os resultados oficiais premiam e avalia cada decisão com uma versão que nunca a viu (validação cruzada em ${m.folds} partes). Ele concorda com o vencedor oficial em <b>${(m.acc*100).toFixed(1)}%</b> das ${m.n.toLocaleString('pt-BR')} decisões: unânimes ${by('unanimous')}, majoritárias ${by('majority')}, divididas ${by('split')}. A concordância menor nas divididas é esperada: ali os próprios juízes divergem.`)}</p>
+   <div class="xg">${lbl().map((l,i)=>`<span style="color:${COL[i]}">${l} <b>${m.classes[i]}</b> (${(m.classes[i]/tot*100).toFixed(1)}%)</span>`).join('')}</div>
+   <p class="mu sm">${T(`Classes by the chance that the official winner matches the stats: ≥${m.cuts[0]*100}% agree, ≥${m.cuts[1]*100}% close, ≥${m.cuts[2]*100}% questionable, below that possible robbery.`,`Classes pela chance de o vencedor oficial bater com as estatísticas: ≥${m.cuts[0]*100}% concordam, ≥${m.cuts[1]*100}% apertada, ≥${m.cuts[2]*100}% questionável, abaixo disso possível roubo.`)}</p>
+   <b>${T('What matters most to the model','O que mais pesa para o modelo')}</b><p class="mu sm" style="margin:.2rem 0">${T('How much the accuracy worsens when a whole group of stats is removed (correlated stats share credit, so groups are compared, not single numbers).','O quanto a precisão piora ao retirar um grupo inteiro de estatísticas (estatísticas correlacionadas dividem o crédito, por isso comparo grupos e não números isolados).')}</p>
+   ${Object.entries(m.imp).sort((a,b)=>b[1]-a[1]).map(([g,v])=>`<div class="sr" style="grid-template-columns:11rem 1fr auto;align-items:center"><span class="mu">${G[g]}</span><i class="mb" style="margin:0"><b style="width:${Math.max(0,v)/mx*100}%"></b></i><span>${v<.002?T('no measurable effect','sem efeito mensurável'):'+'+v.toFixed(3)}</span></div>`).join('')}</div>
+   <div class="card" style="padding:.6rem 1.1rem"><b>${T('Biggest suspected robberies (by the numbers)','Maiores suspeitas de roubo (pelos números)')}</b>
+   ${top.map(([id,d])=>{const f=byId().get(id);if(!f)return'';const w=f.res==='a'?f.a:f.b,l=f.res==='a'?f.b:f.a;return `<div class="h" style="grid-template-columns:1fr auto"><span><a href="#/event/${f.ev}/${id}"><b>${esc(name(w))}</b></a> ${T('beat','venceu')} ${esc(name(l))}<br><span class="mu sm">${fmt(f.date)}, ${esc(f.method)}${d[3]?', '+esc(d[3].replace(/,/g,', ')):''}</span></span><b class="dn">${pc(1-d[0])}</b></div>`}).join('')||`<p class="mu sm">${T('None flagged.','Nenhuma sinalizada.')}</p>`}
+   <p class="mu sm">${T('The percentage is the chance the stats favored the loser. Tap a fight to see round by round.','A porcentagem é a chance de as estatísticas favorecerem o perdedor. Toque numa luta para ver round a round.')}</p></div>`};
+ /* cartão na ficha do lutador */
+ window.XP=id=>{
+  if(!R.d)return'';const rb=[],lk=[];
+  for(const f of S.fg){const d=R.d[f.id];if(!d||d[1]<2)continue;const a=mid(f.a.id)===id,b=mid(f.b.id)===id;if(!a&&!b)continue;(f.res===(a?'a':'b')?lk:rb).push({f,d})}
+  if(!rb.length&&!lk.length)return'';
+  const li=(x,c)=>`<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/event/${x.f.ev}/${x.f.id}" style="color:${c}"><b>${esc(name(mid(x.f.a.id)===id?x.f.b:x.f.a))}</b></a><span class="mu">${fmt(x.f.date)}</span><span>${pc(1-x.d[0])}</span></div>`;
+  const sev=a=>a.sort((x,y)=>x.d[0]-y.d[0]).slice(0,3);
+  return `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Controversial decisions','Decisões polêmicas')}</b><p class="mu sm" style="margin:.3rem 0">${T('Judged against the numbers: ','Julgado contra os números: ')}<b style="color:var(--tx)">${rb.length}</b> (${rb.filter(x=>x.d[1]===3).length} ${T('possible robberies','possíveis roubos')})<br>${T('Favored by the judges despite the numbers: ','Favorecido pelos juízes apesar dos números: ')}<b style="color:var(--tx)">${lk.length}</b> (${lk.filter(x=>x.d[1]===3).length} ${T('possible','possíveis')})</p>
+   ${rb.length?`<p class="mu sm" style="margin:.4rem 0 0">${T('Lost, but the stats favored him (chance)','Perdeu, mas as estatísticas o favoreciam (chance)')}</p>${sev(rb).map(x=>li(x,'var(--loss)')).join('')}`:''}${lk.length?`<p class="mu sm" style="margin:.4rem 0 0">${T('Won, but the stats favored the opponent (chance)','Venceu, mas as estatísticas favoreciam o rival (chance)')}</p>${sev(lk).map(x=>li(x,'var(--gd)')).join('')}`:''}</div>`};
 })();
 init();
 </script>

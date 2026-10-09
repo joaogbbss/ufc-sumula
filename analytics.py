@@ -9,11 +9,13 @@ Três blocos:
   1. ELO dinâmico por nível de oposição (peso pelo método e pelo round do desfecho).
   2. DLI, Índice de Dano e Letalidade Efetiva (knockdowns por 100 golpes e golpes por knockdown).
   3. Benchmarks por divisão (% de KO, finalização e decisão, duração, volume).
+  4. Checagem de decisões ("roubo?"): quanto o resultado oficial destoa dos números (data/decisions.json).
 """
 import json
 import math
 import re
 import sys
+import zlib
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -212,6 +214,162 @@ def run_benchmarks(fights):
     return out
 
 
+
+# ---------- 4) checagem de decisões: o resultado oficial bate com os números? ----------
+DEC_NAMES = ["sig", "tot", "td", "kd", "ctrl", "sub", "led_sig", "led_ctrl"]
+CLS_CUTS = (0.60, 0.35, 0.15)     # P(resultado oficial | números): >=.60 coerente, >=.35 apertada, >=.15 questionável, abaixo disso: possível roubo
+FOLDS = 5
+
+
+def sgn(x):
+    return (x > 0) - (x < 0)
+
+
+def round_pairs(f):
+    """Estatísticas round a round (A, B). Sem dados por round, usa os totais da luta como um bloco só."""
+    rows = [(r["a"], r["b"]) for r in ((f.get("rounds") or {}).get("totals") or []) if r.get("a") and r.get("b")]
+    T = f.get("totals")
+    if not rows and T and T.get("a") and T.get("b"):
+        rows = [(T["a"], T["b"])]
+    return rows
+
+
+def round_vec(a, b):
+    """Diferenças A menos B de UM round. A soma desses vetores é o vetor da luta: o modelo decompõe por round."""
+    sig = num(a.get("Sig. str.")) - num(b.get("Sig. str."))
+    ctl = (seconds(a.get("Ctrl")) - seconds(b.get("Ctrl"))) / 60.0
+    return [sig / 10.0, (num(a.get("Total str.")) - num(b.get("Total str."))) / 10.0,
+            num(a.get("Td")) - num(b.get("Td")), num(a.get("KD")) - num(b.get("KD")), ctl,
+            num(a.get("Sub. att")) - num(b.get("Sub. att")), float(sgn(sig)), float(sgn(ctl)) if abs(ctl) >= 0.5 else 0.0]
+
+
+def judge_scores(detail):
+    out = []
+    for x, y in re.findall(r"(\d{2})\s*-\s*(\d{2})", detail or ""):
+        x, y = int(x), int(y)
+        if 20 <= x <= 50 and 20 <= y <= 50 and abs(x - y) <= 5:
+            out.append((x, y))
+    return out
+
+
+def inv(M):
+    n = len(M)
+    A = [list(row) + [1.0 if i == j else 0.0 for j in range(n)] for i, row in enumerate(M)]
+    for i in range(n):
+        p = max(range(i, n), key=lambda r: abs(A[r][i]))
+        A[i], A[p] = A[p], A[i]
+        d = A[i][i] or 1e-12
+        A[i] = [v / d for v in A[i]]
+        for r in range(n):
+            if r != i and A[r][i]:
+                f = A[r][i]
+                A[r] = [a - f * b for a, b in zip(A[r], A[i])]
+    return [row[n:] for row in A]
+
+
+def fit_lr(X, y, lam=1.0):
+    """Regressão logística ridge (Newton), variáveis padronizadas. Sem dependências."""
+    n, k = len(X), len(X[0])
+    sd = [math.sqrt(sum(x[j] ** 2 for x in X) / n) or 1.0 for j in range(k)]
+    Z = [[x[j] / sd[j] for j in range(k)] for x in X]
+    b, H = [0.0] * k, None
+    for _ in range(30):
+        g, H = [0.0] * k, [[0.0] * k for _ in range(k)]
+        for z, t in zip(Z, y):
+            s = max(-30.0, min(30.0, sum(bj * zj for bj, zj in zip(b, z))))
+            p = 1.0 / (1.0 + math.exp(-s))
+            w = p * (1.0 - p)
+            for j in range(k):
+                g[j] += (t - p) * z[j]
+                for l in range(j + 1):
+                    H[j][l] += w * z[j] * z[l]
+        for j in range(k):
+            g[j] -= lam * b[j]
+            H[j][j] += lam
+            for l in range(j):
+                H[l][j] = H[j][l]
+        Hi = inv(H)
+        d = [sum(Hi[j][l] * g[l] for l in range(k)) for j in range(k)]
+        b = [bj + dj for bj, dj in zip(b, d)]
+        if max(abs(v) for v in d) < 1e-6:
+            break
+    Hi = inv(H)
+    return {"b": b, "sd": sd, "se": [math.sqrt(max(Hi[j][j], 0.0)) for j in range(k)]}
+
+
+def lr_logit(m, x):
+    return sum(bj * xj / sj for bj, xj, sj in zip(m["b"], x, m["sd"]))
+
+
+def sig_(z):
+    return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, z))))
+
+
+DEC_GROUPS = {"strike": [0, 1, 6], "grap": [2, 4, 7], "sub": [5], "kd": [3]}   # variáveis correlacionadas ficam no mesmo grupo
+
+
+def cv_logloss(rows, drop=()):
+    """Log-loss da validação cruzada sem as variáveis em `drop` (importância por grupo, não por coeficiente)."""
+    keep = [j for j in range(len(DEC_NAMES)) if j not in drop]
+    tot = 0.0
+    for k in range(FOLDS):
+        tr = [r for r in rows if r["fold"] != k]
+        m = fit_lr([[r["x"][j] for j in keep] for r in tr], [r["y"] for r in tr])
+        for r in (r for r in rows if r["fold"] == k):
+            p = sig_(lr_logit(m, [r["x"][j] for j in keep]))
+            tot -= math.log(max(p if r["y"] == 1.0 else 1.0 - p, 1e-6))
+    return tot / len(rows)
+
+
+def run_decisions(fights):
+    rows = []
+    for f in fights:
+        kind, sub = klass(f.get("method"))
+        if kind != "dec" or f["res"] not in ("a", "b"):
+            continue
+        rp = round_pairs(f)
+        if not rp:
+            continue
+        vs = [round_vec(a, b) for a, b in rp]
+        fl = zlib.crc32(f["id"].encode()) & 1          # orientação aleatória: o ufcstats sempre lista o vencedor primeiro
+        sign = -1.0 if fl else 1.0
+        x = [sign * sum(v[j] for v in vs) for j in range(len(DEC_NAMES))]
+        subj_won = (f["res"] == "a") != bool(fl)
+        rows.append({"id": f["id"], "x": x, "y": 1.0 if subj_won else 0.0, "rv": [[sign * c for c in v] for v in vs],
+                     "fold": zlib.crc32(f["id"].encode()) % FOLDS, "sub": sub, "f": f, "sj": subj_won})
+    if len(rows) < 300:
+        return None
+    full = fit_lr([r["x"] for r in rows], [r["y"] for r in rows])
+    models = [fit_lr([r["x"] for r in rows if r["fold"] != k], [r["y"] for r in rows if r["fold"] != k]) for k in range(FOLDS)]
+    out, cnt = {}, Counter()
+    agree, ll, by = 0, 0.0, defaultdict(lambda: [0, 0])
+    for r in rows:
+        m = models[r["fold"]]                           # modelo que NÃO viu esta luta (validação cruzada)
+        p = sig_(lr_logit(m, r["x"]))
+        po = p if r["y"] == 1.0 else 1.0 - p            # P(vencedor oficial | números)
+        cls = 0 if po >= CLS_CUTS[0] else 1 if po >= CLS_CUTS[1] else 2 if po >= CLS_CUTS[2] else 3
+        cnt[cls] += 1
+        agree += po > 0.5
+        ll -= math.log(max(po, 1e-6))
+        by[r["sub"]][0] += po > 0.5
+        by[r["sub"]][1] += 1
+        flip = 1.0 if r["sj"] else -1.0                 # contribuição de cada round do ponto de vista do vencedor oficial
+        rs = [round(flip * lr_logit(m, v), 2) for v in r["rv"]]
+        f = r["f"]
+        sc = judge_scores(f.get("detail"))
+        if sc and f["res"] == "b":
+            sc = [(y, x) for x, y in sc]                # primeiro número = lutador listado primeiro (A)
+        out[r["id"]] = [round(po, 3), cls, (r["sub"] or "unanimous")[0], ",".join(f"{x}-{y}" for x, y in sc), rs]
+    n = len(rows)
+    model = {"n": n, "acc": round(agree / n, 4), "ll": round(ll / n, 4),
+             "acc_by": {k: [round(v[0] / v[1], 4), v[1]] for k, v in by.items()},
+             "classes": [cnt[i] for i in range(4)], "cuts": list(CLS_CUTS), "folds": FOLDS, "names": DEC_NAMES,
+             "imp": {g: round(cv_logloss(rows, ix) - ll / n, 4) for g, ix in DEC_GROUPS.items()},   # piora do log-loss sem o grupo
+             "b": [round(full["b"][j] / full["sd"][j], 4) for j in range(len(DEC_NAMES))],
+             "se": [round(full["se"][j] / full["sd"][j], 4) for j in range(len(DEC_NAMES))]}
+    return {"v": 1, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "model": model, "fights": out}
+
+
 # ---------- montagem ----------
 def main():
     fights = load_fights()
@@ -256,6 +414,17 @@ def main():
     (DATA / "analytics.json").write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), "utf-8")
     size = (DATA / "analytics.json").stat().st_size / 1024
     print(f"analytics: {len(fighters)} lutadores, {len(bench) - 1} divisões, {size:.0f} KB -> data/analytics.json")
+    try:
+        dec = run_decisions(fights)
+        if dec:
+            (DATA / "decisions.json").write_text(json.dumps(dec, ensure_ascii=False, separators=(",", ":")), "utf-8")
+            m = dec["model"]
+            print(f"decisions: {m['n']} decisões, concordância {m['acc']*100:.1f}% (validação cruzada), "
+                  f"classes {m['classes']} -> data/decisions.json")
+        else:
+            print("decisions: poucas decisões com estatísticas; nada gerado.")
+    except Exception as ex:  # a checagem de decisões nunca derruba o resto
+        print(f"decisions: erro ({ex}); decisions.json não foi atualizado.")
     return 0
 
 
