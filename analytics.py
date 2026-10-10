@@ -122,7 +122,7 @@ def load_fights():
 
 
 # ---------- 1) ELO dinâmico ----------
-def run_elo(fights):
+def run_elo(fights, pre_out=None):
     st = {}
 
     def get(i):
@@ -134,6 +134,8 @@ def run_elo(fights):
     for f in fights:
         A, B = get(f["a"]["id"]), get(f["b"]["id"])
         ea = 1.0 / (1.0 + 10 ** ((B["r"] - A["r"]) / 400.0))
+        if pre_out is not None:
+            pre_out[f["id"]] = (A["r"], B["r"])      # nota de cada um ANTES da luta (sem vazamento do futuro)
         s = 1.0 if f["res"] == "a" else 0.0 if f["res"] == "b" else 0.5
         m = multiplier(f)
         da = k_factor(A["n"]) * m * (s - ea)
@@ -370,13 +372,180 @@ def run_decisions(fights):
     return {"v": 1, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "model": model, "fights": out}
 
 
+
+# ---------- 5) probabilidade de vitória AO VIVO (round a round) ----------
+LIVE_NAMES = ["prior", "sig", "tot", "td", "kd", "ctrl", "sub"]
+
+
+def run_live(fights, pre):
+    """Chance do vencedor oficial depois de cada round, dado o que já aconteceu + a nota pré-luta (Elo).
+    Um modelo por grupo de rounds (1, 2, 3, 4+), validação cruzada em 5 partes: cada luta é avaliada
+    por modelos que nunca a viram."""
+    items = []
+    for f in fights:
+        if f["res"] not in ("a", "b") or f["id"] not in pre:
+            continue
+        rp = [(r["a"], r["b"]) for r in ((f.get("rounds") or {}).get("totals") or []) if r.get("a") and r.get("b")]
+        if not rp:
+            continue
+        kind, _ = klass(f.get("method"))
+        vs = [round_vec(a, b)[:6] for a, b in rp]               # sig, tot, td, kd, ctrl, sub (diferença A - B)
+        last = len(vs) if kind == "dec" else len(vs) - 1        # no round do desfecho a luta já acabou: não é "ao vivo"
+        fl = zlib.crc32(f["id"].encode()) & 1                   # orientação aleatória (o vencedor vem sempre primeiro)
+        sign = -1.0 if fl else 1.0
+        ea, eb = pre[f["id"]]
+        prior = sign * (ea - eb) / 400.0
+        won = (f["res"] == "a") != bool(fl)
+        cum, rows = [0.0] * 6, []
+        for r in range(1, last + 1):
+            cum = [c + sign * v for c, v in zip(cum, vs[r - 1])]
+            rows.append([prior] + cum[:])
+        items.append({"id": f["id"], "prior": prior, "y": 1.0 if won else 0.0, "rows": rows, "fold": zlib.crc32(f["id"].encode()) % FOLDS})
+    if len(items) < 300:
+        return None
+    # modelo só com a nota pré-luta
+    m0 = [fit_lr([[i["prior"]] for i in items if i["fold"] != k], [i["y"] for i in items if i["fold"] != k]) for k in range(FOLDS)]
+    groups = {}
+    for i in items:
+        for r, x in enumerate(i["rows"], 1):
+            groups.setdefault(min(r, 4), []).append((i, x))
+    mg = {g: [fit_lr([x for it, x in rows if it["fold"] != k], [it["y"] for it, x in rows if it["fold"] != k]) for k in range(FOLDS)]
+          for g, rows in groups.items() if len(rows) >= 150}
+    out, gstats, lows = {}, [], []
+    for it in items:
+        p0 = sig_(lr_logit(m0[it["fold"]], [it["prior"]]))
+        seq = [p0 if it["y"] == 1.0 else 1 - p0]
+        for r, x in enumerate(it["rows"], 1):
+            g = min(r, 4)
+            if g not in mg:
+                break
+            p = sig_(lr_logit(mg[g][it["fold"]], x))
+            seq.append(p if it["y"] == 1.0 else 1 - p)          # sempre do ponto de vista do vencedor oficial
+        seq = [min(0.995, max(0.005, v)) for v in seq]           # nunca exibir 0% ou 100% antes do fim
+        out[it["id"]] = [round(v, 3) for v in seq]
+        if len(seq) > 1:
+            lows.append((min(seq[1:]), it["id"], 1 + seq[1:].index(min(seq[1:]))))
+    for g in sorted(groups):
+        if g not in mg:
+            continue
+        n = ll0 = ll = 0
+        for it, x in groups[g]:
+            p = sig_(lr_logit(mg[g][it["fold"]], x))
+            q = sig_(lr_logit(m0[it["fold"]], [it["prior"]]))
+            ll -= math.log(max(p if it["y"] == 1.0 else 1 - p, 1e-6))
+            ll0 -= math.log(max(q if it["y"] == 1.0 else 1 - q, 1e-6))
+            n += 1
+        gstats.append({"g": g, "n": n, "ll0": round(ll0 / n, 4), "ll": round(ll / n, 4)})
+    lows.sort()
+    return {"v": 1, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "model": {"n": len(items), "groups": gstats, "names": LIVE_NAMES},
+            "comebacks": [[i, round(p, 3), r] for p, i, r in lows[:60]], "fights": out}
+
+
+# ---------- 6) cards de atributos (percentis por divisão) ----------
+CARD_MIN_FIGHTS, CARD_MIN_MIN = 4, 20.0
+CARD_W = {"tro": [2, 1], "def": [1, 1, 1, 1], "lut": [1, 1, 1], "sub": [1, 1], "peg": [1], "car": [1], "elo": [1]}   # pesos dos componentes (volume vale 2x a precisão)
+
+
+def att_of(v):
+    m = re.search(r"of\s+(\d+)", str(v if v is not None else ""))
+    return float(m.group(1)) if m else 0.0
+
+
+def run_cards(fights, fighters):
+    A = defaultdict(lambda: defaultdict(float))
+    for f in fights:
+        T = f.get("totals")
+        if not T or not T.get("a") or not T.get("b"):
+            continue
+        mn = fight_minutes(f)
+        if not mn:
+            continue
+        rp = [(r["a"], r["b"]) for r in ((f.get("rounds") or {}).get("totals") or []) if r.get("a") and r.get("b")]
+        full = klass(f.get("method"))[0] == "dec"
+        done = rp if full else rp[:-1]                          # só rounds completos entram no cardio
+        for me, op, i in (("a", "b", f["a"]["id"]), ("b", "a", f["b"]["id"])):
+            x, a, o = A[i], T[me], T[op]
+            x["mn"] += mn
+            x["sl"] += num(a.get("Sig. str.")); x["sat"] += att_of(a.get("Sig. str."))
+            x["sa"] += num(o.get("Sig. str.")); x["oat"] += att_of(o.get("Sig. str."))
+            x["tl"] += num(a.get("Td")); x["ta"] += att_of(a.get("Td"))
+            x["otl"] += num(o.get("Td")); x["ota"] += att_of(o.get("Td"))
+            x["ct"] += seconds(a.get("Ctrl")); x["sb"] += num(a.get("Sub. att"))
+            if len(done) >= 3:
+                x["c1"] += num(done[0][0 if me == "a" else 1].get("Sig. str.")); x["n1"] += 1
+                late = [num(r[0 if me == "a" else 1].get("Sig. str.")) for r in done[2:]]
+                x["c3"] += sum(late); x["n3"] += len(late)
+    tot = defaultdict(float)
+    for x in A.values():
+        for k, v in x.items():
+            tot[k] += v
+    if not tot["mn"] or not tot["sat"]:
+        return None
+    K = 20.0
+    g_sl, g_acc, g_tl, g_ta = tot["sl"] / tot["mn"], tot["sl"] / tot["sat"], tot["tl"] / tot["mn"], tot["tl"] / max(tot["ta"], 1)
+    g_ct, g_sb = tot["ct"] / 60.0 / tot["mn"], tot["sb"] / tot["mn"]
+    met = {}
+    for i, x in A.items():
+        f = fighters.get(i)
+        if not f or f["n"] < CARD_MIN_FIGHTS or x["mn"] < CARD_MIN_MIN or "ks" not in f:
+            continue
+        mn = x["mn"]
+        sh = lambda v, g, k=K: (v + g * k) / (mn + k)
+        card = lambda v, att, g, k: (v + g * k) / (att + k)
+        ratio = ((x["c3"] / x["n3"]) / (x["c1"] / x["n1"])) if x["n3"] >= 2 and x["c1"] > 0 else 1.0
+        ratio = (ratio * x["n3"] + 1.0 * 3) / (x["n3"] + 3)
+        wins = sum(f["w"])
+        met[i] = {"tro": [sh(x["sl"], g_sl), card(x["sl"], x["sat"], g_acc, 60)],
+                  "def": [1 - card(x["sa"], x["oat"], g_acc, 60), -sh(x["sa"], g_sl), 1 - card(x["otl"], x["ota"], g_ta, 8), -f["kas"]],
+                  "lut": [15 * sh(x["tl"], g_tl), card(x["tl"], x["ta"], g_ta, 8), sh(x["ct"] / 60.0, g_ct)],
+                  "sub": [15 * sh(x["sb"], g_sb), (f["w"][1] + 0.5) / (wins + 5)],
+                  "peg": [f["ks"]], "car": [ratio]}
+    groups = defaultdict(list)
+    for i in met:
+        groups[fighters[i]["div"]].append(i)
+    big = {d: ids for d, ids in groups.items() if len(ids) >= 12}
+    pools = {i: (d if d in big else "ALL") for d, ids in groups.items() for i in ids}
+    members = defaultdict(list)
+    for i, d in pools.items():
+        members[d].append(i)
+    out = {}
+    for d, ids in members.items():
+        if d == "ALL":
+            ids = list(met)
+        z = {}
+        for key in ("tro", "def", "lut", "sub", "peg", "car", "elo"):
+            cols = []
+            for j in range(len(met[ids[0]][key]) if key != "elo" else 1):
+                vals = [met[i][key][j] if key != "elo" else fighters[i]["e"] for i in ids]
+                mu = sum(vals) / len(vals)
+                sd = math.sqrt(sum((v - mu) ** 2 for v in vals) / len(vals)) or 1.0
+                cols.append([(v - mu) / sd for v in vals])
+            wt = CARD_W[key]
+            z[key] = [sum(w * c[k] for w, c in zip(wt, cols)) / sum(wt) for k in range(len(ids))]
+        pct = {}
+        for key, vals in z.items():
+            order = sorted(range(len(ids)), key=lambda k: vals[k])
+            r = [0] * len(ids)
+            for rank, k in enumerate(order):
+                r[k] = round(99 * rank / max(len(ids) - 1, 1))
+            pct[key] = r
+        for k, i in enumerate(ids):
+            if pools[i] != d and d != "ALL":
+                continue
+            out[i] = [pct["elo"][k], pct["tro"][k], pct["def"][k], pct["lut"][k], pct["sub"][k], pct["peg"][k], pct["car"][k], d]
+    return {"v": 1, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "names": ["ovr", "tro", "def", "lut", "sub", "peg", "car"], "min_fights": CARD_MIN_FIGHTS, "cards": out}
+
+
 # ---------- montagem ----------
 def main():
     fights = load_fights()
     if not fights:
         print("analytics: data/fights.json ausente ou vazio; nada a fazer.")
         return 0
-    elo = run_elo(fights)
+    pre_elo = {}
+    elo = run_elo(fights, pre_elo)
     dmg, p0 = run_damage(fights)
     bench = run_benchmarks(fights)
     k100_lg = 100 * p0
@@ -425,6 +594,17 @@ def main():
             print("decisions: poucas decisões com estatísticas; nada gerado.")
     except Exception as ex:  # a checagem de decisões nunca derruba o resto
         print(f"decisions: erro ({ex}); decisions.json não foi atualizado.")
+    for nome, fn in (("live", lambda: run_live(fights, pre_elo)), ("cards", lambda: run_cards(fights, fighters))):
+        try:
+            res = fn()
+            if res:
+                (DATA / f"{nome}.json").write_text(json.dumps(res, ensure_ascii=False, separators=(",", ":")), "utf-8")
+                n = len(res["fights"]) if nome == "live" else len(res["cards"])
+                print(f"{nome}: {n} registros -> data/{nome}.json")
+            else:
+                print(f"{nome}: dados insuficientes; nada gerado.")
+        except Exception as ex:  # cada bloco é independente: um erro não derruba os outros
+            print(f"{nome}: erro ({ex}); data/{nome}.json não foi atualizado.")
     return 0
 
 

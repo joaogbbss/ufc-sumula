@@ -94,6 +94,17 @@ footer{max-width:980px;margin:auto;padding:0 clamp(1rem,4vw,2rem) 1.5rem;font-si
 .stk{display:flex;height:10px;margin:.5rem 0}.stk i{display:block}
 .xg{display:flex;flex-wrap:wrap;gap:.2rem .9rem;font-size:.85rem;color:var(--mu)}.xg b{color:var(--tx)}
 @media(max-width:480px){nav a{font-size:.95rem;letter-spacing:.02em}} /* cabe 6 abas no celular */
+/* ===== Estúdio: cards, radar e menu rolável (módulo acoplável) ===== */
+.fc{max-width:340px;padding:1rem 1.2rem 1.1rem;clip-path:var(--ch);color:#14110a;background:linear-gradient(155deg,var(--c1),var(--c2));margin:.4rem 0 1rem}
+.fc.legend{--c1:#fff2a8;--c2:#e0a800}.fc.gold{--c1:#f7d56a;--c2:#b98a12}.fc.silver{--c1:#e6ebf2;--c2:#8e98a8}.fc.bronze{--c1:#e0a877;--c2:#8a5428}
+.fct{display:flex;justify-content:space-between;align-items:center}.fco{font:900 3.6rem/1 var(--d)}.fco small{display:block;font:800 .9rem var(--d);letter-spacing:.1em}.fco em{display:block;font:800 .95rem var(--d);letter-spacing:.08em;font-style:normal;text-transform:uppercase;opacity:.75}
+.fc .ring.big{--rc:#14110a}.fc .ring>span{background:#f3efe2;color:#14110a}
+.fcn{font:900 1.7rem/1.05 var(--d);text-transform:uppercase;margin-top:.5rem}.fcd{font-size:.8rem;opacity:.7;margin-bottom:.6rem}
+.fca{display:grid;grid-template-columns:2.6rem 1fr 2rem;gap:.5rem;align-items:center;font:800 .95rem var(--d);letter-spacing:.05em}
+.fca i{display:block;height:7px;background:rgba(0,0,0,.18)}.fca u{display:block;height:100%;background:#14110a}.fca span{text-align:right}
+.fcf{margin-top:.6rem;font:800 .75rem var(--d);letter-spacing:.2em;opacity:.55}
+.rdr{width:100%;max-width:340px;display:block;margin:0 auto}
+@media(max-width:560px){nav{overflow-x:auto;scrollbar-width:none}nav::-webkit-scrollbar{display:none}nav a{flex:1 0 auto;padding-left:.7rem;padding-right:.7rem}}
 </style>
 </head>
 <body>
@@ -232,7 +243,7 @@ function pre(){ /* single chronological pass: every feature uses only what was k
  for(const f of L){
   const ia=mid(f.a.id),ib=mid(f.b.id);if(ia===ib)continue;const A=g(ia),B=g(ib),fa=feat(A,ia,f.date),fb=feat(B,ib,f.date);
   if(f.res!=='draw'){const fl=hash(f.id),X=fl?B:A,Y=fl?A:B,u=fl?fb:fa,v=fl?fa:fb; /* random orientation: ufcstats always lists the winner first */
-   rows.push({x:u.map((a,i)=>a==null||v[i]==null?0:a-v[i]),y:(f.res==='a')!==(fl===1)?1:0,date:f.date,nx:X.n,ny:Y.n,ix:fl?ib:ia,iy:fl?ia:ib})}
+   rows.push({x:u.map((a,i)=>a==null||v[i]==null?0:a-v[i]),y:(f.res==='a')!==(fl===1)?1:0,date:f.date,nx:X.n,ny:Y.n,ix:fl?ib:ia,iy:fl?ia:ib,fid:f.id})}
   const s=f.res==='draw'?.5:f.res==='a'?1:0,e=1/(1+10**((B.elo-A.elo)/400)),m=mins(f),t=Date.parse(f.date);
   A.elo+=28*(s-e);B.elo-=28*(s-e);
   for(const [X,sd,od,r] of [[A,'a','b',s],[B,'b','a',1-s]]){X.n++;X.last=t;X.rec.push(r);
@@ -755,6 +766,169 @@ function route(){
   const sev=a=>a.sort((x,y)=>x.d[0]-y.d[0]).slice(0,3);
   return `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Controversial decisions','Decisões polêmicas')}</b><p class="mu sm" style="margin:.3rem 0">${T('Judged against the numbers: ','Julgado contra os números: ')}<b style="color:var(--tx)">${rb.length}</b> (${rb.filter(x=>x.d[1]===3).length} ${T('possible robberies','possíveis roubos')})<br>${T('Favored by the judges despite the numbers: ','Favorecido pelos juízes apesar dos números: ')}<b style="color:var(--tx)">${lk.length}</b> (${lk.filter(x=>x.d[1]===3).length} ${T('possible','possíveis')})</p>
    ${rb.length?`<p class="mu sm" style="margin:.4rem 0 0">${T('Lost, but the stats favored him (chance)','Perdeu, mas as estatísticas o favoreciam (chance)')}</p>${sev(rb).map(x=>li(x,'var(--loss)')).join('')}`:''}${lk.length?`<p class="mu sm" style="margin:.4rem 0 0">${T('Won, but the stats favored the opponent (chance)','Venceu, mas as estatísticas favoreciam o rival (chance)')}</p>${sev(lk).map(x=>li(x,'var(--gd)')).join('')}`:''}</div>`};
+})();
+/* ======== MÓDULO ESTÚDIO (acoplável): Cruzador, Cards, Máquina do tempo e Viradas ======== */
+(function(){
+ const Z={tab:'cross',v:'reach',T:3,side:'more',div:'ALL',sub:'all',met:'win',e3:1,from:2010,tests:new Set(),a:'',b:'',t:'',fl:new Set(),cards:null,live:null,cb:null,lm:null};
+ const sum=a=>a.reduce((x,y)=>x+y,0),nm=id=>S.F.get(id)?.name||id,f2=v=>v.toFixed(2);
+ const erf=x=>{const s=Math.sign(x);x=Math.abs(x);const t=1/(1+.3275911*x);return s*(1-((((1.061405429*t-1.453152027)*t+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x))};
+ const pval=z=>2*(1-.5*(1+erf(Math.abs(z)/Math.SQRT2))),wil=(k,n)=>{if(!n)return[0,1];const z=1.96,p=k/n,d=1+z*z/n,c=p+z*z/(2*n),a=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[(c-a)/d,(c+a)/d]};
+ const ppf=v=>(v*100).toFixed(1)+'%',sg2=v=>(v>=0?'+':'')+v.toFixed(1);
+ /* ---- carga dos dados do Estúdio (encadeia com os módulos anteriores) ---- */
+ const prevLoad=window.XLOAD;
+ window.XLOAD=async()=>{if(prevLoad)await prevLoad();const g=async n=>{try{const r=await fetch('data/'+n+'.json',{cache:'no-cache'});return r.ok?r.json():null}catch{return null}};
+  const [c,l]=await Promise.all([g('cards'),g('live')]);Z.cards=c&&c.cards;Z.live=l&&l.fights;Z.lm=l&&l.model;Z.cb=l&&l.comebacks};
+ const fmap=()=>Z._fm||(Z._fm=new Map(S.fg.map(f=>[f.id,f])));
+
+ /* ================= 1) CRUZADOR DE VARIÁVEIS ================= */
+ const VARS=()=>[
+  {k:'reach',l:T('Reach','Envergadura'),u:T('inches','polegadas'),f:r=>r.x[3]*10,T:3,s:1},
+  {k:'height',l:T('Height','Altura'),u:T('inches','polegadas'),f:r=>r.x[4]*10,T:3,s:1},
+  {k:'age',l:T('Age','Idade'),u:T('years','anos'),f:r=>r.x[2]*10,T:3,s:1},
+  {k:'stance',l:T('Southpaw vs orthodox','Canhoto vs destro'),u:'',f:r=>r.x[5],T:1,bin:true},
+  {k:'exp',l:T('Experience (ratio of fights)','Experiência (razão de lutas)'),u:'×',f:r=>r.x[1],tf:Math.log,T:2,s:.5},
+  {k:'lay',l:T('Time off','Tempo parado'),u:T('years','anos'),f:r=>r.x[6],T:1,s:.5},
+  {k:'form',l:T('Recent form (last 3 fights)','Fase recente (últimas 3 lutas)'),u:T('wins/3','vitórias/3'),f:r=>r.x[7],T:.34,s:.01},
+  {k:'elo',l:T('Elo gap (control check)','Diferença de Elo (teste de controle)'),u:T('points','pontos'),f:r=>r.x[0]*400,T:100,s:10}];
+ const slope=pop=>{let c=Math.LN10;if(pop.length<50)return c;for(let i=0;i<14;i++){let g=0,h=0;for(const [x,y] of pop){const p=1/(1+Math.exp(-c*x));g+=(y-p)*x;h+=p*(1-p)*x*x}if(!h)break;const d=g/h;c+=d;if(Math.abs(d)<1e-6)break}return c}; /* Elo calibrado: quão forte o gap de Elo prevê, nestas lutas */
+ function cross(){
+  const V=VARS().find(v=>v.k===Z.v),thr=V.tf?V.tf(Z.T):Z.T,fm=fmap(),q=[],base=[],pop=[];
+  for(const r of pre().rows){
+   if(Z.e3&&(r.nx<3||r.ny<3))continue;const f=fm.get(r.fid);if(!f||+f.date.slice(0,4)<Z.from||(Z.div!=='ALL'&&f.div!==Z.div))continue;
+   const m=cls(f.method),fin=m==='KO'||m==='SUB';
+   if(Z.met==='win'&&!(Z.sub==='all'||(Z.sub==='fin'&&fin)||(Z.sub==='ko'&&m==='KO')||(Z.sub==='sub'&&m==='SUB')||(Z.sub==='dec'&&m==='DEC')))continue;
+   base.push(fin?1:0);pop.push([r.x[0],r.y]);
+   let d=V.f(r);if(Z.side==='less'&&!V.bin)d=-d;
+   if(d>=thr)q.push({y:r.y,e0:r.x[0]*400,fin:fin?1:0,date:r.date});else if(d<=-thr)q.push({y:1-r.y,e0:-r.x[0]*400,fin:fin?1:0,date:r.date})}
+  const key=JSON.stringify([Z.v,Z.T,Z.side,Z.div,Z.sub,Z.met,Z.e3,Z.from]);Z.tests.add(key);
+  const n=q.length,K=Z.tests.size,res={n,K,V,base:base.length};
+  if(Z.met==='fin'){const k=sum(q.map(r=>r.fin)),b=sum(base),N=base.length,p1=k/Math.max(n,1),p2=b/Math.max(N,1),pp=(k+b)/(n+N||1),se=Math.sqrt(pp*(1-pp)*(1/Math.max(n,1)+1/Math.max(N,1)));
+   Object.assign(res,{rate:p1,ci:wil(k,n),basel:p2,diff:p1-p2,z:se?(p1-p2)/se:0,p:se?pval((p1-p2)/se):1,se});return res}
+  const cal=slope(pop),E=q.map(r=>1/(1+Math.exp(-cal*r.e0/400))),k=sum(q.map(r=>r.y)),Es=sum(E),Vr=sum(E.map(e=>e*(1-e)));
+  Object.assign(res,{cal:cal/Math.LN10,k,rate:n?k/n:0,ci:wil(k,n),exp:n?Es/n:0,diff:n?(k-Es)/n:0,se:n?Math.sqrt(Vr)/n:0,z:Vr?(k-Es)/Math.sqrt(Vr):0,p0:n?pval((k-n/2)/Math.sqrt(n/4)):1});res.p=Vr?pval(res.z):1;
+  const o=q.map((r,i)=>({...r,e:E[i]})).sort((a,b)=>a.date<b.date?-1:1),t=Math.floor(o.length/3);
+  res.eras=[o.slice(0,t),o.slice(t,2*t),o.slice(2*t)].map(g=>({n:g.length,from:g[0]?.date.slice(0,4),to:g.at(-1)?.date.slice(0,4),ex:g.length?100*(sum(g.map(r=>r.y))-sum(g.map(r=>r.e)))/g.length:0}));
+  return res}
+ function zres(){
+  const el=$('#zr');if(!el)return;const r=cross(),pct=Z.met==='fin';
+  if(r.n<30)return el.innerHTML=`<div class="card" style="padding:.8rem 1.1rem"><p class="dn">${T(`Only ${r.n} fights match: too few to conclude anything. Loosen the gap, the division or the years.`,`Só ${r.n} lutas atendem: pouco para concluir qualquer coisa. Afrouxe a diferença, a divisão ou os anos.`)}</p></div>`;
+  const al=.05/r.K,sig=r.p<al,weak=!sig&&r.p<.05,row=(l,v)=>`<div class="sr" style="grid-template-columns:1fr auto"><span class="mu">${l}</span><b>${v}</b></div>`;
+  const verdict=sig?T(`Evidence of an effect (p = ${r.p.toFixed(4)}, below the corrected cutoff ${al.toFixed(4)} for ${r.K} test${r.K>1?'s':''}).`,`Há evidência de efeito (p = ${r.p.toFixed(4)}, abaixo do corte corrigido ${al.toFixed(4)} para ${r.K} teste${r.K>1?'s':''}).`):weak?T(`Weak signal: significant alone (p = ${r.p.toFixed(3)}), but you have looked at ${r.K} hypotheses, so it could be luck.`,`Sinal fraco: significativo sozinho (p = ${r.p.toFixed(3)}), mas você já olhou ${r.K} hipóteses, então pode ser sorte.`):T(`No evidence of an effect (p = ${r.p.toFixed(2)}). That is also a result.`,`Sem evidência de efeito (p = ${r.p.toFixed(2)}). Isso também é um resultado.`);
+  const ctl=r.V.k==='elo'?`<p class="mu sm">${T('Control check: the raw win rate is high but, after adjusting for Elo, the excess should be near zero. If it is, the machinery works.','Teste de controle: o acerto bruto é alto mas, ajustado pelo Elo, o excesso deve ficar perto de zero. Se ficar, a conta funciona.')}</p>`:'';
+  const eras=r.eras?r.eras.map(e=>`${e.from}–${e.to}: <b style="color:${e.ex>=0?'var(--win)':'var(--loss)'}">${sg2(e.ex)}</b> (${e.n})`).join(', '):'';
+  const same=r.eras?r.eras.filter(e=>Math.sign(e.ex)===Math.sign(r.diff)).length:0;
+  el.innerHTML=`<div class="card" style="padding:.9rem 1.1rem"><b>${sig?'● ':''}${verdict}</b>
+   ${row(T('Fights where exactly one side has the trait','Lutas em que só um lado tem a característica'),r.n.toLocaleString(S.pt?'pt-BR':'en-US'))}
+   ${pct?row(T('Finish rate in these fights','Taxa de finalização nessas lutas'),`${ppf(r.rate)} (${ppf(r.ci[0])} – ${ppf(r.ci[1])})`)+row(T('Finish rate in comparable fights without the gap','Taxa de finalização em lutas comparáveis sem a diferença'),ppf(r.basel))+row(T('Difference','Diferença'),`${sg2(r.diff*100)} pp`):
+   row(T('Win rate of the side with the trait','Taxa de vitória do lado com a característica'),`${ppf(r.rate)} (${ppf(r.ci[0])} – ${ppf(r.ci[1])})`)+row(T('Expected from Elo alone (calibrated)','Esperado só pelo Elo (calibrado)'),ppf(r.exp))+row(T('Above expectation (skill removed)','Acima do esperado (força descontada)'),`<span style="color:${r.diff>=0?'var(--win)':'var(--loss)'}">${sg2(r.diff*100)} pp</span> ± ${(1.96*r.se*100).toFixed(1)}`)+row(T('Raw win rate vs 50%: p','Taxa bruta vs 50%: p'),r.p0.toFixed(4))}
+   ${r.eras?`<p class="mu sm" style="margin:.5rem 0 0">${T('Replication across eras (excess per 100 fights)','Replicação entre eras (excesso por 100 lutas)')}: ${eras}. ${same===3?T('Same direction in all three.','Mesma direção nas três.'):T('Not consistent across eras: be careful.','Não é consistente entre as eras: cuidado.')}</p>`:''}${ctl}
+   <p class="mu sm">${r.cal==null?T('Compared with similar fights that do not have the gap, under the same filters. Correlation is not causation.','Comparado com lutas parecidas que não têm a diferença, sob os mesmos filtros. Correlação não é causa.'):T(`Skill is removed with each fighter\'s Elo before the fight, calibrated on these ${r.base.toLocaleString('en-US')} fights (the raw Elo scale was ${r.cal>1?'too shy':'too bold'} by ${Math.abs((r.cal-1)*100).toFixed(0)}%). This is the effect beyond how good they already were. Correlation is not causation.`,`A força é descontada pelo Elo de cada lutador antes da luta, calibrado nestas ${r.base.toLocaleString('pt-BR')} lutas (a escala bruta do Elo estava ${r.cal>1?'tímida':'ousada'} em ${Math.abs((r.cal-1)*100).toFixed(0)}%). Isto é o efeito além de quão bons eles já eram. Correlação não é causa.`)}</p></div>`}
+ function tCross(){
+  const Vs=VARS(),V=Vs.find(v=>v.k===Z.v),dv=[...new Set(S.fg.map(f=>f.div))].sort(),op=(a,v)=>a.map(([k,l])=>`<option value="${k}"${String(k)===String(v)?' selected':''}>${l}</option>`).join('');
+  return `<p class="mu sm">${T('Cross a trait with the result, like a statistics package, in plain language. Every test you run is counted, and the significance cutoff tightens to protect you from finding patterns by luck.','Cruze uma característica com o resultado, como num pacote estatístico, em linguagem simples. Cada teste que você roda é contado, e o corte de significância fica mais rígido para te proteger de achar padrões por sorte.')}</p>
+  <div class="ctl"><label>${T('Trait','Característica')}<select data-zf="v">${op(Vs.map(v=>[v.k,v.l]),Z.v)}</select></label>
+  ${V.bin?'':`<label>${T('Gap of at least','Diferença mínima')} (${V.u})<input data-zf="T" type="number" step="${V.s||1}" min="0" value="${Z.T}"></label><label>${T('Side analysed','Lado analisado')}<select data-zf="side">${op([['more',T('The higher value','O maior valor')],['less',T('The lower value','O menor valor')]],Z.side)}</select></label>`}
+  <label>${T('Outcome','Desfecho')}<select data-zf="met">${op([['win',T('That side wins','Esse lado vence')],['fin',T('Fight ends by finish','Luta termina em finalização')]],Z.met)}</select></label>
+  ${Z.met==='win'?`<label>${T('Fights counted','Lutas contadas')}<select data-zf="sub">${op([['all',T('All','Todas')],['fin',T('Only finishes','Só finalizações')],['ko','Só KO/TKO'],['sub',T('Only submissions','Só submissões')],['dec',T('Only decisions','Só decisões')]],Z.sub)}</select></label>`:''}
+  <label>${T('Division','Divisão')}<select data-zf="div">${op([['ALL',T('All','Todas')],...dv.map(d=>[d,d])],Z.div)}</select></label>
+  <label>${T('From year','A partir do ano')}<input data-zf="from" type="number" min="1993" value="${Z.from}"></label>
+  <label>${T('Both with 3+ fights','Os dois com 3+ lutas')}<select data-zf="e3">${op([[1,T('Yes','Sim')],[0,T('No','Não')]],Z.e3)}</select></label></div><div id="zr"></div>`}
+
+ /* ================= 2) CARDS ================= */
+ const TIER=o=>o>=92?['legend',T('Legend','Lenda')]:o>=75?['gold',T('Gold','Ouro')]:o>=50?['silver',T('Silver','Prata')]:['bronze',T('Bronze','Bronze')];
+ const AK=['tro','def','lut','sub','peg','car'],AL=()=>({tro:T('STR','TRO'),def:T('DEF','DEF'),lut:T('WRE','LUT'),sub:'SUB',peg:T('PWR','PEG'),car:T('CAR','CAR')});
+ const CC={legend:['#fff2a8','#e0a800'],gold:['#f7d56a','#b98a12'],silver:['#e6ebf2','#8e98a8'],bronze:['#e0a877','#8a5428']};
+ function cardHtml(id){const c=Z.cards&&Z.cards[id],p=S.F.get(id);if(!c||!p)return'';const t=TIER(c[0]),L=AL();
+  return `<div class="fc ${t[0]}"><div class="fct"><div class="fco">${c[0]}<small>${T('OVR','GER')}</small><em>${t[1]}</em></div>${av(id,p.name,'big')}</div><div class="fcn">${esc(p.name)}</div><div class="fcd">${esc(c[7]==='ALL'?T('All divisions','Todas as divisões'):c[7])}</div>
+  ${AK.map((k,i)=>`<div class="fca"><b>${L[k]}</b><i><u style="width:${c[i+1]}%"></u></i><span>${c[i+1]}</span></div>`).join('')}<div class="fcf">SÚMULA UFC</div></div>`}
+ function radar(a,b){
+  const C=[Z.cards[a],b&&Z.cards[b]].filter(Boolean),R=90,cx=120,cy=115,L=AL(),pt=(i,v)=>{const g=-Math.PI/2+i*Math.PI/3;return[cx+R*v/99*Math.cos(g),cy+R*v/99*Math.sin(g)]};
+  const poly=(c,col)=>`<polygon points="${AK.map((_,i)=>pt(i,c[i+1]).join(',')).join(' ')}" fill="${col}" fill-opacity=".25" stroke="${col}" stroke-width="2"/>`;
+  return `<svg class="rdr" viewBox="0 0 240 230">${[.33,.66,1].map(s=>`<polygon points="${AK.map((_,i)=>pt(i,99*s).join(',')).join(' ')}" fill="none" stroke="var(--ln)"/>`).join('')}${AK.map((k,i)=>{const [x,y]=pt(i,112);return `<text x="${x}" y="${y+4}" text-anchor="middle" font-size="11" fill="var(--mu)">${L[k]}</text>`}).join('')}${poly(C[0],'#f5c518')}${C[1]?poly(C[1],'#6c8cff'):''}</svg>`}
+ function cardImg(id){
+  const c=Z.cards[id],p=S.F.get(id),t=TIER(c[0]),[c1,c2]=CC[t[0]],F='"Big Shoulders Display",Impact,"Arial Narrow",sans-serif',L=AL(),cv=document.createElement('canvas');cv.width=900;cv.height=1260;const x=cv.getContext('2d');
+  const fin=()=>cv.toBlob(b=>{const f=new File([b],'card-'+(p.name||id).replace(/\W+/g,'-')+'.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(()=>{});else{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=f.name;a.click()}});
+  const g=x.createLinearGradient(0,0,900,1260);g.addColorStop(0,c1);g.addColorStop(1,c2);x.fillStyle='#090a0d';x.fillRect(0,0,900,1260);
+  const oct=(cx,cy,r)=>{x.beginPath();for(let i=0;i<8;i++){const a=Math.PI/8+i*Math.PI/4;x[i?'lineTo':'moveTo'](cx+r*Math.cos(a),cy+r*Math.sin(a))}x.closePath()};
+  x.fillStyle=g;x.beginPath();x.moveTo(60,0);x.lineTo(840,0);x.lineTo(900,60);x.lineTo(900,1200);x.lineTo(840,1260);x.lineTo(60,1260);x.lineTo(0,1200);x.lineTo(0,60);x.closePath();x.fill();
+  x.fillStyle='#14110a';x.textAlign='left';x.font=`900 230px ${F}`;x.fillText(String(c[0]),70,260);x.font=`800 44px ${F}`;x.fillText(T('OVR','GER'),78,320);x.font=`800 40px ${F}`;x.fillText(t[1].toUpperCase(),78,372);
+  const draw=img=>{x.save();oct(650,250,170);x.clip();x.fillStyle='#f3efe2';x.fillRect(470,70,360,360);if(img)x.drawImage(img,470,70,360,360);else{x.fillStyle='#14110a';x.textAlign='center';x.font=`800 150px ${F}`;x.fillText(p.name.split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(),650,300)}x.restore();x.strokeStyle='#14110a';x.lineWidth=10;oct(650,250,170);x.stroke();
+   x.fillStyle='#14110a';x.textAlign='left';let fs=96;x.font=`900 ${fs}px ${F}`;while(x.measureText(p.name.toUpperCase()).width>760&&fs>40){fs-=4;x.font=`900 ${fs}px ${F}`}x.fillText(p.name.toUpperCase(),70,540);
+   x.font='500 34px Archivo,Arial,sans-serif';x.globalAlpha=.7;x.fillText(c[7]==='ALL'?T('All divisions','Todas as divisões'):c[7],72,592);x.globalAlpha=1;
+   AK.forEach((k,i)=>{const y=700+i*80;x.font=`800 50px ${F}`;x.fillText(L[k],70,y);x.fillStyle='rgba(0,0,0,.18)';x.fillRect(220,y-34,520,30);x.fillStyle='#14110a';x.fillRect(220,y-34,520*c[i+1]/99,30);x.textAlign='right';x.font=`900 56px ${F}`;x.fillText(String(c[i+1]),830,y);x.textAlign='left'});
+   x.globalAlpha=.55;x.font=`800 34px ${F}`;x.fillText('SÚMULA UFC',70,1200);x.globalAlpha=1;fin()};
+  const im=S.me.ph[id];if(im){const i=new Image();i.onload=()=>draw(i);i.onerror=()=>draw(null);i.src=im}else draw(null)}
+ function upPhoto(id,file){const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const c=document.createElement('canvas'),s=Math.min(i.width,i.height);c.width=c.height=192;c.getContext('2d').drawImage(i,(i.width-s)/2,(i.height-s)/2,s,s,0,0,192,192);S.me.ph[id]=c.toDataURL('image/jpeg',.8);saveMe();draw()};i.src=r.result};r.readAsDataURL(file)}
+ const slot=(s,lbl,only)=>{const id=Z[s],p=S.F.get(id);return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${lbl}</div>${p?`<div class="sel">${av(id,p.name,'sm')}<b>${esc(p.name)}</b><button data-zc="${s}">×</button></div>`:`<input data-zq="${s}:${only}" type="search" placeholder="${T('Search a fighter…','Buscar lutador…')}"><div class="res" id="zs${s}"></div>`}</div>`};
+ function tCards(){
+  if(!Z.cards)return `<p class="empty">${T('cards.json not found. Run the workflow "Atualizar base UFC" once so analytics.py generates it.','cards.json não encontrado. Rode o workflow "Atualizar base UFC" uma vez para o analytics.py gerá-lo.')}</p>`;
+  let h=`<p class="mu sm">${T('Six attributes as percentiles inside the fighter\'s division (99 = best). OVR is the Elo percentile. Needs 4+ UFC fights.','Seis atributos como percentis dentro da divisão do lutador (99 = o melhor). GER é o percentil do Elo. Exige 4+ lutas no UFC.')}</p><div class="xs">${slot('a',T('Fighter A','Lutador A'),'c')}${slot('b',T('Compare with (optional)','Comparar com (opcional)'),'c')}</div>`;
+  if(Z.a&&!Z.cards[Z.a])h+=`<p class="dn sm">${T('This fighter has no card yet (fewer than 4 fights or too little data).','Este lutador ainda não tem card (menos de 4 lutas ou poucos dados).')}</p>`;
+  if(Z.a&&Z.cards[Z.a]){h+=`<div class="xs"><div>${cardHtml(Z.a)}</div>${Z.b&&Z.cards[Z.b]?`<div>${cardHtml(Z.b)}</div>`:''}</div>${radar(Z.a,Z.b&&Z.cards[Z.b]?Z.b:null)}
+   <div class="acts" style="margin-top:.8rem"><button data-zimg="${Z.a}">${T('Share card as image','Compartilhar card como imagem')}</button><label class="btn">${T('Add photo','Adicionar foto')}<input type="file" accept="image/*" data-zph="${Z.a}" hidden></label><a class="btn" href="#/fighter/${Z.a}">${T('Open profile','Abrir ficha')}</a></div>`;
+   if(Z.b&&Z.cards[Z.b])h+=`<div class="acts"><button data-zimg="${Z.b}">${T('Share B as image','Compartilhar o B como imagem')}</button></div>`}
+  return h}
+
+ /* ================= 3) MÁQUINA DO TEMPO ("E SE?") ================= */
+ function tTm(){
+  const id=Z.t,p=S.F.get(id);
+  let h=`<p class="mu sm">${T('Flip the result of any historical fight and watch the ripple: ratings, rankings, title reigns. Only the winner changes; stats and method stay as they were. Nothing is saved.','Inverta o resultado de qualquer luta histórica e veja o efeito cascata: notas, rankings e reinados. Só o vencedor muda; estatísticas e método ficam como eram. Nada é salvo.')}</p>${slot('t',T('Fighter','Lutador'),'f')}`;
+  if(p){const fs=S.fg.filter(f=>(f.res==='a'||f.res==='b')&&(mid(f.a.id)===id||mid(f.b.id)===id)).sort((a,b)=>b.date<a.date?-1:1);
+   h+=fs.map(f=>{const on=Z.fl.has(f.id),w=on?f.b:f.a,l=on?f.a:f.b;return `<div class="h" style="grid-template-columns:5.5rem 1fr auto"><span class="mu">${fmt(f.date)}</span><span><b>${esc(name(w))}</b> ${T('beat','venceu')} ${esc(name(l))}<br><span class="mu sm">${esc(f.method)}, ${esc(f.div)}${f.title?', '+T('title','cinturão'):''}</span></span><button data-ztf="${f.id}" class="pk${on?' on':''}">${on?T('Flipped','Invertida'):T('Flip','Inverter')}</button></div>`}).join('')}
+  h+=`<div class="acts" style="margin-top:.8rem"><button id="ztr" ${Z.fl.size?'':'disabled'}>${T('Recalculate history','Recalcular a história')} (${Z.fl.size})</button>${Z.fl.size?`<button data-ztc="1">${T('Clear flips','Limpar inversões')}</button>`:''}</div><div id="zt"></div>`;return h}
+ function tmRun(){
+  const el=$('#zt');if(!el)return;el.innerHTML=`<p class="mu">${T('Recalculating the whole history…','Recalculando a história inteira…')}</p>`;
+  setTimeout(()=>{
+   const L1=scope('ALL').map(f=>Z.fl.has(f.id)?{...f,res:f.res==='a'?'b':f.res==='b'?'a':f.res}:f),E0=getE('ALL'),E1=whr(L1,S.P),P=S.P,cut=Date.now()-2*YR;
+   const rows=[...E1.RM.values()].filter(x=>E0.RM.has(x.id)).map(x=>({id:x.id,d:x.cur-E0.RM.get(x.id).cur,c0:E0.RM.get(x.id).cur,c1:x.cur,h:x.hs-E0.RM.get(x.id).hs,n:x.n}));
+   const big=rows.filter(r=>r.n>=3).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)).slice(0,10),fl=[...Z.fl].map(i=>fmap().get(i)).filter(Boolean);
+   const act=E=>[...E.rows].filter(x=>x.n>=P.min&&Date.parse(x.last)>=cut).sort((a,b)=>b.cur-a.cur),a0=act(E0),a1=act(E1),pos0=new Map(a0.map((x,i)=>[x.id,i+1]));
+   const rk=k=>`${k.div}|${k.id}|${k.start}`,r0=new Map(E0.rg.map(k=>[rk(k),k])),r1=new Map(E1.rg.map(k=>[rk(k),k])),gone=[...r0].filter(([k])=>!r1.has(k)).map(x=>x[1]),born=[...r1].filter(([k])=>!r0.has(k)).map(x=>x[1]),chg=[...r1].filter(([k,v])=>r0.has(k)&&r0.get(k).def!==v.def).map(([k,v])=>({v,o:r0.get(k)}));
+   const li=(r)=>`<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/fighter/${r.id}"><b>${esc(nm(r.id))}</b></a><span class="mu">${Math.round(r.c0)} → ${Math.round(r.c1)}</span><b class="${r.d>=0?'up':'dn'}">${r.d>=0?'+':''}${r.d.toFixed(0)}</b></div>`;
+   const rg=(k,sign)=>`<div class="sr" style="grid-template-columns:1fr auto"><span><a href="#/fighter/${k.id}"><b>${esc(nm(k.id))}</b></a> <span class="mu">${esc(k.div)}</span></span><span class="${sign}">${k.start.slice(0,4)}–${k.end?k.end.slice(0,4):T('now','hoje')}, ${k.def} ${T('def.','def.')}</span></div>`;
+   el.innerHTML=`<h2>${T('What changes','O que muda')}</h2><div class="card" style="padding:.8rem 1.1rem"><b>${T('Fights flipped','Lutas invertidas')}</b>${fl.map(f=>`<p class="mu sm" style="margin:.2rem 0">${fmt(f.date)}: ${esc(name(f.b))} ${T('now beats','agora vence')} ${esc(name(f.a))}</p>`).join('')}</div>
+   <div class="card" style="padding:.8rem 1.1rem"><b>${T('Biggest changes in current rating','Maiores mudanças na nota atual')}</b>${big.map(li).join('')||`<p class="mu sm">${T('No relevant change.','Sem mudança relevante.')}</p>`}<p class="mu sm">${T('The change spreads through the whole network of opponents.','A mudança se espalha por toda a rede de adversários.')}</p></div>
+   <div class="card" style="padding:.8rem 1.1rem"><b>${T('Current top 10 after the change','Top 10 atual depois da mudança')}</b>${a1.slice(0,10).map((x,i)=>{const o=pos0.get(x.id),m=o?o-(i+1):0;return `<div class="sr" style="grid-template-columns:2rem 1fr auto"><b>${i+1}</b><a href="#/fighter/${x.id}">${esc(nm(x.id))}</a><span class="${m>0?'up':m<0?'dn':'mu'}">${o?(m>0?'▲'+m:m<0?'▼'+(-m):'='):T('new','novo')}</span></div>`}).join('')}</div>
+   <div class="card" style="padding:.8rem 1.1rem"><b>${T('Title reigns','Reinados de título')}</b>${gone.length?`<p class="mu sm" style="margin:.4rem 0 0">${T('Disappear','Deixam de existir')}</p>${gone.map(k=>rg(k,'dn')).join('')}`:''}${born.length?`<p class="mu sm" style="margin:.4rem 0 0">${T('Appear','Passam a existir')}</p>${born.map(k=>rg(k,'up')).join('')}`:''}${chg.length?`<p class="mu sm" style="margin:.4rem 0 0">${T('Change in defenses','Mudam de defesas')}</p>${chg.slice(0,6).map(c=>`<div class="sr" style="grid-template-columns:1fr auto"><span>${esc(nm(c.v.id))}</span><span>${c.o.def} → ${c.v.def}</span></div>`).join('')}`:''}${gone.length+born.length+chg.length?'':`<p class="mu sm">${T('No title reign changes.','Nenhum reinado de título muda.')}</p>`}</div>`},30)}
+
+ /* ================= 4) VIRADAS E GRÁFICO AO VIVO ================= */
+ function liveChart(f){
+  const v=Z.live&&Z.live[f.id];if(!v||v.length<2)return'';
+  const w=f.res==='a'?f.a:f.b,l=f.res==='a'?f.b:f.a,pts=[...v,1],n=pts.length,W=320,H=130,X=i=>26+i*(W-52)/(n-1),Y=p=>H-26-p*(H-46),lab=pts.map((_,i)=>i===0?T('Pre','Antes'):i===n-1?T('Result','Final'):'R'+i);
+  const mn=Math.min(...v.slice(1)),mr=1+v.slice(1).indexOf(mn);
+  return `<div class="card" style="padding:.8rem 1.1rem;margin-bottom:.8rem"><b>${T('Live win probability','Probabilidade de vitória ao vivo')}: ${esc(name(w))}</b>
+   <svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block"><line x1="26" x2="${W-26}" y1="${Y(.5)}" y2="${Y(.5)}" stroke="var(--ln)" stroke-dasharray="4"/><polyline points="${pts.map((p,i)=>X(i)+','+Y(p)).join(' ')}" fill="none" stroke="var(--gd)" stroke-width="2.5"/>${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p)}" r="4" fill="${i===n-1?'var(--win)':'var(--gd)'}"/><text x="${X(i)}" y="${Math.max(12,Y(p)-9)}" text-anchor="middle" font-size="10" fill="var(--tx)">${Math.round(p*100)}%</text><text x="${X(i)}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--mu)">${lab[i]}</text>`).join('')}</svg>
+   <p class="mu sm">${T('Chance that the official winner would win, using only what had happened up to the end of each round, plus the pre-fight Elo (cross-validated).','Chance de o vencedor oficial vencer, usando só o que tinha acontecido até o fim de cada round, mais o Elo pré-luta (validação cruzada).')}${mn<.35?` <b style="color:var(--gd)">${T(`Comeback: ${name(w)} was down to ${Math.round(mn*100)}% after round ${mr}.`,`Virada: ${name(w)} chegou a ${Math.round(mn*100)}% depois do round ${mr}.`)}</b>`:''}</p></div>`}
+ const pxs=window.XS;window.XS=f=>(pxs?pxs(f):'')+liveChart(f);
+ function tCb(){
+  if(!Z.cb)return `<p class="empty">${T('live.json not found. Run the workflow "Atualizar base UFC" once so analytics.py generates it.','live.json não encontrado. Rode o workflow "Atualizar base UFC" uma vez para o analytics.py gerá-lo.')}</p>`;
+  const m=Z.lm,by=fmap();
+  return `<div class="card" style="padding:.8rem 1.1rem"><p class="mu sm">${T('How well the model reads a fight as it unfolds (log-loss, lower is better), cross-validated:','Quão bem o modelo lê a luta enquanto ela acontece (log-loss, menor é melhor), com validação cruzada:')}</p>${m.groups.map(g=>`<div class="sr" style="grid-template-columns:1fr auto auto"><span>${T('After round','Depois do round')} ${g.g}${g.g===4?'+':''} (${g.n.toLocaleString(S.pt?'pt-BR':'en-US')})</span><span class="mu">${T('pre-fight only','só pré-luta')} ${g.ll0.toFixed(3)}</span><b>${g.ll.toFixed(3)}</b></div>`).join('')}</div>
+  <h2>${T('Biggest comebacks in UFC history','Maiores viradas da história do UFC')}</h2>${Z.cb.slice(0,25).map(([id,p,r])=>{const f=by.get(id);if(!f)return'';const w=f.res==='a'?f.a:f.b,l=f.res==='a'?f.b:f.a;return `<div class="card h" style="grid-template-columns:1fr auto;padding:.6rem 1rem;border-bottom:0"><span><a href="#/event/${f.ev}/${id}"><b>${esc(name(w))}</b></a> ${T('beat','venceu')} ${esc(name(l))}<br><span class="mu sm">${fmt(f.date)}, ${esc(f.method)} ${f.round?'R'+esc(f.round):''}</span></span><span style="text-align:right"><b class="up">${Math.round(p*100)}%</b><br><span class="mu sm">${T('after R','depois do R')}${r}</span></span></div>`}).join('')}
+  <p class="mu sm">${T('The percentage is the lowest chance the eventual winner had after any round.','A porcentagem é a menor chance que o vencedor final teve depois de algum round.')}</p>`}
+
+ /* ================= tela, eventos e rota ================= */
+ function draw(){
+  const el=$('#zx');if(!el)return;const tb=(k,l)=>`<button data-zt="${k}" class="${Z.tab===k?'on':''}">${l}</button>`;
+  el.innerHTML=`<div class="seg">${tb('cross',T('Cross-tabs','Cruzador'))}${tb('cards','Cards')}${tb('tm',T('What if?','E se?'))}${tb('cb',T('Comebacks','Viradas'))}</div>`+({cross:tCross,cards:tCards,tm:tTm,cb:tCb}[Z.tab])()+`<p class="mu sm" style="margin-top:1rem">${T('Everything here is exploratory: patterns are hypotheses, not proof.','Tudo aqui é exploratório: padrões são hipóteses, não provas.')}</p>`;
+  if(Z.tab==='cross')zres();
+  const m=$('#m');
+  m.onclick=e=>{const t=e.target.closest('[data-zt],[data-zp],[data-zc],[data-zimg],[data-ztf],[data-ztc],#ztr');if(!t)return;const d=t.dataset;
+   if(d.zt){Z.tab=d.zt;draw()}else if(d.zp){const [s,id]=d.zp.split(':');Z[s]=id;draw()}else if(d.zc){Z[d.zc]='';draw()}
+   else if(d.zimg)cardImg(d.zimg);else if(d.ztf){Z.fl.has(d.ztf)?Z.fl.delete(d.ztf):Z.fl.add(d.ztf);draw()}else if(d.ztc){Z.fl.clear();draw()}else if(t.id==='ztr')tmRun()};
+  m.oninput=e=>{const q=e.target.closest('[data-zq]');
+   if(q){const [s,only]=q.dataset.zq.split(':'),t=q.value.toLowerCase().trim(),r=$('#zs'+s);if(r)r.innerHTML=t?[...S.F.values()].filter(f=>(only==='c'?Z.cards&&Z.cards[f.id]:true)&&(f.name+' '+f.nick).toLowerCase().includes(t)).slice(0,6).map(f=>`<button data-zp="${s}:${f.id}"><span>${esc(f.name)}</span><span class="mu">${esc(f.record)}</span></button>`).join(''):'';return}
+   const ph=e.target.closest('[data-zph]');if(ph){if(ph.files[0])upPhoto(ph.dataset.zph,ph.files[0]);return}
+   const f=e.target.closest('[data-zf]');if(!f)return;const k=f.dataset.zf,num=['T','from','e3'].includes(k);Z[k]=num?+f.value:f.value;
+   if(k==='v'){Z.T=VARS().find(v=>v.k===Z.v).T;Z.side='more';draw()}else if(k==='met'){draw()}else zres()};
+ }
+ async function vStudio(a){
+  if(a){Z.a=mid(a);Z.tab='cards'}
+  M(`<h1>${T('Studio','Estúdio')}</h1><div id="zx"><p class="mu">${T('Loading…','Carregando…')}</p></div>`);
+  if(window.XLOAD)await window.XLOAD();draw()}
+ const pxt=window.XT;window.XT=()=>[...(pxt?pxt():[]),['studio',T('Studio','Estúdio')]];
+ window.XV={...(window.XV||{}),studio:vStudio};
+ const pxp=window.XP;window.XP=id=>(pxp?pxp(id):'')+(Z.cards&&Z.cards[id]?`<div class="acts"><a class="btn" href="#/studio/${id}">${T('See the card','Ver o card')}</a></div>`:'');
 })();
 init();
 </script>
