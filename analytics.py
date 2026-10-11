@@ -254,6 +254,23 @@ def judge_scores(detail):
     return out
 
 
+def judge_order(fights):
+    """Descobre se os placares dos juízes vêm na ordem dos lutadores listados ou com o vencedor primeiro.
+    Teste: numa decisão UNÂNIME todos os juízes favorecem o vencedor, então a ordem certa é a que mais acerta isso."""
+    listed = winner_first = n = 0
+    for f in fights:
+        kind, sub = klass(f.get("method"))
+        if kind != "dec" or sub != "unanimous" or f["res"] not in ("a", "b"):
+            continue
+        sc = judge_scores(f.get("detail"))
+        if len(sc) < 2:
+            continue
+        n += 1
+        listed += all(((x - y) if f["res"] == "a" else (y - x)) > 0 for x, y in sc)
+        winner_first += all(x > y for x, y in sc)
+    return ("winner_first" if winner_first > listed else "listed"), listed, winner_first, n
+
+
 def inv(M):
     n = len(M)
     A = [list(row) + [1.0 if i == j else 0.0 for j in range(n)] for i, row in enumerate(M)]
@@ -333,7 +350,7 @@ def run_decisions(fights):
         if not rp:
             continue
         vs = [round_vec(a, b) for a, b in rp]
-        fl = zlib.crc32(f["id"].encode()) & 1          # orientação aleatória: o ufcstats sempre lista o vencedor primeiro
+        fl = zlib.crc32(f["id"].encode()) & 1          # orientação aleatória: A e B não são sempre vencedor e perdedor
         sign = -1.0 if fl else 1.0
         x = [sign * sum(v[j] for v in vs) for j in range(len(DEC_NAMES))]
         subj_won = (f["res"] == "a") != bool(fl)
@@ -343,6 +360,7 @@ def run_decisions(fights):
         return None
     full = fit_lr([r["x"] for r in rows], [r["y"] for r in rows])
     models = [fit_lr([r["x"] for r in rows if r["fold"] != k], [r["y"] for r in rows if r["fold"] != k]) for k in range(FOLDS)]
+    order, n_listed, n_wf, n_un = judge_order(fights)
     out, cnt = {}, Counter()
     agree, ll, by = 0, 0.0, defaultdict(lambda: [0, 0])
     for r in rows:
@@ -359,13 +377,14 @@ def run_decisions(fights):
         rs = [round(flip * lr_logit(m, v), 2) for v in r["rv"]]
         f = r["f"]
         sc = judge_scores(f.get("detail"))
-        if sc and f["res"] == "b":
-            sc = [(y, x) for x, y in sc]                # primeiro número = lutador listado primeiro (A)
+        if sc and order == "listed" and f["res"] == "b":
+            sc = [(y, x) for x, y in sc]                # números na ordem listada: inverte quando o vencedor é o 2º listado
         out[r["id"]] = [round(po, 3), cls, (r["sub"] or "unanimous")[0], ",".join(f"{x}-{y}" for x, y in sc), rs]
     n = len(rows)
     model = {"n": n, "acc": round(agree / n, 4), "ll": round(ll / n, 4),
              "acc_by": {k: [round(v[0] / v[1], 4), v[1]] for k, v in by.items()},
              "classes": [cnt[i] for i in range(4)], "cuts": list(CLS_CUTS), "folds": FOLDS, "names": DEC_NAMES,
+             "judge_order": order, "judge_check": [n_listed, n_wf, n_un],
              "imp": {g: round(cv_logloss(rows, ix) - ll / n, 4) for g, ix in DEC_GROUPS.items()},   # piora do log-loss sem o grupo
              "b": [round(full["b"][j] / full["sd"][j], 4) for j in range(len(DEC_NAMES))],
              "se": [round(full["se"][j] / full["sd"][j], 4) for j in range(len(DEC_NAMES))]}
@@ -391,7 +410,7 @@ def run_live(fights, pre):
         kind, _ = klass(f.get("method"))
         vs = [round_vec(a, b)[:6] for a, b in rp]               # sig, tot, td, kd, ctrl, sub (diferença A - B)
         last = len(vs) if kind == "dec" else len(vs) - 1        # no round do desfecho a luta já acabou: não é "ao vivo"
-        fl = zlib.crc32(f["id"].encode()) & 1                   # orientação aleatória (o vencedor vem sempre primeiro)
+        fl = zlib.crc32(f["id"].encode()) & 1                   # orientação aleatória (A e B não são sempre vencedor e perdedor)
         sign = -1.0 if fl else 1.0
         ea, eb = pre[f["id"]]
         prior = sign * (ea - eb) / 400.0
