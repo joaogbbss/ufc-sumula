@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scraper do UFC Stats (ufcstats.com).
+"""Scraper do UFC Stats (ufcstats.com) + Enriquecimento via ESPN MMA API.
 
 1ª execução: baixa tudo (eventos, lutas com estatísticas, lutadores).
 Demais execuções: só eventos novos + reprocessa os últimos N eventos
@@ -23,7 +23,6 @@ BASE = "http://ufcstats.com"
 OUT = Path("data")
 DELAY = 0.7  # pausa entre requisições, para não sobrecarregar o site
 
-# Ordem importa: nomes mais específicos antes dos genéricos.
 DIVS = ["Women's Strawweight", "Women's Flyweight", "Women's Bantamweight",
         "Women's Featherweight", "Light Heavyweight", "Strawweight", "Flyweight",
         "Bantamweight", "Featherweight", "Lightweight", "Welterweight",
@@ -37,10 +36,9 @@ S.headers.update({
 })
 DATE_RE = re.compile(r"([A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})")
 
-
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-CHALLENGE = "Checking your browser"  # página de verificação anti-robô do site
+CHALLENGE = "Checking your browser"
 _ctx = _page = None
 _solved = 0
 
@@ -64,7 +62,7 @@ def _solve(url):
         time.sleep(1)
         try:
             html = _page.content()
-        except Exception:  # a página está recarregando
+        except Exception:
             continue
         if CHALLENGE not in html:
             _solved += 1
@@ -80,7 +78,7 @@ def get(url, tries=4):
     for i in range(tries):
         try:
             html = None
-            r = _ctx.request.get(url, timeout=30000)  # rápido, usa os cookies do navegador
+            r = _ctx.request.get(url, timeout=30000)
             if r.status == 200:
                 html = r.text()
             if html is None or CHALLENGE in html:
@@ -124,6 +122,29 @@ def parse_date(t):
 def division(title):
     t = title.replace("Catchweight", "Catch Weight").lower()
     return next((d for d in DIVS if d.lower() in t), "Outros")
+
+
+def fetch_espn_image(fighter_name):
+    """Complementa a ficha com headshot PNG transparente oficial via API aberta da ESPN."""
+    if not fighter_name:
+        return None
+    try:
+        r = S.get("https://site.web.api.espn.com/apis/search/v2",
+                  params={"query": fighter_name, "limit": 5}, timeout=6)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        for res in data.get("results", []):
+            if res.get("type") == "player":
+                for item in res.get("contents", []):
+                    link = item.get("link", {}).get("web", "")
+                    if "mma" in link or "ufc" in str(item).lower():
+                        espn_uid = item.get("uid", "").split(":")[-1]
+                        if espn_uid.isdigit():
+                            return f"https://a.espncdn.com/i/headshots/mma/players/full/{espn_uid}.png"
+    except Exception:
+        pass
+    return None
 
 
 # ---------- páginas ----------
@@ -198,7 +219,7 @@ def parse_fight(url, ev, order):
     st = (ppl[0]["st"], ppl[1]["st"])
     res = ("a" if st[0] == "W" else "b" if st[1] == "W"
            else "draw" if "D" in st else "nc" if "NC" in st else None)
-    if not res:  # luta sem resultado (cancelada / futura)
+    if not res:
         return None
     tl = s.select_one("i.b-fight-details__fight-title")
     title = txt(tl)
@@ -220,9 +241,10 @@ def parse_fight(url, ev, order):
             **parse_tables(s)}
 
 
-def parse_fighter(fid):
+def parse_fighter(fid, existing_img=None):
     s = get(f"{BASE}/fighter-details/{fid}")
-    d = {"id": fid, "name": txt(s.select_one("span.b-content__title-highlight")),
+    name = txt(s.select_one("span.b-content__title-highlight"))
+    d = {"id": fid, "name": name,
          "nick": txt(s.select_one("p.b-content__Nickname")),
          "record": txt(s.select_one("span.b-content__title-record")).replace("Record:", "").strip()}
     for li in s.select("li.b-list__box-list-item"):
@@ -230,6 +252,9 @@ def parse_fighter(fid):
         val = txt(li).replace(label, "", 1).strip()
         if label and val:
             d[label.rstrip(":").strip()] = val
+    img = existing_img or fetch_espn_image(name)
+    if img:
+        d["img"] = img
     return d
 
 
@@ -259,6 +284,148 @@ def upcoming(limit=3):
                 cells = " ".join(txt(td) for td in tr.select("td"))
                 e["fights"].append({"a": {"id": uid(fl[0]["href"]), "name": txt(fl[0])},
                                     "b": {"id": uid(fl[1]["href"]), "name": txt(fl[1])},
+                                    "div": division(cells), "title": "title" in cells.lower()})
+    return evs
+
+
+# ---------- validação ----------
+
+def validate(events, fights, fighters, extra=()):
+    issues, used = [], set(extra)
+    for f in fights.values():
+        a, b = f["a"]["id"], f["b"]["id"]
+        used |= {a, b}
+        if a == b:
+            issues.append(["luta_contra_si_mesmo", f["id"]])
+        if f["ev"] not in events:
+            issues.append(["luta_sem_evento", f["id"]])
+        for x in (a, b):
+            if x not in fighters:
+                issues.append(["lutador_sem_ficha", x])
+    for fid, p in fighters.items():
+        if fid not in used:
+            issues.append(["lutador_sem_luta", fid])
+    by_name, by_dob = {}, {}
+    for p in fighters.values():
+        n, dob = p["name"].lower(), p.get("DOB", "")
+        if n in by_name:
+            issues.append(["mesmo_nome", by_name[n], p["id"]])
+        by_name[n] = p["id"]
+        if dob not in ("", "--"):
+            if (n, dob) in by_dob:
+                issues.append(["possivel_duplicado", by_dob[(n, dob)], p["id"]])
+            by_dob[(n, dob)] = p["id"]
+    return issues
+
+
+# ---------- principal ----------
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--max-minutes", type=float, default=300)
+    ap.add_argument("--refresh", type=int, default=3,
+                    help="reprocessa os N eventos mais recentes")
+    args = ap.parse_args()
+    t0 = time.time()
+
+    def has_time():
+        return (time.time() - t0) / 60 < args.max_minutes
+
+    events = {e["id"]: e for e in load("events.json", [])}
+    fights = {f["id"]: f for f in load("fights.json", [])}
+    fighters = {f["id"]: f for f in load("fighters.json", [])}
+    meta = load("meta.json", {"done": []})
+    done = set(meta["done"])
+
+    def persist():
+        meta.update(done=sorted(done), updated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    n_events=len(events), n_fights=len(fights), n_fighters=len(fighters))
+        save("events.json", sorted(events.values(), key=lambda e: e["date"], reverse=True))
+        save("fights.json", sorted(fights.values(), key=lambda f: (f["date"], -f["ord"])))
+        save("fighters.json", sorted(fighters.values(), key=lambda p: p["name"]))
+        save("meta.json", meta)
+
+    today = date.today().isoformat()
+    listed = sorted((e for e in list_events() if e["date"] <= today), key=lambda e: e["date"])
+    if not listed:
+        raise SystemExit("ERRO: nenhum evento encontrado no ufcstats.com (veja o DIAGNOSTICO acima).")
+    recent = {e["id"] for e in listed[-args.refresh:]}
+    todo = [e for e in reversed(listed) if e["id"] not in done or e["id"] in recent]
+    print(f"{len(listed)} eventos no site, {len(todo)} para processar")
+
+    touched = set()
+    for n, e in enumerate(todo, 1):
+        if not has_time():
+            print("Tempo esgotado; o restante continua na próxima execução.")
+            break
+        try:
+            urls = event_fight_urls(e["id"])
+            ids = [uid(u) for u in urls]
+            new = {}
+            for i, u in enumerate(urls):
+                fid = ids[i]
+                if fid in fights and e["id"] not in recent:
+                    continue
+                f = parse_fight(u, e, i)
+                if f:
+                    new[fid] = f
+            resolved = set(new) | {x for x in ids if x in fights and e["id"] not in recent}
+            age = (date.today() - date.fromisoformat(e["date"])).days
+            complete = bool(ids) and (len(resolved) == len(ids) or (age >= 3 and resolved))
+            if complete:
+                fights.update(new)
+                events[e["id"]] = {**e, "n": len(urls)}
+                done.add(e["id"])
+                if e["id"] in recent:
+                    touched |= {x for f in new.values() for x in (f["a"]["id"], f["b"]["id"])}
+                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: {len(new)} lutas")
+            else:
+                for k in [k for k, f in fights.items() if f["ev"] == e["id"]]:
+                    del fights[k]
+                events.pop(e["id"], None)
+                done.discard(e["id"])
+                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: ainda não terminou, ignorado por enquanto "
+                      f"({len(resolved)}/{len(ids)} lutas com resultado)")
+        except Exception as ex:
+            print(f"ERRO em {e['name']}: {ex}")
+        if n % 5 == 0:
+            persist()
+
+    up, upids, up_ok = [], set(), False
+    try:
+        up = upcoming()
+        upids = {f[s]["id"] for e in up for f in e["fights"] for s in "ab"}
+        up_ok = True
+        print(f"Próximos eventos: {len(up)} ({sum(len(e['fights']) for e in up)} lutas)")
+    except Exception as ex:
+        print(f"aviso: próximos eventos não carregados: {ex}")
+
+    need = {x for f in fights.values() for x in (f["a"]["id"], f["b"]["id"])} | upids
+    pending = [x for x in need if x not in fighters] + [x for x in touched if x in fighters]
+    for k, fid in enumerate(pending, 1):
+        if not has_time():
+            print("Tempo esgotado nas fichas; continua na próxima execução.")
+            break
+        try:
+            old_img = fighters.get(fid, {}).get("img")
+            fighters[fid] = parse_fighter(fid, existing_img=old_img)
+        except Exception as ex:
+            print(f"ERRO no lutador {fid}: {ex}")
+        if k % 100 == 0:
+            persist()
+
+    persist()
+    if up_ok:
+        save("upcoming.json", {"updated": meta["updated"], "events": up})
+    issues = validate(events, fights, fighters, upids)
+    save("validation.json", {"updated": meta["updated"], "count": len(issues), "issues": issues})
+    print(f"Pronto: {len(events)} eventos, {len(fights)} lutas, {len(fighters)} lutadores, "
+          f"{len(issues)} avisos de validação.")
+
+
+if __name__ == "__main__":
+    main()
+: uid(fl[1]["href"]), "name": txt(fl[1])},
                                     "div": division(cells), "title": "title" in cells.lower()})
     return evs
 
