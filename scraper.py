@@ -1,28 +1,34 @@
 #!/usr/bin/env python3
-"""Scraper do UFC Stats (ufcstats.com) + Enriquecimento via ESPN MMA API.
+"""Scraper do UFC Stats (ufcstats.com) + Enriquecimento via ESPN API e BestFightOdds.
 
 1ª execução: baixa tudo (eventos, lutas com estatísticas, lutadores).
 Demais execuções: só eventos novos + reprocessa os últimos N eventos
-(o site às vezes corrige resultados). Se o tempo acabar, salva o progresso
-e continua de onde parou na próxima execução.
+(o site às vezes corrige resultados) + enriquece fichas com fotos PNG,
+país/bandeira, academia (ESPN API) e odds de mercado (BestFightOdds).
+Se o tempo acabar, salva o progresso e continua de onde parou na próxima execução.
 
-Uso: python scraper.py [--max-minutes 300] [--refresh 2]
+Uso: python scraper.py [--max-minutes 300] [--refresh 3] [--enrich-limit 150]
 """
 import argparse
 import json
 import re
 import time
+import unicodedata
 from datetime import date, datetime, timezone
 from pathlib import Path
+from urllib.parse import quote_plus
 
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 BASE = "http://ufcstats.com"
+ESPN_SEARCH_API = "https://site.web.api.espn.com/apis/common/v3/search"
+BFO_SEARCH_URL = "https://www.bestfightodds.com/search"
 OUT = Path("data")
 DELAY = 0.7  # pausa entre requisições, para não sobrecarregar o site
 
+# Ordem importa: nomes mais específicos antes dos genéricos.
 DIVS = ["Women's Strawweight", "Women's Flyweight", "Women's Bantamweight",
         "Women's Featherweight", "Light Heavyweight", "Strawweight", "Flyweight",
         "Bantamweight", "Featherweight", "Lightweight", "Welterweight",
@@ -30,15 +36,16 @@ DIVS = ["Women's Strawweight", "Women's Flyweight", "Women's Bantamweight",
 
 S = requests.Session()
 S.headers.update({
-    "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 })
 DATE_RE = re.compile(r"([A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})")
 
+
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-CHALLENGE = "Checking your browser"
+CHALLENGE = "Checking your browser"  # página de verificação anti-robô do site
 _ctx = _page = None
 _solved = 0
 
@@ -62,7 +69,7 @@ def _solve(url):
         time.sleep(1)
         try:
             html = _page.content()
-        except Exception:
+        except Exception:  # a página está recarregando
             continue
         if CHALLENGE not in html:
             _solved += 1
@@ -78,7 +85,7 @@ def get(url, tries=4):
     for i in range(tries):
         try:
             html = None
-            r = _ctx.request.get(url, timeout=30000)
+            r = _ctx.request.get(url, timeout=30000)  # rápido, usa os cookies do navegador
             if r.status == 200:
                 html = r.text()
             if html is None or CHALLENGE in html:
@@ -98,6 +105,12 @@ def txt(el):
 
 def uid(url):
     return url.rstrip("/").split("/")[-1]
+
+
+def norm_name(s):
+    """Normaliza nome para comparação entre bases (remove acentos e pontuação)."""
+    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
 
 
 def load(name, default):
@@ -124,30 +137,7 @@ def division(title):
     return next((d for d in DIVS if d.lower() in t), "Outros")
 
 
-def fetch_espn_image(fighter_name):
-    """Complementa a ficha com headshot PNG transparente oficial via API aberta da ESPN."""
-    if not fighter_name:
-        return None
-    try:
-        r = S.get("https://site.web.api.espn.com/apis/search/v2",
-                  params={"query": fighter_name, "limit": 5}, timeout=6)
-        if r.status_code != 200:
-            return None
-        data = r.json()
-        for res in data.get("results", []):
-            if res.get("type") == "player":
-                for item in res.get("contents", []):
-                    link = item.get("link", {}).get("web", "")
-                    if "mma" in link or "ufc" in str(item).lower():
-                        espn_uid = item.get("uid", "").split(":")[-1]
-                        if espn_uid.isdigit():
-                            return f"https://a.espncdn.com/i/headshots/mma/players/full/{espn_uid}.png"
-    except Exception:
-        pass
-    return None
-
-
-# ---------- páginas ----------
+# ---------- páginas ufcstats ----------
 
 def list_events():
     soup = get(f"{BASE}/statistics/events/completed?page=all")
@@ -219,7 +209,7 @@ def parse_fight(url, ev, order):
     st = (ppl[0]["st"], ppl[1]["st"])
     res = ("a" if st[0] == "W" else "b" if st[1] == "W"
            else "draw" if "D" in st else "nc" if "NC" in st else None)
-    if not res:
+    if not res:  # luta sem resultado (cancelada / futura)
         return None
     tl = s.select_one("i.b-fight-details__fight-title")
     title = txt(tl)
@@ -241,10 +231,9 @@ def parse_fight(url, ev, order):
             **parse_tables(s)}
 
 
-def parse_fighter(fid, existing_img=None):
+def parse_fighter(fid):
     s = get(f"{BASE}/fighter-details/{fid}")
-    name = txt(s.select_one("span.b-content__title-highlight"))
-    d = {"id": fid, "name": name,
+    d = {"id": fid, "name": txt(s.select_one("span.b-content__title-highlight")),
          "nick": txt(s.select_one("p.b-content__Nickname")),
          "record": txt(s.select_one("span.b-content__title-record")).replace("Record:", "").strip()}
     for li in s.select("li.b-list__box-list-item"):
@@ -252,10 +241,108 @@ def parse_fighter(fid, existing_img=None):
         val = txt(li).replace(label, "", 1).strip()
         if label and val:
             d[label.rstrip(":").strip()] = val
-    img = existing_img or fetch_espn_image(name)
-    if img:
-        d["img"] = img
     return d
+
+
+# ---------- enriquecimento externo (ESPN API + BestFightOdds) ----------
+
+def enrich_fighter_espn(fighter_dict):
+    """Enriquece o dicionário do lutador com foto PNG transparente, país e equipa via API da ESPN."""
+    name = fighter_dict.get("name", "")
+    if not name:
+        return fighter_dict
+    try:
+        url = f"{ESPN_SEARCH_API}?query={quote_plus(name)}&limit=5&type=player"
+        r = S.get(url, timeout=10)
+        if r.status_code != 200:
+            fighter_dict["espn_checked"] = True
+            return fighter_dict
+        data = r.json()
+        target = norm_name(name)
+        best = None
+        for item in data.get("items", []):
+            if item.get("league") == "ufc" or item.get("sport") == "mma":
+                if norm_name(item.get("displayName", "")) == target:
+                    best = item
+                    break
+                if best is None:
+                    best = item
+        if best and best.get("id"):
+            espn_id = str(best["id"])
+            fighter_dict["espn_id"] = espn_id
+            fighter_dict["img"] = f"https://a.espncdn.com/i/headshots/mma/players/full/{espn_id}.png"
+            # Busca metadados complementares no endpoint de atleta da ESPN
+            ath_url = f"https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/athletes/{espn_id}"
+            ra = S.get(ath_url, timeout=10)
+            if ra.status_code == 200:
+                ath = ra.json().get("athlete", {})
+                if ath.get("citizenship"):
+                    fighter_dict["country"] = ath["citizenship"]
+                if ath.get("flag", {}).get("href"):
+                    fighter_dict["flag"] = ath["flag"]["href"]
+                if ath.get("association", {}).get("name"):
+                    fighter_dict["team"] = ath["association"]["name"]
+        fighter_dict["espn_checked"] = True
+    except Exception:
+        pass
+    return fighter_dict
+
+
+def american_to_prob(odd_str):
+    """Converte odd americana ('-175', '+145') em probabilidade implícita bruta."""
+    try:
+        v = float(str(odd_str).replace("+", "").strip())
+        if v < 0:
+            return (-v) / ((-v) + 100.0)
+        elif v > 0:
+            return 100.0 / (v + 100.0)
+    except ValueError:
+        pass
+    return None
+
+
+def fetch_bfo_fighter_odds(fighter_name):
+    """Busca odds abertas na página pública do BestFightOdds para lutas futuras."""
+    try:
+        r = S.get(f"{BFO_SEARCH_URL}?query={quote_plus(fighter_name)}", timeout=12)
+        if r.status_code != 200:
+            return {}
+        soup = BeautifulSoup(r.text, "lxml")
+        odds_map = {}
+        for tr in soup.select("table.odds-table tbody tr"):
+            th = tr.select_one("th a, td.oppcell a")
+            if not th:
+                continue
+            fname = norm_name(txt(th))
+            odds_cells = [txt(td) for td in tr.select("td.but-sg, td.moneyline") if re.match(r"^[+-]\d+$", txt(td))]
+            if fname and odds_cells:
+                probs = [american_to_prob(o) for o in odds_cells if american_to_prob(o)]
+                if probs:
+                    odds_map[fname] = sum(probs) / len(probs)
+        return odds_map
+    except Exception:
+        return {}
+
+
+def enrich_upcoming_odds(events_list):
+    """Adiciona probabilidades implícitas do mercado (sem vig) às lutas de upcoming.json."""
+    for ev in events_list:
+        fights = ev.get("fights", [])
+        if not fights:
+            continue
+        # Usa o main event para puxar a tabela de odds do card no BestFightOdds
+        main_a = fights[0]["a"]["name"]
+        odds_map = fetch_bfo_fighter_odds(main_a)
+        if not odds_map:
+            continue
+        for f in fights:
+            na, nb = norm_name(f["a"]["name"]), norm_name(f["b"]["name"])
+            pa, pb = odds_map.get(na), odds_map.get(nb)
+            if pa and pb and (pa + pb) > 0:
+                # Remove o overround (vig) das casas de apostas
+                f["mkt_pa"] = round(pa / (pa + pb), 3)
+                f["mkt_pb"] = round(pb / (pa + pb), 3)
+    return events_list
 
 
 def upcoming(limit=3):
@@ -266,6 +353,145 @@ def upcoming(limit=3):
         eid = uid(a["href"])
         row = a.find_parent("tr") or a.parent
         m = DATE_RE.search(txt(row))
+        if eid in seen or not m:
+            continue
+        seen.add(eid)
+        tds = row.select("td")
+        evs.append({"id": eid, "name": txt(a), "date": parse_date(m.group(1)),
+                    "location": txt(tds[-1]) if tds else ""})
+    today = date.today().isoformat()
+    evs = sorted((e for e in evs if re.fullmatch(r"\d{4}-\d\d-\d\d", e["date"]) and e["date"] >= today),
+                 key=lambda e: e["date"])[:limit]
+    for e in evs:
+        s = get(f"{BASE}/event-details/{e['id']}")
+        e["fights"] = []
+        for tr in s.select("tr"):
+            fl = tr.select("a[href*='fighter-details']")
+            if len(fl) >= 2:
+                cells = " ".join(txt(td) for td in tr.select("td"))
+                e["fights"].append({"a": {"id": uid(fl[0]["href"]), "name": txt(fl[0])},
+                                    "b": {"id": uid(fl[1]["href"]), "name": txt(fl[1])},
+                                    "div": division(cells), "title": "title" in cells.lower()})
+    return enrich_upcoming_odds(evs)
+
+
+# ---------- validação ----------
+
+def validate(events, fights, fighters, extra=()):
+    issues, used = [], set(extra)
+    for f in fights.values():
+        a, b = f["a"]["id"], f["b"]["id"]
+        used |= {a, b}
+        if a == b:
+            issues.append(["luta_contra_si_mesmo", f["id"]])
+        if f["ev"] not in events:
+            issues.append(["luta_sem_evento", f["id"]])
+        for x in (a, b):
+            if x not in fighters:
+                issues.append(["lutador_sem_ficha", x])
+    for fid, p in fighters.items():
+        if fid not in used:
+            issues.append(["lutador_sem_luta", fid])
+    by_name, by_dob = {}, {}
+    for p in fighters.values():
+        n, dob = p["name"].lower(), p.get("DOB", "")
+        if n in by_name:
+            issues.append(["mesmo_nome", by_name[n], p["id"]])
+        by_name[n] = p["id"]
+        if dob not in ("", "--"):
+            if (n, dob) in by_dob:
+                issues.append(["possivel_duplicado", by_dob[(n, dob)], p["id"]])
+            by_dob[(n, dob)] = p["id"]
+    return issues
+
+
+# ---------- principal ----------
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--max-minutes", type=float, default=300)
+    ap.add_argument("--refresh", type=int, default=3,
+                    help="reprocessa os N eventos mais recentes")
+    ap.add_argument("--enrich-limit", type=int, default=150,
+                    help="máximo de lutadores enriquecidos via ESPN por execução")
+    args = ap.parse_args()
+    t0 = time.time()
+
+    def has_time():
+        return (time.time() - t0) / 60 < args.max_minutes
+
+    events = {e["id"]: e for e in load("events.json", [])}
+    fights = {f["id"]: f for f in load("fights.json", [])}
+    fighters = {f["id"]: f for f in load("fighters.json", [])}
+    meta = load("meta.json", {"done": []})
+    done = set(meta["done"])
+
+    def persist():
+        meta.update(done=sorted(done), updated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    n_events=len(events), n_fights=len(fights), n_fighters=len(fighters))
+        save("events.json", sorted(events.values(), key=lambda e: e["date"], reverse=True))
+        save("fights.json", sorted(fights.values(), key=lambda f: (f["date"], -f["ord"])))
+        save("fighters.json", sorted(fighters.values(), key=lambda p: p["name"]))
+        save("meta.json", meta)
+
+    today = date.today().isoformat()
+    listed = sorted((e for e in list_events() if e["date"] <= today), key=lambda e: e["date"])
+    if not listed:
+        raise SystemExit("ERRO: nenhum evento encontrado no ufcstats.com (veja o DIAGNOSTICO acima).")
+    recent = {e["id"] for e in listed[-args.refresh:]}
+    todo = [e for e in reversed(listed) if e["id"] not in done or e["id"] in recent]
+    print(f"{len(listed)} eventos no site, {len(todo)} para processar")
+
+    touched = set()
+    for n, e in enumerate(todo, 1):
+        if not has_time():
+            print("Tempo esgotado; o restante continua na próxima execução.")
+            break
+        try:
+            urls = event_fight_urls(e["id"])
+            ids = [uid(u) for u in urls]
+            new = {}
+            for i, u in enumerate(urls):
+                fid = ids[i]
+                if fid in fights and e["id"] not in recent:
+                    continue
+                f = parse_fight(u, e, i)
+                if f:
+                    new[fid] = f
+            resolved = set(new) | {x for x in ids if x in fights and e["id"] not in recent}
+            age = (date.today() - date.fromisoformat(e["date"])).days
+            # Evento só entra na base quando TODAS as lutas têm resultado
+            # (ou, se passou de 3 dias, quando pelo menos algumas têm).
+            complete = bool(ids) and (len(resolved) == len(ids) or (age >= 3 and resolved))
+            if complete:
+                fights.update(new)
+                events[e["id"]] = {**e, "n": len(urls)}
+                done.add(e["id"])
+                if e["id"] in recent:
+                    touched |= {x for f in new.values() for x in (f["a"]["id"], f["b"]["id"])}
+                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: {len(new)} lutas")
+            else:
+                for k in [k for k, f in fights.items() if f["ev"] == e["id"]]:
+                    del fights[k]
+                events.pop(e["id"], None)
+                done.discard(e["id"])
+                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: ainda não terminou, ignorado por enquanto "
+                      f"({len(resolved)}/{len(ids)} lutas com resultado)")
+        except Exception as ex:  # um evento com erro não derruba a execução
+            print(f"ERRO em {e['name']}: {ex}")
+        if n % 5 == 0:
+            persist()
+
+    up, upids, up_ok = [], set(), False
+    try:
+        up = upcoming()
+        upids = {f[s]["id"] for e in up for f in e["fights"] for s in "ab"}
+        up_ok = True
+        print(f"Próximos eventos: {len(up)} ({sum(len(e['fights']) for e in up)} lutas)")
+    except Exception as ex:  # falha aqui não derruba a execução
+        print(f"aviso: próximos eventos não carregados: {ex}")
+
+    need = {x fo= DATE_RE.search(txt(row))
         if eid in seen or not m:
             continue
         seen.add(eid)
