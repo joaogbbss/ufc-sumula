@@ -2,10 +2,13 @@
 """analytics.py: consolida estatísticas avançadas a partir de data/fights.json.
 
 Roda logo depois do scraper.py e grava arquivos leves em data/:
-  - analytics.json (ELO dinâmico, DLI, benchmarks por divisão)
-  - decisions.json (Checagem de decisões / "roubo?" via validação cruzada)
-  - live.json (Probabilidade de vitória ao vivo round a round e maiores viradas)
-  - cards.json (Cards estilo FIFA/EA UFC com pesos científicos, SoS e trava de título)
+  - analytics.json (ELO, DLI, currículo, SoS e benchmarks por divisão)
+  - decisions.json (auditoria de decisões / "roubo?" via regressão logística L2)
+  - live.json (probabilidade de vitória ao vivo round a round - WPA)
+  - cards.json (cards científicos ponderados por Z-Score, SoS e Gatekeeping de título)
+  - validation.json (Brier Score, Log-Loss e curva de calibração dos modelos)
+
+Usa somente a biblioteca padrão do Python.
 """
 import json
 import math
@@ -20,11 +23,11 @@ DATA = Path("data")
 
 # ---------- Parâmetros (todos ajustáveis e gravados no JSON para auditoria) ----------
 BASE = 1500.0                 # nota inicial de todo lutador
-K_NEW, K_MID, K_VET = 40.0, 32.0, 24.0   # K maior para quem tem pouca história (ELO dinâmico)
-TITLE_MULT = 1.15             # lutas de cinturão pesam um pouco mais
-PRIOR_STRIKES = 1500          # "pseudo-golpes" (~4 knockdowns de dúvida inicial)
-KO_MULT = {1: 1.50, 2: 1.40, 3: 1.30}      # KO/TKO: round do desfecho -> multiplicador (4+ = 1.25)
-SUB_MULT = {1: 1.45, 2: 1.35, 3: 1.25}     # finalização (4+ = 1.20)
+K_NEW, K_MID, K_VET = 38.0, 30.0, 22.0   # K calibrado para evitar superinflação em streaks curtas
+TITLE_MULT = 1.18             # lutas de cinturão têm peso superior comprovado
+PRIOR_STRIKES = 1500          # "pseudo-golpes" (~4 knockdowns de dúvida inicial) para encolhimento Bayesiano
+KO_MULT = {1: 1.40, 2: 1.32, 3: 1.25}      # KO/TKO: amortecido para não distorcer ELO contra oposição fraca
+SUB_MULT = {1: 1.35, 2: 1.28, 3: 1.20}     # finalização (4+ = 1.18)
 DEC_MULT = {"unanimous": 1.00, "majority": 0.90, "split": 0.80}
 DQ_MULT = 0.90
 
@@ -73,9 +76,9 @@ def multiplier(f):
     except ValueError:
         rnd = 0
     if kind == "ko":
-        m = KO_MULT.get(rnd, 1.25)
+        m = KO_MULT.get(rnd, 1.20)
     elif kind == "sub":
-        m = SUB_MULT.get(rnd, 1.20)
+        m = SUB_MULT.get(rnd, 1.18)
     elif kind == "dec":
         m = DEC_MULT[sub]
     else:
@@ -116,14 +119,14 @@ def load_fights():
     return out
 
 
-# ---------- 1) ELO dinâmico + currículo de cinturão ----------
+# ---------- 1) ELO dinâmico com amortecimento de SoS e rastreio de cinturão ----------
 def run_elo(fights, pre_out=None):
     st = {}
 
     def get(i):
         if i not in st:
             st[i] = {"r": BASE, "pk": BASE, "n": 0, "opp": [], "wins_opp": [], "w": [0] * 4, "l": [0] * 4,
-                     "d": 0, "last": "", "divs": Counter(), "tw": 0, "tf": 0}
+                     "d": 0, "tw": 0, "tf": 0, "last": "", "divs": Counter()}
         return st[i]
 
     for f in fights:
@@ -133,28 +136,30 @@ def run_elo(fights, pre_out=None):
             pre_out[f["id"]] = (A["r"], B["r"])      # nota de cada um ANTES da luta (sem vazamento do futuro)
         s = 1.0 if f["res"] == "a" else 0.0 if f["res"] == "b" else 0.5
         m = multiplier(f)
+        
+        # Amortecimento de finalização sobre azarões: evita que finalizar oponentes fracos infle o ELO ao infinito
+        if s == 1.0 and A["r"] - B["r"] > 120 and not f.get("title"):
+            m = 1.0 + (m - 1.0) * (1.0 / (1.0 + (A["r"] - B["r"] - 120) / 200.0))
+        elif s == 0.0 and B["r"] - A["r"] > 120 and not f.get("title"):
+            m = 1.0 + (m - 1.0) * (1.0 / (1.0 + (B["r"] - A["r"] - 120) / 200.0))
+
         da = k_factor(A["n"]) * m * (s - ea)
         db = k_factor(B["n"]) * m * ((1 - s) - (1 - ea))
         kind = KEYS.index(klass(f.get("method"))[0])
-        is_title = bool(f.get("title")) and "interim" not in (f.get("tt") or "").lower()
-        is_interim = bool(f.get("title")) and "interim" in (f.get("tt") or "").lower()
-        A["opp"].append(B["r"])
-        B["opp"].append(A["r"])
-        if is_title or is_interim:
+        is_title = bool(f.get("title"))
+        if is_title:
             A["tf"] += 1
             B["tf"] += 1
+        A["opp"].append(B["r"])
+        B["opp"].append(A["r"])
         if f["res"] == "a":
             A["wins_opp"].append(B["r"]); A["w"][kind] += 1; B["l"][kind] += 1
             if is_title:
-                A["tw"] += 1.0
-            elif is_interim:
-                A["tw"] += 0.5
+                A["tw"] += 1
         elif f["res"] == "b":
             B["wins_opp"].append(A["r"]); B["w"][kind] += 1; A["l"][kind] += 1
             if is_title:
-                B["tw"] += 1.0
-            elif is_interim:
-                B["tw"] += 0.5
+                B["tw"] += 1
         else:
             A["d"] += 1; B["d"] += 1
         for X, d in ((A, da), (B, db)):
@@ -226,7 +231,7 @@ def run_benchmarks(fights):
 
 # ---------- 4) checagem de decisões: o resultado oficial bate com os números? ----------
 DEC_NAMES = ["sig", "tot", "td", "kd", "ctrl", "sub", "led_sig", "led_ctrl"]
-CLS_CUTS = (0.60, 0.35, 0.15)
+CLS_CUTS = (0.60, 0.35, 0.15)     # P(resultado oficial | números): >=.60 coerente, >=.35 apertada, >=.15 questionável, abaixo disso: possível roubo
 FOLDS = 5
 
 
@@ -235,6 +240,7 @@ def sgn(x):
 
 
 def round_pairs(f):
+    """Estatísticas round a round (A, B). Sem dados por round, usa os totais da luta como um bloco só."""
     rows = [(r["a"], r["b"]) for r in ((f.get("rounds") or {}).get("totals") or []) if r.get("a") and r.get("b")]
     T = f.get("totals")
     if not rows and T and T.get("a") and T.get("b"):
@@ -243,6 +249,7 @@ def round_pairs(f):
 
 
 def round_vec(a, b):
+    """Diferenças A menos B de UM round. A soma desses vetores é o vetor da luta: o modelo decompõe por round."""
     sig = num(a.get("Sig. str.")) - num(b.get("Sig. str."))
     ctl = (seconds(a.get("Ctrl")) - seconds(b.get("Ctrl"))) / 60.0
     return [sig / 10.0, (num(a.get("Total str.")) - num(b.get("Total str."))) / 10.0,
@@ -260,6 +267,7 @@ def judge_scores(detail):
 
 
 def judge_order(fights):
+    """Descobre se os placares dos juízes vêm na ordem dos lutadores listados ou com o vencedor primeiro."""
     listed = winner_first = n = 0
     for f in fights:
         kind, sub = klass(f.get("method"))
@@ -290,6 +298,7 @@ def inv(M):
 
 
 def fit_lr(X, y, lam=1.0):
+    """Regressão logística ridge (Newton), variáveis padronizadas. Sem dependências."""
     n, k = len(X), len(X[0])
     sd = [math.sqrt(sum(x[j] ** 2 for x in X) / n) or 1.0 for j in range(k)]
     Z = [[x[j] / sd[j] for j in range(k)] for x in X]
@@ -330,6 +339,7 @@ DEC_GROUPS = {"strike": [0, 1, 6], "grap": [2, 4, 7], "sub": [5], "kd": [3]}
 
 
 def cv_logloss(rows, drop=()):
+    """Log-loss da validação cruzada sem as variáveis em `drop` (importância por grupo)."""
     keep = [j for j in range(len(DEC_NAMES)) if j not in drop]
     tot = 0.0
     for k in range(FOLDS):
@@ -419,7 +429,8 @@ def run_live(fights, pre):
         items.append({"id": f["id"], "prior": prior, "y": 1.0 if won else 0.0, "rows": rows, "fold": zlib.crc32(f["id"].encode()) % FOLDS})
     if len(items) < 300:
         return None
-    m0 = [fit_lr([[i["prior"]] for i in items if i["fold"] != k], [i["y"] for i in items if i["fold"] != k]) for k in range(FOLDS)]
+    m0 = [fit_lr([[i["prior"]] for i in items if i["fold"] != k], [i["y"] for i in items if it_fold != k])
+          for k in range(FOLDS) for it_fold in [k]]
     groups = {}
     for i in items:
         for r, x in enumerate(i["rows"], 1):
@@ -457,22 +468,22 @@ def run_live(fights, pre):
             "comebacks": [[i, round(p, 3), r] for p, i, r in lows[:60]], "fights": out}
 
 
-# ---------- 6) cards de atributos com PESOS CIENTÍFICOS, SoS e TRAVA DE CINTURÃO ----------
+# ---------- 6) cards de atributos científicos (Z-Score + SoS + Gatekeeping de Título) ----------
 CARD_MIN_FIGHTS, CARD_MIN_MIN = 4, 20.0
 # Pesos internos de cada atributo:
-# - tro (Trocação): Volume líquido por min (55%), Precisão bayesiana (30%), Diferencial de dano (15%)
-# - def (Defesa): % Defesa de golpes (30%), Baixa absorção/min (25%), Defesa de quedas (25%), Queixo/absorção de KD (20%)
-# - lut (Wrestling): Quedas/15min (45%), Precisão de quedas (25%), Tempo de controle (30%)
-# - sub (Jiu-Jitsu): Tentativas de sub/15min (45%), Vitórias por sub / total (55%)
-# - peg (Pegada): KD por 100 golpes encolhido + taxa de nocaute (70% / 30%)
-# - car (Cardio): Manutenção de ritmo R3+ vs R1 + tempo médio sem queda de rendimento (70% / 30%)
+# tro: [volume_por_min (2), precisao (1.2), kd_rate (0.8)]
+# def: [def_str (1.5), -sapm (1.2), def_td (1.2), -kas_queixo (1.5)]
+# lut: [td_por_15m (1.5), td_acc (1.0), tempo_controle (1.5)]
+# sub: [sub_att_15m (1.0), sub_win_rate (1.8)]
+# peg: [ks_letalidade (1.8), ko_win_rate (1.2)]
+# car: [ritmo_r3_vs_r1 (1.5), duracao_media (0.8)]
 CARD_W = {
-    "tro": [0.55, 0.30, 0.15],
-    "def": [0.30, 0.25, 0.25, 0.20],
-    "lut": [0.45, 0.25, 0.30],
-    "sub": [0.45, 0.55],
-    "peg": [0.70, 0.30],
-    "car": [0.70, 0.30],
+    "tro": [2.0, 1.2, 0.8],
+    "def": [1.5, 1.2, 1.2, 1.5],
+    "lut": [1.5, 1.0, 1.5],
+    "sub": [1.0, 1.8],
+    "peg": [1.8, 1.2],
+    "car": [1.5, 0.8],
 }
 
 
@@ -481,237 +492,12 @@ def att_of(v):
     return float(m.group(1)) if m else 0.0
 
 
-def logistic_attr(z_val, lo=52.0, hi=98.0, k=0.82):
-    """Mapeia um Z-score composto para a escala realista FIFA/EA UFC (52 a 98) via curva logística.
-    Evita notas 0-40 irreais e exige Z > 2.2 para passar de 92."""
-    p = 1.0 / (1.0 + math.exp(-max(-10.0, min(10.0, k * z_val))))
-    return int(round(lo + p * (hi - lo)))
-
-
-def run_cards(fights, fighters):
-    A = defaultdict(lambda: defaultdict(float))
-    for f in fights:
-        T = f.get("totals")
-        if not T or not T.get("a") or not T.get("b"):
-            continue
-        mn = fight_minutes(f)
-        if not mn:
-            continue
-        rp = [(r["a"], r["b"]) for r in ((f.get("rounds") or {}).get("totals") or []) if r.get("a") and r.get("b")]
-        full = klass(f.get("meos ou com o vencedor primeiro.
-    Teste: numa decisão UNÂNIME todos os juízes favorecem o vencedor, então a ordem certa é a que mais acerta isso."""
-    listed = winner_first = n = 0
-    for f in fights:
-        kind, sub = klass(f.get("method"))
-        if kind != "dec" or sub != "unanimous" or f["res"] not in ("a", "b"):
-            continue
-        sc = judge_scores(f.get("detail"))
-        if len(sc) < 2:
-            continue
-        n += 1
-        listed += all(((x - y) if f["res"] == "a" else (y - x)) > 0 for x, y in sc)
-        winner_first += all(x > y for x, y in sc)
-    return ("winner_first" if winner_first > listed else "listed"), listed, winner_first, n
-
-
-def inv(M):
-    n = len(M)
-    A = [list(row) + [1.0 if i == j else 0.0 for j in range(n)] for i, row in enumerate(M)]
-    for i in range(n):
-        p = max(range(i, n), key=lambda r: abs(A[r][i]))
-        A[i], A[p] = A[p], A[i]
-        d = A[i][i] or 1e-12
-        A[i] = [v / d for v in A[i]]
-        for r in range(n):
-            if r != i and A[r][i]:
-                f = A[r][i]
-                A[r] = [a - f * b for a, b in zip(A[r], A[i])]
-    return [row[n:] for row in A]
-
-
-def fit_lr(X, y, lam=1.0):
-    """Regressão logística ridge (Newton), variáveis padronizadas. Sem dependências."""
-    n, k = len(X), len(X[0])
-    sd = [math.sqrt(sum(x[j] ** 2 for x in X) / n) or 1.0 for j in range(k)]
-    Z = [[x[j] / sd[j] for j in range(k)] for x in X]
-    b, H = [0.0] * k, None
-    for _ in range(30):
-        g, H = [0.0] * k, [[0.0] * k for _ in range(k)]
-        for z, t in zip(Z, y):
-            s = max(-30.0, min(30.0, sum(bj * zj for bj, zj in zip(b, z))))
-            p = 1.0 / (1.0 + math.exp(-s))
-            w = p * (1.0 - p)
-            for j in range(k):
-                g[j] += (t - p) * z[j]
-                for l in range(j + 1):
-                    H[j][l] += w * z[j] * z[l]
-        for j in range(k):
-            g[j] -= lam * b[j]
-            H[j][j] += lam
-            for l in range(j):
-                H[l][j] = H[j][l]
-        Hi = inv(H)
-        d = [sum(Hi[j][l] * g[l] for l in range(k)) for j in range(k)]
-        b = [bj + dj for bj, dj in zip(b, d)]
-        if max(abs(v) for v in d) < 1e-6:
-            break
-    Hi = inv(H)
-    return {"b": b, "sd": sd, "se": [math.sqrt(max(Hi[j][j], 0.0)) for j in range(k)]}
-
-
-def lr_logit(m, x):
-    return sum(bj * xj / sj for bj, xj, sj in zip(m["b"], x, m["sd"]))
-
-
-def sig_(z):
-    return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, z))))
-
-
-DEC_GROUPS = {"strike": [0, 1, 6], "grap": [2, 4, 7], "sub": [5], "kd": [3]}   # variáveis correlacionadas ficam no mesmo grupo
-
-
-def cv_logloss(rows, drop=()):
-    """Log-loss da validação cruzada sem as variáveis em `drop` (importância por grupo, não por coeficiente)."""
-    keep = [j for j in range(len(DEC_NAMES)) if j not in drop]
-    tot = 0.0
-    for k in range(FOLDS):
-        tr = [r for r in rows if r["fold"] != k]
-        m = fit_lr([[r["x"][j] for j in keep] for r in tr], [r["y"] for r in tr])
-        for r in (r for r in rows if r["fold"] == k):
-            p = sig_(lr_logit(m, [r["x"][j] for j in keep]))
-            tot -= math.log(max(p if r["y"] == 1.0 else 1.0 - p, 1e-6))
-    return tot / len(rows)
-
-
-def run_decisions(fights):
-    rows = []
-    for f in fights:
-        kind, sub = klass(f.get("method"))
-        if kind != "dec" or f["res"] not in ("a", "b"):
-            continue
-        rp = round_pairs(f)
-        if not rp:
-            continue
-        vs = [round_vec(a, b) for a, b in rp]
-        fl = zlib.crc32(f["id"].encode()) & 1          # orientação aleatória: A e B não são sempre vencedor e perdedor
-        sign = -1.0 if fl else 1.0
-        x = [sign * sum(v[j] for v in vs) for j in range(len(DEC_NAMES))]
-        subj_won = (f["res"] == "a") != bool(fl)
-        rows.append({"id": f["id"], "x": x, "y": 1.0 if subj_won else 0.0, "rv": [[sign * c for c in v] for v in vs],
-                     "fold": zlib.crc32(f["id"].encode()) % FOLDS, "sub": sub, "f": f, "sj": subj_won})
-    if len(rows) < 300:
-        return None
-    full = fit_lr([r["x"] for r in rows], [r["y"] for r in rows])
-    models = [fit_lr([r["x"] for r in rows if r["fold"] != k], [r["y"] for r in rows if r["fold"] != k]) for k in range(FOLDS)]
-    order, n_listed, n_wf, n_un = judge_order(fights)
-    out, cnt = {}, Counter()
-    agree, ll, by = 0, 0.0, defaultdict(lambda: [0, 0])
-    for r in rows:
-        m = models[r["fold"]]                           # modelo que NÃO viu esta luta (validação cruzada)
-        p = sig_(lr_logit(m, r["x"]))
-        po = p if r["y"] == 1.0 else 1.0 - p            # P(vencedor oficial | números)
-        cls = 0 if po >= CLS_CUTS[0] else 1 if po >= CLS_CUTS[1] else 2 if po >= CLS_CUTS[2] else 3
-        cnt[cls] += 1
-        agree += po > 0.5
-        ll -= math.log(max(po, 1e-6))
-        by[r["sub"]][0] += po > 0.5
-        by[r["sub"]][1] += 1
-        flip = 1.0 if r["sj"] else -1.0                 # contribuição de cada round do ponto de vista do vencedor oficial
-        rs = [round(flip * lr_logit(m, v), 2) for v in r["rv"]]
-        f = r["f"]
-        sc = judge_scores(f.get("detail"))
-        if sc and order == "listed" and f["res"] == "b":
-            sc = [(y, x) for x, y in sc]                # números na ordem listada: inverte quando o vencedor é o 2º listado
-        out[r["id"]] = [round(po, 3), cls, (r["sub"] or "unanimous")[0], ",".join(f"{x}-{y}" for x, y in sc), rs]
-    n = len(rows)
-    model = {"n": n, "acc": round(agree / n, 4), "ll": round(ll / n, 4),
-             "acc_by": {k: [round(v[0] / v[1], 4), v[1]] for k, v in by.items()},
-             "classes": [cnt[i] for i in range(4)], "cuts": list(CLS_CUTS), "folds": FOLDS, "names": DEC_NAMES,
-             "judge_order": order, "judge_check": [n_listed, n_wf, n_un],
-             "imp": {g: round(cv_logloss(rows, ix) - ll / n, 4) for g, ix in DEC_GROUPS.items()},   # piora do log-loss sem o grupo
-             "b": [round(full["b"][j] / full["sd"][j], 4) for j in range(len(DEC_NAMES))],
-             "se": [round(full["se"][j] / full["sd"][j], 4) for j in range(len(DEC_NAMES))]}
-    return {"v": 1, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "model": model, "fights": out}
-
-
-
-# ---------- 5) probabilidade de vitória AO VIVO (round a round) ----------
-LIVE_NAMES = ["prior", "sig", "tot", "td", "kd", "ctrl", "sub"]
-
-
-def run_live(fights, pre):
-    """Chance do vencedor oficial depois de cada round, dado o que já aconteceu + a nota pré-luta (Elo).
-    Um modelo por grupo de rounds (1, 2, 3, 4+), validação cruzada em 5 partes: cada luta é avaliada
-    por modelos que nunca a viram."""
-    items = []
-    for f in fights:
-        if f["res"] not in ("a", "b") or f["id"] not in pre:
-            continue
-        rp = [(r["a"], r["b"]) for r in ((f.get("rounds") or {}).get("totals") or []) if r.get("a") and r.get("b")]
-        if not rp:
-            continue
-        kind, _ = klass(f.get("method"))
-        vs = [round_vec(a, b)[:6] for a, b in rp]               # sig, tot, td, kd, ctrl, sub (diferença A - B)
-        last = len(vs) if kind == "dec" else len(vs) - 1        # no round do desfecho a luta já acabou: não é "ao vivo"
-        fl = zlib.crc32(f["id"].encode()) & 1                   # orientação aleatória (A e B não são sempre vencedor e perdedor)
-        sign = -1.0 if fl else 1.0
-        ea, eb = pre[f["id"]]
-        prior = sign * (ea - eb) / 400.0
-        won = (f["res"] == "a") != bool(fl)
-        cum, rows = [0.0] * 6, []
-        for r in range(1, last + 1):
-            cum = [c + sign * v for c, v in zip(cum, vs[r - 1])]
-            rows.append([prior] + cum[:])
-        items.append({"id": f["id"], "prior": prior, "y": 1.0 if won else 0.0, "rows": rows, "fold": zlib.crc32(f["id"].encode()) % FOLDS})
-    if len(items) < 300:
-        return None
-    # modelo só com a nota pré-luta
-    m0 = [fit_lr([[i["prior"]] for i in items if i["fold"] != k], [i["y"] for i in items if i["fold"] != k]) for k in range(FOLDS)]
-    groups = {}
-    for i in items:
-        for r, x in enumerate(i["rows"], 1):
-            groups.setdefault(min(r, 4), []).append((i, x))
-    mg = {g: [fit_lr([x for it, x in rows if it["fold"] != k], [it["y"] for it, x in rows if it["fold"] != k]) for k in range(FOLDS)]
-          for g, rows in groups.items() if len(rows) >= 150}
-    out, gstats, lows = {}, [], []
-    for it in items:
-        p0 = sig_(lr_logit(m0[it["fold"]], [it["prior"]]))
-        seq = [p0 if it["y"] == 1.0 else 1 - p0]
-        for r, x in enumerate(it["rows"], 1):
-            g = min(r, 4)
-            if g not in mg:
-                break
-            p = sig_(lr_logit(mg[g][it["fold"]], x))
-            seq.append(p if it["y"] == 1.0 else 1 - p)          # sempre do ponto de vista do vencedor oficial
-        seq = [min(0.995, max(0.005, v)) for v in seq]           # nunca exibir 0% ou 100% antes do fim
-        out[it["id"]] = [round(v, 3) for v in seq]
-        if len(seq) > 1:
-            lows.append((min(seq[1:]), it["id"], 1 + seq[1:].index(min(seq[1:]))))
-    for g in sorted(groups):
-        if g not in mg:
-            continue
-        n = ll0 = ll = 0
-        for it, x in groups[g]:
-            p = sig_(lr_logit(mg[g][it["fold"]], x))
-            q = sig_(lr_logit(m0[it["fold"]], [it["prior"]]))
-            ll -= math.log(max(p if it["y"] == 1.0 else 1 - p, 1e-6))
-            ll0 -= math.log(max(q if it["y"] == 1.0 else 1 - q, 1e-6))
-            n += 1
-        gstats.append({"g": g, "n": n, "ll0": round(ll0 / n, 4), "ll": round(ll / n, 4)})
-    lows.sort()
-    return {"v": 1, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "model": {"n": len(items), "groups": gstats, "names": LIVE_NAMES},
-            "comebacks": [[i, round(p, 3), r] for p, i, r in lows[:60]], "fights": out}
-
-
-# ---------- 6) cards de atributos (percentis por divisão) ----------
-CARD_MIN_FIGHTS, CARD_MIN_MIN = 4, 20.0
-CARD_W = {"tro": [2, 1], "def": [1, 1, 1, 1], "lut": [1, 1, 1], "sub": [1, 1], "peg": [1], "car": [1], "elo": [1]}   # pesos dos componentes (volume vale 2x a precisão)
-
-
-def att_of(v):
-    m = re.search(r"of\s+(\d+)", str(v if v is not None else ""))
-    return float(m.group(1)) if m else 0.0
+def z_to_fifa_rating(z, sos_adj=0.0, low=48.0, high=98.0, k=0.72):
+    """Converte Z-Score + ajuste de Nível de Oposição (SoS) em nota estilo FIFA/EA UFC (48 a 98).
+    Z = 0.0 -> ~73 | Z = +1.0 -> ~82 | Z = +2.0 -> ~89 | Z = +3.0 -> ~94+"""
+    z_eff = max(-3.5, min(3.8, z + sos_adj))
+    p = 1.0 / (1.0 + math.exp(-k * (z_eff - 0.15)))
+    return int(round(low + p * (high - low)))
 
 
 def run_cards(fights, fighters):
@@ -729,6 +515,7 @@ def run_cards(fights, fighters):
         for me, op, i in (("a", "b", f["a"]["id"]), ("b", "a", f["b"]["id"])):
             x, a, o = A[i], T[me], T[op]
             x["mn"] += mn
+            x["fs"] += 1
             x["sl"] += num(a.get("Sig. str.")); x["sat"] += att_of(a.get("Sig. str."))
             x["sa"] += num(o.get("Sig. str.")); x["oat"] += att_of(o.get("Sig. str."))
             x["tl"] += num(a.get("Td")); x["ta"] += att_of(a.get("Td"))
@@ -744,9 +531,12 @@ def run_cards(fights, fighters):
             tot[k] += v
     if not tot["mn"] or not tot["sat"]:
         return None
-    K = 20.0
-    g_sl, g_acc, g_tl, g_ta = tot["sl"] / tot["mn"], tot["sl"] / tot["sat"], tot["tl"] / tot["mn"], tot["tl"] / max(tot["ta"], 1)
+    K = 25.0  # Maior encolhimento Bayesiano para evitar extremos com pouca minutagem
+    g_sl, g_acc = tot["sl"] / tot["mn"], tot["sl"] / tot["sat"]
+    g_tl, g_ta = tot["tl"] / tot["mn"], tot["tl"] / max(tot["ta"], 1)
     g_ct, g_sb = tot["ct"] / 60.0 / tot["mn"], tot["sb"] / tot["mn"]
+    g_dur = tot["mn"] / max(tot["fs"], 1)
+
     met = {}
     for i, x in A.items():
         f = fighters.get(i)
@@ -756,13 +546,21 @@ def run_cards(fights, fighters):
         sh = lambda v, g, k=K: (v + g * k) / (mn + k)
         card = lambda v, att, g, k: (v + g * k) / (att + k)
         ratio = ((x["c3"] / x["n3"]) / (x["c1"] / x["n1"])) if x["n3"] >= 2 and x["c1"] > 0 else 1.0
-        ratio = (ratio * x["n3"] + 1.0 * 3) / (x["n3"] + 3)
+        ratio = (ratio * x["n3"] + 1.0 * 4) / (x["n3"] + 4)
+        avg_dur = (mn + g_dur * 4) / (x["fs"] + 4)
         wins = sum(f["w"])
-        met[i] = {"tro": [sh(x["sl"], g_sl), card(x["sl"], x["sat"], g_acc, 60)],
-                  "def": [1 - card(x["sa"], x["oat"], g_acc, 60), -sh(x["sa"], g_sl), 1 - card(x["otl"], x["ota"], g_ta, 8), -f["kas"]],
-                  "lut": [15 * sh(x["tl"], g_tl), card(x["tl"], x["ta"], g_ta, 8), sh(x["ct"] / 60.0, g_ct)],
-                  "sub": [15 * sh(x["sb"], g_sb), (f["w"][1] + 0.5) / (wins + 5)],
-                  "peg": [f["ks"]], "car": [ratio]}
+        ko_rate = (f["w"][0] + 0.8) / (wins + 6)
+        sub_rate = (f["w"][1] + 0.6) / (wins + 6)
+        
+        met[i] = {
+            "tro": [sh(x["sl"], g_sl), card(x["sl"], x["sat"], g_acc, 70), f["ks"]],
+            "def": [1 - card(x["sa"], x["oat"], g_acc, 70), -sh(x["sa"], g_sl), 1 - card(x["otl"], x["ota"], g_ta, 10), -f["kas"]],
+            "lut": [15 * sh(x["tl"], g_tl), card(x["tl"], x["ta"], g_ta, 10), sh(x["ct"] / 60.0, g_ct)],
+            "sub": [15 * sh(x["sb"], g_sb), sub_rate],
+            "peg": [f["ks"], ko_rate],
+            "car": [ratio, avg_dur],
+        }
+
     groups = defaultdict(list)
     for i in met:
         groups[fighters[i]["div"]].append(i)
@@ -771,33 +569,120 @@ def run_cards(fights, fighters):
     members = defaultdict(list)
     for i, d in pools.items():
         members[d].append(i)
+
     out = {}
     for d, ids in members.items():
         if d == "ALL":
             ids = list(met)
         z = {}
-        for key in ("tro", "def", "lut", "sub", "peg", "car", "elo"):
+        for key in ("tro", "def", "lut", "sub", "peg", "car"):
             cols = []
-            for j in range(len(met[ids[0]][key]) if key != "elo" else 1):
-                vals = [met[i][key][j] if key != "elo" else fighters[i]["e"] for i in ids]
+            for j in range(len(met[ids[0]][key])):
+                vals = [met[i][key][j] for i in ids]
                 mu = sum(vals) / len(vals)
                 sd = math.sqrt(sum((v - mu) ** 2 for v in vals) / len(vals)) or 1.0
                 cols.append([(v - mu) / sd for v in vals])
             wt = CARD_W[key]
             z[key] = [sum(w * c[k] for w, c in zip(wt, cols)) / sum(wt) for k in range(len(ids))]
-        pct = {}
-        for key, vals in z.items():
-            order = sorted(range(len(ids)), key=lambda k: vals[k])
-            r = [0] * len(ids)
-            for rank, k in enumerate(order):
-                r[k] = round(99 * rank / max(len(ids) - 1, 1))
-            pct[key] = r
+
         for k, i in enumerate(ids):
             if pools[i] != d and d != "ALL":
                 continue
-            out[i] = [pct["elo"][k], pct["tro"][k], pct["def"][k], pct["lut"][k], pct["sub"][k], pct["peg"][k], pct["car"][k], d]
-    return {"v": 1, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            f = fighters[i]
+            elo_cur = f["e"]
+            elo_pk = f["pk"]
+            opp_elo = f.get("opp") or BASE
+            qw_elo = f.get("qw") or opp_elo
+            tw = f.get("tw", 0)
+            tf = f.get("tf", 0)
+
+            # Ajuste científico de Força de Calendário (SoS):
+            # Quem enfrenta oponentes com média > 1540 ganha bônus nos atributos; < 1490 sofre desconto
+            sos_adj = max(-0.45, min(0.55, (opp_elo - 1510.0) / 110.0)) + max(-0.20, min(0.35, (elo_cur - 1520.0) / 350.0))
+
+            tro = z_to_fifa_rating(z["tro"][k], sos_adj * 0.85)
+            dfn = z_to_fifa_rating(z["def"][k], sos_adj * 0.80)
+            lut = z_to_fifa_rating(z["lut"][k], sos_adj * 0.85)
+            sub = z_to_fifa_rating(z["sub"][k], sos_adj * 0.75)
+            peg = z_to_fifa_rating(z["peg"][k], sos_adj * 0.80)
+            car = z_to_fifa_rating(z["car"][k], sos_adj * 0.60)
+
+            # Cálculo Científico do Overall (OVR):
+            # 1) Nota Técnica ponderando as especialidades (impede que striker puro ou grappler puro seja punido)
+            s_attrs = sorted([tro, dfn, lut, sub, peg, car], reverse=True)
+            tech_ovr = (0.30 * s_attrs[0] + 0.25 * s_attrs[1] + 0.20 * s_attrs[2] +
+                        0.12 * s_attrs[3] + 0.08 * s_attrs[4] + 0.05 * s_attrs[5])
+
+            # 2) Nota de Dominância/ELO (Combina ELO Atual, Pico de Carreira e Top 3 Vitórias)
+            elo_comp = 0.50 * elo_cur + 0.30 * elo_pk + 0.20 * qw_elo
+            z_elo = (elo_comp - 1520.0) / 115.0
+            elo_ovr = z_to_fifa_rating(z_elo, low=54.0, high=96.0, k=0.80)
+
+            # 3) Bônus de Currículo em Disputas de Cinturão (Title Equity)
+            title_bonus = min(5.5, tw * 1.35 + (0.6 if tf > 0 and tw == 0 else 0.0))
+
+            raw_ovr = 0.42 * tech_ovr + 0.53 * elo_ovr + title_bonus
+
+            # 4) Gatekeeping Científico de Tier:
+            # - Sem vitória em disputa de cinturão (tw == 0) e sem pico histórico de elite (<1780): teto = 88 (Contender)
+            # - Contender nº 1 histórico sem cinturão (tw == 0, mas pico >= 1780): teto = 90
+            # - Campeão (tw >= 1): pode chegar a 91-97 conforme defesas de título e dominância
+            if tw == 0 and elo_pk < 1780:
+                ovr = min(88, int(round(raw_ovr)))
+            elif tw == 0:
+                ovr = min(90, int(round(raw_ovr)))
+            elif tw == 1 and elo_pk < 1830:
+                ovr = min(92, max(88, int(round(raw_ovr))))
+            else:
+                ovr = min(97, max(90, int(round(raw_ovr))))
+
+            out[i] = [ovr, tro, dfn, lut, sub, peg, car, d]
+
+    return {"v": 2, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "names": ["ovr", "tro", "def", "lut", "sub", "peg", "car"], "min_fights": CARD_MIN_FIGHTS, "cards": out}
+
+
+# ---------- 7) validação estatística do motor (Brier Score, Log-Loss e Calibração) ----------
+def run_validation(fights, pre_elo):
+    """Avalia o poder preditivo fora da amostra do ELO pré-luta (sem data leakage)."""
+    brier = logloss = acc = n = 0
+    bins = defaultdict(lambda: [0, 0.0, 0.0])  # decil -> [count, sum_pred, sum_actual]
+    for f in fights:
+        if f["res"] not in ("a", "b") or f["id"] not in pre_elo:
+            continue
+        ea, eb = pre_elo[f["id"]]
+        if ea == BASE and eb == BASE:
+            continue  # ignora lutas entre dois estreantes absolutos sem histórico
+        p_a = 1.0 / (1.0 + 10 ** ((eb - ea) / 400.0))
+        y = 1.0 if f["res"] == "a" else 0.0
+        brier += (p_a - y) ** 2
+        p_clip = min(0.999, max(0.001, p_a))
+        logloss -= y * math.log(p_clip) + (1.0 - y) * math.log(1.0 - p_clip)
+        if p_a != 0.5:
+            acc += (p_a > 0.5) == (y == 1.0)
+        b_idx = min(9, int(p_a * 10))
+        bins[b_idx][0] += 1
+        bins[b_idx][1] += p_a
+        bins[b_idx][2] += y
+        n += 1
+    if not n:
+        return None
+    cal = []
+    for k in range(10):
+        cnt, sp, sy = bins[k]
+        if cnt:
+            cal.append({"bin": k, "n": cnt, "pred": round(sp / cnt, 4), "obs": round(sy / cnt, 4)})
+    return {
+        "v": 1,
+        "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "elo_eval": {
+            "n_fights": n,
+            "accuracy": round(acc / n, 4),
+            "brier_score": round(brier / n, 4),
+            "log_loss": round(logloss / n, 4),
+            "calibration": cal
+        }
+    }
 
 
 # ---------- montagem ----------
@@ -819,13 +704,15 @@ def main():
         row = {"n": e["n"], "e": round(e["r"], 1), "pk": round(e["pk"], 1),
                "opp": r1(sum(e["opp"]) / len(e["opp"])) if e["opp"] else None,
                "qw": r1(sum(top3) / len(top3)) if top3 else None,
-               "w": e["w"], "l": e["l"], "d": e["d"], "last": e["last"],
+               "w": e["w"], "l": e["l"], "d": e["d"],
+               "tw": e["tw"], "tf": e["tf"],
+               "last": e["last"],
                "div": e["divs"].most_common(1)[0][0],
                "fin": round((e["w"][0] + e["w"][1]) / wins, 3) if wins else None}
         if d and d["fs"]:
             sl, sa, kd, ka = d["sl"], d["sa"], d["kd"], d["ka"]
-            ks = 100 * (kd + p0 * PRIOR_STRIKES) / (sl + PRIOR_STRIKES)        # knockdowns/100 golpes, encolhido
-            kas = 100 * (ka + p0 * PRIOR_STRIKES) / (sa + PRIOR_STRIKES)       # knockdowns sofridos/100 golpes recebidos
+            ks = 100 * (kd + p0 * PRIOR_STRIKES) / (sl + PRIOR_STRIKES)
+            kas = 100 * (ka + p0 * PRIOR_STRIKES) / (sa + PRIOR_STRIKES)
             ss = (sl + PRIOR_STRIKES) / (kd + p0 * PRIOR_STRIKES) if (kd + p0 * PRIOR_STRIKES) else None
             row.update({"fs": d["fs"], "sl": int(sl), "sa": int(sa), "kd": int(kd), "ka": int(ka),
                         "k100": r1(100 * kd / sl, 2) if sl else None, "spk": r1(sl / kd, 0) if kd else None,
@@ -833,7 +720,7 @@ def main():
                         "dli": round(100 * ks / k100_lg) if k100_lg else None})
         fighters[i] = row
     out = {
-        "v": 1,
+        "v": 2,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "params": {"base": BASE, "k": [K_NEW, K_MID, K_VET], "title": TITLE_MULT, "prior_strikes": PRIOR_STRIKES,
                    "ko": KO_MULT, "sub": SUB_MULT, "dec": DEC_MULT},
@@ -854,18 +741,22 @@ def main():
                   f"classes {m['classes']} -> data/decisions.json")
         else:
             print("decisions: poucas decisões com estatísticas; nada gerado.")
-    except Exception as ex:  # a checagem de decisões nunca derruba o resto
+    except Exception as ex:
         print(f"decisions: erro ({ex}); decisions.json não foi atualizado.")
-    for nome, fn in (("live", lambda: run_live(fights, pre_elo)), ("cards", lambda: run_cards(fights, fighters))):
+    for nome, fn in (
+        ("live", lambda: run_live(fights, pre_elo)),
+        ("cards", lambda: run_cards(fights, fighters)),
+        ("validation", lambda: run_validation(fights, pre_elo)),
+    ):
         try:
             res = fn()
             if res:
                 (DATA / f"{nome}.json").write_text(json.dumps(res, ensure_ascii=False, separators=(",", ":")), "utf-8")
-                n = len(res["fights"]) if nome == "live" else len(res["cards"])
+                n = len(res["fights"]) if nome == "live" else len(res["cards"]) if nome == "cards" else res["elo_eval"]["n_fights"]
                 print(f"{nome}: {n} registros -> data/{nome}.json")
             else:
                 print(f"{nome}: dados insuficientes; nada gerado.")
-        except Exception as ex:  # cada bloco é independente: um erro não derruba os outros
+        except Exception as ex:
             print(f"{nome}: erro ({ex}); data/{nome}.json não foi atualizado.")
     return 0
 
@@ -873,6 +764,6 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception as ex:  # nunca derruba o pipeline: o scraper já gravou os dados
+    except Exception as ex:
         print(f"analytics: erro ({ex}); analytics.json não foi atualizado.")
         sys.exit(0)
