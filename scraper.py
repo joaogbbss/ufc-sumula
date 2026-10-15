@@ -26,13 +26,14 @@ BASE = "http://ufcstats.com"
 ESPN_SEARCH_API = "https://site.web.api.espn.com/apis/common/v3/search"
 BFO_SEARCH_URL = "https://www.bestfightodds.com/search"
 OUT = Path("data")
-DELAY = 0.7  # pausa entre requisições, para não sobrecarregar o site
+DELAY = 0.7
 
-# Ordem importa: nomes mais específicos antes dos genéricos.
-DIVS = ["Women's Strawweight", "Women's Flyweight", "Women's Bantamweight",
-        "Women's Featherweight", "Light Heavyweight", "Strawweight", "Flyweight",
-        "Bantamweight", "Featherweight", "Lightweight", "Welterweight",
-        "Middleweight", "Heavyweight", "Catch Weight", "Open Weight"]
+DIVS = [
+    "Women's Strawweight", "Women's Flyweight", "Women's Bantamweight",
+    "Women's Featherweight", "Light Heavyweight", "Strawweight", "Flyweight",
+    "Bantamweight", "Featherweight", "Lightweight", "Welterweight",
+    "Middleweight", "Heavyweight", "Catch Weight", "Open Weight"
+]
 
 S = requests.Session()
 S.headers.update({
@@ -42,34 +43,38 @@ S.headers.update({
 })
 DATE_RE = re.compile(r"([A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})")
 
-
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-CHALLENGE = "Checking your browser"  # página de verificação anti-robô do site
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+CHALLENGE = "Checking your browser"
 _ctx = _page = None
 _solved = 0
 
 
 def _start():
-    """Abre um Chromium invisível; o site exige um navegador real."""
     global _ctx, _page
     pw = sync_playwright().start()
-    browser = pw.chromium.launch(headless=True,
-                                 args=["--disable-blink-features=AutomationControlled"])
-    _ctx = browser.new_context(user_agent=UA, locale="en-US",
-                               viewport={"width": 1280, "height": 800})
+    browser = pw.chromium.launch(
+        headless=True,
+        args=["--disable-blink-features=AutomationControlled"]
+    )
+    _ctx = browser.new_context(
+        user_agent=UA,
+        locale="en-US",
+        viewport={"width": 1280, "height": 800}
+    )
     _page = _ctx.new_page()
 
 
 def _solve(url):
-    """Abre a página no navegador e espera a verificação terminar."""
     global _solved
     _page.goto(url, wait_until="domcontentloaded", timeout=60000)
     for _ in range(90):
         time.sleep(1)
         try:
             html = _page.content()
-        except Exception:  # a página está recarregando
+        except Exception:
             continue
         if CHALLENGE not in html:
             _solved += 1
@@ -85,7 +90,7 @@ def get(url, tries=4):
     for i in range(tries):
         try:
             html = None
-            r = _ctx.request.get(url, timeout=30000)  # rápido, usa os cookies do navegador
+            r = _ctx.request.get(url, timeout=30000)
             if r.status == 200:
                 html = r.text()
             if html is None or CHALLENGE in html:
@@ -108,7 +113,6 @@ def uid(url):
 
 
 def norm_name(s):
-    """Normaliza nome para comparação entre bases (remove acentos e pontuação)."""
     s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode("ascii")
     return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
 
@@ -153,11 +157,18 @@ def list_events():
         if not loc:
             tds = row.select("td")
             loc = tds[-1] if tds else None
-        out.append({"id": eid, "name": txt(a), "date": parse_date(m.group(1)),
-                    "location": txt(loc)})
+        out.append({
+            "id": eid,
+            "name": txt(a),
+            "date": parse_date(m.group(1)),
+            "location": txt(loc)
+        })
     if not out:
-        print("DIAGNOSTICO: titulo =", txt(soup.title), "| links na pagina =", len(soup.select("a")),
-              "| tamanho =", len(str(soup)))
+        print(
+            "DIAGNOSTICO: titulo =", txt(soup.title),
+            "| links na pagina =", len(soup.select("a")),
+            "| tamanho =", len(str(soup))
+        )
         print("INICIO DA PAGINA:", re.sub(r"\s+", " ", str(soup))[:800])
     return [e for e in out if re.fullmatch(r"\d{4}-\d\d-\d\d", e["date"])]
 
@@ -171,7 +182,6 @@ def event_fight_urls(eid):
 
 
 def parse_tables(s):
-    """Totais e golpes significativos (por luta e por round)."""
     kinds = {"totals": [], "sig": []}
     for t in s.select("table"):
         th = t.select_one("thead")
@@ -191,10 +201,14 @@ def parse_tables(s):
             rows.append(sides)
         kinds["sig" if "Head" in heads else "totals"].append(rows)
     T, G = kinds["totals"], kinds["sig"]
-    return {"totals": T[0][0] if T and T[0] else None,
-            "sig": G[0][0] if G and G[0] else None,
-            "rounds": {"totals": T[1] if len(T) > 1 else [],
-                       "sig": G[1] if len(G) > 1 else []}}
+    return {
+        "totals": T[0][0] if T and T[0] else None,
+        "sig": G[0][0] if G and G[0] else None,
+        "rounds": {
+            "totals": T[1] if len(T) > 1 else [],
+            "sig": G[1] if len(G) > 1 else []
+        }
+    }
 
 
 def parse_fight(url, ev, order):
@@ -202,14 +216,19 @@ def parse_fight(url, ev, order):
     ppl = []
     for p in s.select("div.b-fight-details__person")[:2]:
         a = p.select_one("a.b-fight-details__person-link")
-        ppl.append({"id": uid(a["href"]) if a and a.get("href") else None,
-                    "name": txt(a), "st": txt(p.select_one("i.b-fight-details__person-status"))})
+        ppl.append({
+            "id": uid(a["href"]) if a and a.get("href") else None,
+            "name": txt(a),
+            "st": txt(p.select_one("i.b-fight-details__person-status"))
+        })
     if len(ppl) < 2 or not ppl[0]["id"] or not ppl[1]["id"]:
         return None
     st = (ppl[0]["st"], ppl[1]["st"])
-    res = ("a" if st[0] == "W" else "b" if st[1] == "W"
-           else "draw" if "D" in st else "nc" if "NC" in st else None)
-    if not res:  # luta sem resultado (cancelada / futura)
+    res = (
+        "a" if st[0] == "W" else "b" if st[1] == "W"
+        else "draw" if "D" in st else "nc" if "NC" in st else None
+    )
+    if not res:
         return None
     tl = s.select_one("i.b-fight-details__fight-title")
     title = txt(tl)
@@ -218,24 +237,36 @@ def parse_fight(url, ev, order):
         k, _, v = txt(it).partition(":")
         info[k.strip().lower()] = v.strip()
     ps = s.select("p.b-fight-details__text")
-    return {"id": uid(url), "ev": ev["id"], "date": ev["date"], "ord": order,
-            "a": {"id": ppl[0]["id"], "name": ppl[0]["name"]},
-            "b": {"id": ppl[1]["id"], "name": ppl[1]["name"]},
-            "res": res, "div": division(title), "title": "title" in title.lower(),
-            "tt": title,
-            "bonus": [i["src"].rsplit("/", 1)[-1].split(".")[0] for i in tl.select("img")] if tl else [],
-            "method": info.get("method", ""), "round": info.get("round", ""),
-            "time": info.get("time", ""), "fmt": info.get("time format", ""),
-            "ref": info.get("referee", ""),
-            "detail": txt(ps[1]).split(":", 1)[-1].strip() if len(ps) > 1 else "",
-            **parse_tables(s)}
+    return {
+        "id": uid(url),
+        "ev": ev["id"],
+        "date": ev["date"],
+        "ord": order,
+        "a": {"id": ppl[0]["id"], "name": ppl[0]["name"]},
+        "b": {"id": ppl[1]["id"], "name": ppl[1]["name"]},
+        "res": res,
+        "div": division(title),
+        "title": "title" in title.lower(),
+        "tt": title,
+        "bonus": [i["src"].rsplit("/", 1)[-1].split(".")[0] for i in tl.select("img")] if tl else [],
+        "method": info.get("method", ""),
+        "round": info.get("round", ""),
+        "time": info.get("time", ""),
+        "fmt": info.get("time format", ""),
+        "ref": info.get("referee", ""),
+        "detail": txt(ps[1]).split(":", 1)[-1].strip() if len(ps) > 1 else "",
+        **parse_tables(s)
+    }
 
 
 def parse_fighter(fid):
     s = get(f"{BASE}/fighter-details/{fid}")
-    d = {"id": fid, "name": txt(s.select_one("span.b-content__title-highlight")),
-         "nick": txt(s.select_one("p.b-content__Nickname")),
-         "record": txt(s.select_one("span.b-content__title-record")).replace("Record:", "").strip()}
+    d = {
+        "id": fid,
+        "name": txt(s.select_one("span.b-content__title-highlight")),
+        "nick": txt(s.select_one("p.b-content__Nickname")),
+        "record": txt(s.select_one("span.b-content__title-record")).replace("Record:", "").strip()
+    }
     for li in s.select("li.b-list__box-list-item"):
         label = txt(li.select_one("i.b-list__box-item-title"))
         val = txt(li).replace(label, "", 1).strip()
@@ -247,7 +278,6 @@ def parse_fighter(fid):
 # ---------- enriquecimento externo (ESPN API + BestFightOdds) ----------
 
 def enrich_fighter_espn(fighter_dict):
-    """Enriquece o dicionário do lutador com foto PNG transparente, país e equipa via API da ESPN."""
     name = fighter_dict.get("name", "")
     if not name:
         return fighter_dict
@@ -271,7 +301,6 @@ def enrich_fighter_espn(fighter_dict):
             espn_id = str(best["id"])
             fighter_dict["espn_id"] = espn_id
             fighter_dict["img"] = f"https://a.espncdn.com/i/headshots/mma/players/full/{espn_id}.png"
-            # Busca metadados complementares no endpoint de atleta da ESPN
             ath_url = f"https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/athletes/{espn_id}"
             ra = S.get(ath_url, timeout=10)
             if ra.status_code == 200:
@@ -289,12 +318,11 @@ def enrich_fighter_espn(fighter_dict):
 
 
 def american_to_prob(odd_str):
-    """Converte odd americana ('-175', '+145') em probabilidade implícita bruta."""
     try:
         v = float(str(odd_str).replace("+", "").strip())
         if v < 0:
             return (-v) / ((-v) + 100.0)
-        elif v > 0:
+        if v > 0:
             return 100.0 / (v + 100.0)
     except ValueError:
         pass
@@ -302,7 +330,6 @@ def american_to_prob(odd_str):
 
 
 def fetch_bfo_fighter_odds(fighter_name):
-    """Busca odds abertas na página pública do BestFightOdds para lutas futuras."""
     try:
         r = S.get(f"{BFO_SEARCH_URL}?query={quote_plus(fighter_name)}", timeout=12)
         if r.status_code != 200:
@@ -325,12 +352,10 @@ def fetch_bfo_fighter_odds(fighter_name):
 
 
 def enrich_upcoming_odds(events_list):
-    """Adiciona probabilidades implícitas do mercado (sem vig) às lutas de upcoming.json."""
     for ev in events_list:
         fights = ev.get("fights", [])
         if not fights:
             continue
-        # Usa o main event para puxar a tabela de odds do card no BestFightOdds
         main_a = fights[0]["a"]["name"]
         odds_map = fetch_bfo_fighter_odds(main_a)
         if not odds_map:
@@ -339,14 +364,12 @@ def enrich_upcoming_odds(events_list):
             na, nb = norm_name(f["a"]["name"]), norm_name(f["b"]["name"])
             pa, pb = odds_map.get(na), odds_map.get(nb)
             if pa and pb and (pa + pb) > 0:
-                # Remove o overround (vig) das casas de apostas
                 f["mkt_pa"] = round(pa / (pa + pb), 3)
                 f["mkt_pb"] = round(pb / (pa + pb), 3)
     return events_list
 
 
 def upcoming(limit=3):
-    """Próximos eventos (cards completos), para o app registrar previsões antes das lutas."""
     soup = get(f"{BASE}/statistics/events/upcoming")
     evs, seen = [], set()
     for a in soup.select('a[href*="event-details"]'):
@@ -357,11 +380,17 @@ def upcoming(limit=3):
             continue
         seen.add(eid)
         tds = row.select("td")
-        evs.append({"id": eid, "name": txt(a), "date": parse_date(m.group(1)),
-                    "location": txt(tds[-1]) if tds else ""})
+        evs.append({
+            "id": eid,
+            "name": txt(a),
+            "date": parse_date(m.group(1)),
+            "location": txt(tds[-1]) if tds else ""
+        })
     today = date.today().isoformat()
-    evs = sorted((e for e in evs if re.fullmatch(r"\d{4}-\d\d-\d\d", e["date"]) and e["date"] >= today),
-                 key=lambda e: e["date"])[:limit]
+    evs = sorted(
+        (e for e in evs if re.fullmatch(r"\d{4}-\d\d-\d\d", e["date"]) and e["date"] >= today),
+        key=lambda e: e["date"]
+    )[:limit]
     for e in evs:
         s = get(f"{BASE}/event-details/{e['id']}")
         e["fights"] = []
@@ -369,9 +398,12 @@ def upcoming(limit=3):
             fl = tr.select("a[href*='fighter-details']")
             if len(fl) >= 2:
                 cells = " ".join(txt(td) for td in tr.select("td"))
-                e["fights"].append({"a": {"id": uid(fl[0]["href"]), "name": txt(fl[0])},
-                                    "b": {"id": uid(fl[1]["href"]), "name": txt(fl[1])},
-                                    "div": division(cells), "title": "title" in cells.lower()})
+                e["fights"].append({
+                    "a": {"id": uid(fl[0]["href"]), "name": txt(fl[0])},
+                    "b": {"id": uid(fl[1]["href"]), "name": txt(fl[1])},
+                    "div": division(cells),
+                    "title": "title" in cells.lower()
+                })
     return enrich_upcoming_odds(evs)
 
 
@@ -410,10 +442,8 @@ def validate(events, fights, fighters, extra=()):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-minutes", type=float, default=300)
-    ap.add_argument("--refresh", type=int, default=3,
-                    help="reprocessa os N eventos mais recentes")
-    ap.add_argument("--enrich-limit", type=int, default=150,
-                    help="máximo de lutadores enriquecidos via ESPN por execução")
+    ap.add_argument("--refresh", type=int, default=3, help="reprocessa os N eventos mais recentes")
+    ap.add_argument("--enrich-limit", type=int, default=150, help="máximo de lutadores enriquecidos via ESPN por execução")
     args = ap.parse_args()
     t0 = time.time()
 
@@ -427,145 +457,13 @@ def main():
     done = set(meta["done"])
 
     def persist():
-        meta.update(done=sorted(done), updated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                    n_events=len(events), n_fights=len(fights), n_fighters=len(fighters))
-        save("events.json", sorted(events.values(), key=lambda e: e["date"], reverse=True))
-        save("fights.json", sorted(fights.values(), key=lambda f: (f["date"], -f["ord"])))
-        save("fighters.json", sorted(fighters.values(), key=lambda p: p["name"]))
-        save("meta.json", meta)
-
-    today = date.today().isoformat()
-    listed = sorted((e for e in list_events() if e["date"] <= today), key=lambda e: e["date"])
-    if not listed:
-        raise SystemExit("ERRO: nenhum evento encontrado no ufcstats.com (veja o DIAGNOSTICO acima).")
-    recent = {e["id"] for e in listed[-args.refresh:]}
-    todo = [e for e in reversed(listed) if e["id"] not in done or e["id"] in recent]
-    print(f"{len(listed)} eventos no site, {len(todo)} para processar")
-
-    touched = set()
-    for n, e in enumerate(todo, 1):
-        if not has_time():
-            print("Tempo esgotado; o restante continua na próxima execução.")
-            break
-        try:
-            urls = event_fight_urls(e["id"])
-            ids = [uid(u) for u in urls]
-            new = {}
-            for i, u in enumerate(urls):
-                fid = ids[i]
-                if fid in fights and e["id"] not in recent:
-                    continue
-                f = parse_fight(u, e, i)
-                if f:
-                    new[fid] = f
-            resolved = set(new) | {x for x in ids if x in fights and e["id"] not in recent}
-            age = (date.today() - date.fromisoformat(e["date"])).days
-            # Evento só entra na base quando TODAS as lutas têm resultado
-            # (ou, se passou de 3 dias, quando pelo menos algumas têm).
-            complete = bool(ids) and (len(resolved) == len(ids) or (age >= 3 and resolved))
-            if complete:
-                fights.update(new)
-                events[e["id"]] = {**e, "n": len(urls)}
-                done.add(e["id"])
-                if e["id"] in recent:
-                    touched |= {x for f in new.values() for x in (f["a"]["id"], f["b"]["id"])}
-                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: {len(new)} lutas")
-            else:
-                for k in [k for k, f in fights.items() if f["ev"] == e["id"]]:
-                    del fights[k]
-                events.pop(e["id"], None)
-                done.discard(e["id"])
-                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: ainda não terminou, ignorado por enquanto "
-                      f"({len(resolved)}/{len(ids)} lutas com resultado)")
-        except Exception as ex:  # um evento com erro não derruba a execução
-            print(f"ERRO em {e['name']}: {ex}")
-        if n % 5 == 0:
-            persist()
-
-    up, upids, up_ok = [], set(), False
-    try:
-        up = upcoming()
-        upids = {f[s]["id"] for e in up for f in e["fights"] for s in "ab"}
-        up_ok = True
-        print(f"Próximos eventos: {len(up)} ({sum(len(e['fights']) for e in up)} lutas)")
-    except Exception as ex:  # falha aqui não derruba a execução
-        print(f"aviso: próximos eventos não carregados: {ex}")
-
-    need = {x fo= DATE_RE.search(txt(row))
-        if eid in seen or not m:
-            continue
-        seen.add(eid)
-        tds = row.select("td")
-        evs.append({"id": eid, "name": txt(a), "date": parse_date(m.group(1)),
-                    "location": txt(tds[-1]) if tds else ""})
-    today = date.today().isoformat()
-    evs = sorted((e for e in evs if re.fullmatch(r"\d{4}-\d\d-\d\d", e["date"]) and e["date"] >= today),
-                 key=lambda e: e["date"])[:limit]
-    for e in evs:
-        s = get(f"{BASE}/event-details/{e['id']}")
-        e["fights"] = []
-        for tr in s.select("tr"):
-            fl = tr.select("a[href*='fighter-details']")
-            if len(fl) >= 2:
-                cells = " ".join(txt(td) for td in tr.select("td"))
-                e["fights"].append({"a": {"id": uid(fl[0]["href"]), "name": txt(fl[0])},
-                                    "b": {"id": uid(fl[1]["href"]), "name": txt(fl[1])},
-                                    "div": division(cells), "title": "title" in cells.lower()})
-    return evs
-
-
-# ---------- validação ----------
-
-def validate(events, fights, fighters, extra=()):
-    issues, used = [], set(extra)
-    for f in fights.values():
-        a, b = f["a"]["id"], f["b"]["id"]
-        used |= {a, b}
-        if a == b:
-            issues.append(["luta_contra_si_mesmo", f["id"]])
-        if f["ev"] not in events:
-            issues.append(["luta_sem_evento", f["id"]])
-        for x in (a, b):
-            if x not in fighters:
-                issues.append(["lutador_sem_ficha", x])
-    for fid, p in fighters.items():
-        if fid not in used:
-            issues.append(["lutador_sem_luta", fid])
-    by_name, by_dob = {}, {}
-    for p in fighters.values():
-        n, dob = p["name"].lower(), p.get("DOB", "")
-        if n in by_name:
-            issues.append(["mesmo_nome", by_name[n], p["id"]])
-        by_name[n] = p["id"]
-        if dob not in ("", "--"):
-            if (n, dob) in by_dob:
-                issues.append(["possivel_duplicado", by_dob[(n, dob)], p["id"]])
-            by_dob[(n, dob)] = p["id"]
-    return issues
-
-
-# ---------- principal ----------
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--max-minutes", type=float, default=300)
-    ap.add_argument("--refresh", type=int, default=3,
-                    help="reprocessa os N eventos mais recentes")
-    args = ap.parse_args()
-    t0 = time.time()
-
-    def has_time():
-        return (time.time() - t0) / 60 < args.max_minutes
-
-    events = {e["id"]: e for e in load("events.json", [])}
-    fights = {f["id"]: f for f in load("fights.json", [])}
-    fighters = {f["id"]: f for f in load("fighters.json", [])}
-    meta = load("meta.json", {"done": []})
-    done = set(meta["done"])
-
-    def persist():
-        meta.update(done=sorted(done), updated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                    n_events=len(events), n_fights=len(fights), n_fighters=len(fighters))
+        meta.update(
+            done=sorted(done),
+            updated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            n_events=len(events),
+            n_fights=len(fights),
+            n_fighters=len(fighters)
+        )
         save("events.json", sorted(events.values(), key=lambda e: e["date"], reverse=True))
         save("fights.json", sorted(fights.values(), key=lambda f: (f["date"], -f["ord"])))
         save("fighters.json", sorted(fighters.values(), key=lambda p: p["name"]))
@@ -610,8 +508,10 @@ def main():
                     del fights[k]
                 events.pop(e["id"], None)
                 done.discard(e["id"])
-                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: ainda não terminou, ignorado por enquanto "
-                      f"({len(resolved)}/{len(ids)} lutas com resultado)")
+                print(
+                    f"[{n}/{len(todo)}] {e['date']} {e['name']}: ainda não terminou, ignorado por enquanto "
+                    f"({len(resolved)}/{len(ids)} lutas com resultado)"
+                )
         except Exception as ex:
             print(f"ERRO em {e['name']}: {ex}")
         if n % 5 == 0:
@@ -633,163 +533,40 @@ def main():
             print("Tempo esgotado nas fichas; continua na próxima execução.")
             break
         try:
-            old_img = fighters.get(fid, {}).get("img")
-            fighters[fid] = parse_fighter(fid, existing_img=old_img)
+            prev = fighters.get(fid, {})
+            d = parse_fighter(fid)
+            for key in ("espn_id", "img", "country", "flag", "team", "espn_checked"):
+                if key in prev:
+                    d[key] = prev[key]
+            fighters[fid] = enrich_fighter_espn(d)
         except Exception as ex:
             print(f"ERRO no lutador {fid}: {ex}")
         if k % 100 == 0:
             persist()
+
+    if has_time() and args.enrich_limit > 0:
+        to_enrich = [
+            fid for fid in list(upids) + list(fighters.keys())
+            if fid in fighters and not fighters[fid].get("espn_checked")
+        ]
+        to_enrich = list(dict.fromkeys(to_enrich))[:args.enrich_limit]
+        if to_enrich:
+            print(f"Enriquecendo {len(to_enrich)} lutadores via ESPN API...")
+            for fid in to_enrich:
+                if not has_time():
+                    break
+                fighters[fid] = enrich_fighter_espn(fighters[fid])
+                time.sleep(0.15)
 
     persist()
     if up_ok:
         save("upcoming.json", {"updated": meta["updated"], "events": up})
     issues = validate(events, fights, fighters, upids)
     save("validation.json", {"updated": meta["updated"], "count": len(issues), "issues": issues})
-    print(f"Pronto: {len(events)} eventos, {len(fights)} lutas, {len(fighters)} lutadores, "
-          f"{len(issues)} avisos de validação.")
-
-
-if __name__ == "__main__":
-    main()
-: uid(fl[1]["href"]), "name": txt(fl[1])},
-                                    "div": division(cells), "title": "title" in cells.lower()})
-    return evs
-
-
-# ---------- validação ----------
-
-def validate(events, fights, fighters, extra=()):
-    issues, used = [], set(extra)
-    for f in fights.values():
-        a, b = f["a"]["id"], f["b"]["id"]
-        used |= {a, b}
-        if a == b:
-            issues.append(["luta_contra_si_mesmo", f["id"]])
-        if f["ev"] not in events:
-            issues.append(["luta_sem_evento", f["id"]])
-        for x in (a, b):
-            if x not in fighters:
-                issues.append(["lutador_sem_ficha", x])
-    for fid, p in fighters.items():
-        if fid not in used:
-            issues.append(["lutador_sem_luta", fid])
-    by_name, by_dob = {}, {}
-    for p in fighters.values():
-        n, dob = p["name"].lower(), p.get("DOB", "")
-        if n in by_name:
-            issues.append(["mesmo_nome", by_name[n], p["id"]])
-        by_name[n] = p["id"]
-        if dob not in ("", "--"):
-            if (n, dob) in by_dob:
-                issues.append(["possivel_duplicado", by_dob[(n, dob)], p["id"]])
-            by_dob[(n, dob)] = p["id"]
-    return issues
-
-
-# ---------- principal ----------
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--max-minutes", type=float, default=300)
-    ap.add_argument("--refresh", type=int, default=3,
-                    help="reprocessa os N eventos mais recentes")
-    args = ap.parse_args()
-    t0 = time.time()
-
-    def has_time():
-        return (time.time() - t0) / 60 < args.max_minutes
-
-    events = {e["id"]: e for e in load("events.json", [])}
-    fights = {f["id"]: f for f in load("fights.json", [])}
-    fighters = {f["id"]: f for f in load("fighters.json", [])}
-    meta = load("meta.json", {"done": []})
-    done = set(meta["done"])
-
-    def persist():
-        meta.update(done=sorted(done), updated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                    n_events=len(events), n_fights=len(fights), n_fighters=len(fighters))
-        save("events.json", sorted(events.values(), key=lambda e: e["date"], reverse=True))
-        save("fights.json", sorted(fights.values(), key=lambda f: (f["date"], -f["ord"])))
-        save("fighters.json", sorted(fighters.values(), key=lambda p: p["name"]))
-        save("meta.json", meta)
-
-    today = date.today().isoformat()
-    listed = sorted((e for e in list_events() if e["date"] <= today), key=lambda e: e["date"])
-    if not listed:
-        raise SystemExit("ERRO: nenhum evento encontrado no ufcstats.com (veja o DIAGNOSTICO acima).")
-    recent = {e["id"] for e in listed[-args.refresh:]}
-    todo = [e for e in reversed(listed) if e["id"] not in done or e["id"] in recent]
-    print(f"{len(listed)} eventos no site, {len(todo)} para processar")
-
-    touched = set()
-    for n, e in enumerate(todo, 1):
-        if not has_time():
-            print("Tempo esgotado; o restante continua na próxima execução.")
-            break
-        try:
-            urls = event_fight_urls(e["id"])
-            ids = [uid(u) for u in urls]
-            new = {}
-            for i, u in enumerate(urls):
-                fid = ids[i]
-                if fid in fights and e["id"] not in recent:
-                    continue
-                f = parse_fight(u, e, i)
-                if f:
-                    new[fid] = f
-            resolved = set(new) | {x for x in ids if x in fights and e["id"] not in recent}
-            age = (date.today() - date.fromisoformat(e["date"])).days
-            # Evento só entra na base quando TODAS as lutas têm resultado
-            # (ou, se passou de 3 dias, quando pelo menos algumas têm).
-            complete = bool(ids) and (len(resolved) == len(ids) or (age >= 3 and resolved))
-            if complete:
-                fights.update(new)
-                events[e["id"]] = {**e, "n": len(urls)}
-                done.add(e["id"])
-                if e["id"] in recent:
-                    touched |= {x for f in new.values() for x in (f["a"]["id"], f["b"]["id"])}
-                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: {len(new)} lutas")
-            else:
-                for k in [k for k, f in fights.items() if f["ev"] == e["id"]]:
-                    del fights[k]
-                events.pop(e["id"], None)
-                done.discard(e["id"])
-                print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: ainda não terminou, ignorado por enquanto "
-                      f"({len(resolved)}/{len(ids)} lutas com resultado)")
-        except Exception as ex:  # um evento com erro não derruba a execução
-            print(f"ERRO em {e['name']}: {ex}")
-        if n % 5 == 0:
-            persist()
-
-    up, upids, up_ok = [], set(), False
-    try:
-        up = upcoming()
-        upids = {f[s]["id"] for e in up for f in e["fights"] for s in "ab"}
-        up_ok = True
-        print(f"Próximos eventos: {len(up)} ({sum(len(e['fights']) for e in up)} lutas)")
-    except Exception as ex:  # falha aqui não derruba a execução
-        print(f"aviso: próximos eventos não carregados: {ex}")
-
-    need = {x for f in fights.values() for x in (f["a"]["id"], f["b"]["id"])} | upids
-    pending = [x for x in need if x not in fighters] + [x for x in touched if x in fighters]
-    for k, fid in enumerate(pending, 1):
-        if not has_time():
-            print("Tempo esgotado nas fichas; continua na próxima execução.")
-            break
-        try:
-            fighters[fid] = parse_fighter(fid)
-        except Exception as ex:
-            print(f"ERRO no lutador {fid}: {ex}")
-        if k % 100 == 0:
-            persist()
-
-    persist()
-    if up_ok:
-        save("upcoming.json", {"updated": meta["updated"], "events": up})
-    issues = validate(events, fights, fighters, upids)
-    save("validation.json", {"updated": meta["updated"], "count": len(issues), "issues": issues})
-    print(f"Pronto: {len(events)} eventos, {len(fights)} lutas, {len(fighters)} lutadores, "
-          f"{len(issues)} avisos de validação.")
+    print(
+        f"Pronto: {len(events)} eventos, {len(fights)} lutas, {len(fighters)} lutadores, "
+        f"{len(issues)} avisos de validação."
+    )
 
 
 if __name__ == "__main__":
