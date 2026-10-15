@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -87,14 +87,14 @@ details p,details li{font-size:.9rem;color:var(--mu)}details b{color:var(--tx)}
 footer{max-width:980px;margin:auto;padding:0 clamp(1rem,4vw,2rem) 1.5rem;font-size:.8rem;color:var(--mu)}
 @media(min-width:760px){body{padding-bottom:0}nav{position:static;border:0;background:none;backdrop-filter:none;padding:0;gap:.3rem}nav a{flex:none;padding:.4rem 1rem;box-shadow:none}nav a.on{background:var(--gd);color:#000;clip-path:var(--ch);box-shadow:none}}
 @media(prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
-/* ===== Raio-X / Laboratório Estatístico (módulo acoplável) ===== */
+/* ===== Raio-X / Laboratório Estatístico ===== */
 .seg{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1rem}.seg button.on{background:var(--gd);color:#000}
 .xs{display:grid;grid-template-columns:1fr;gap:.6rem}
 @media(min-width:620px){.xs{grid-template-columns:1fr 1fr}}
 .stk{display:flex;height:10px;margin:.5rem 0}.stk i{display:block}
 .xg{display:flex;flex-wrap:wrap;gap:.2rem .9rem;font-size:.85rem;color:var(--mu)}.xg b{color:var(--tx)}
-@media(max-width:480px){nav a{font-size:.95rem;letter-spacing:.02em}} /* cabe 6 abas no celular */
-/* ===== Estúdio: cards, radar e menu rolável (módulo acoplável) ===== */
+@media(max-width:480px){nav a{font-size:.95rem;letter-spacing:.02em}}
+/* ===== Estúdio: cards, radar e menu rolável ===== */
 .fc{max-width:340px;padding:1rem 1.2rem 1.1rem;clip-path:var(--ch);color:#14110a;background:linear-gradient(155deg,var(--c1),var(--c2));margin:.4rem 0 1rem}
 .fc.legend{--c1:#fff2a8;--c2:#e0a800}.fc.elite{--c1:#ffe484;--c2:#c9920e}.fc.gold{--c1:#f3d27a;--c2:#a67c1e}.fc.silver{--c1:#e6ebf2;--c2:#8e98a8}.fc.bronze{--c1:#e0a877;--c2:#8a5428}
 .fct{display:flex;justify-content:space-between;align-items:center}.fco{font:900 3.6rem/1 var(--d)}.fco small{display:block;font:800 .9rem var(--d);letter-spacing:.1em}.fco em{display:block;font:800 .95rem var(--d);letter-spacing:.08em;font-style:normal;text-transform:uppercase;opacity:.75}
@@ -108,36 +108,41 @@ footer{max-width:980px;margin:auto;padding:0 clamp(1rem,4vw,2rem) 1.5rem;font-si
 </style>
 </head>
 <body>
-<div class="top"><span class="brand"><svg viewBox="0 0 40 40"><polygon points="12,1 28,1 39,12 39,28 28,39 12,39 1,28 1,12" fill="none" stroke="#f5c518" stroke-width="3"/><polygon points="14,9 26,9 31,14 31,26 26,31 14,31 9,26 9,14" fill="#f5c518"/></svg>SÚMULA <em>UFC</em></span><nav id="nv"></nav><button class="lg" id="lg"></button></div>
-<main id="m"></main>
+<div class="top"><span class="brand"><svg viewBox="0 0 40 40"><polygon points="12,1 28,1 39,12 39,28 28,39 12,39 1,28 1,12" fill="none" stroke="#f5c518" stroke-width="3"/><polygon points="14,9 26,9 31,14 31,26 26,31 14,31 9,26 9,14" fill="#f5c518"/></svg>SÚMULA <em>UFC</em></span><nav id="nv"></nav><button class="lg" id="lg">PT</button></div>
+<main id="m"><p class="mu" style="padding:2rem 0">Carregando base de dados do UFC…</p></main>
 <footer id="ft"></footer>
 <script>
 const $=s=>document.querySelector(s),M=h=>$('#m').innerHTML=h;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const S={ev:[],fg:[],F:new Map(),ov:{merges:{},div:{},exclude:[]},meta:{},P:{vol:80,fin:1,title:.25,tw:1,min:3,act:2},mode:'cur',div:'ALL',pt:false,sim:{a:'',b:'',m:'cur',d:'ALL'},ps:{},cache:new Map(),lg:null,me:{ph:{},fav:{},note:{},log:{}},up:[],simLast:null};
+const S={ev:[],fg:[],F:new Map(),ov:{merges:{},div:{},exclude:[]},meta:{},P:{vol:80,fin:1,title:.25,tw:1,min:3,act:2},mode:'cur',div:'ALL',pt:true,sim:{a:'',b:'',m:'cur',d:'ALL'},ps:{},cache:new Map(),lg:null,me:{ph:{},fav:{},note:{},log:{}},up:[],simLast:null};
 try{Object.assign(S.P,JSON.parse(localStorage.sumulaP3||'{}'))}catch{}
 try{Object.assign(S.me,JSON.parse(localStorage.sumulaMe||'{}'))}catch{}
-try{S.pt=localStorage.sumulaLang==='pt'}catch{}
+try{if(localStorage.sumulaLang)S.pt=localStorage.sumulaLang==='pt'}catch{}
 const T=(en,pt)=>S.pt?pt:en;
 const saveMe=()=>{try{localStorage.sumulaMe=JSON.stringify(S.me)}catch{alert(T('Storage is full. Remove some photos.','Armazenamento cheio. Remova algumas fotos.'))}};
 const mid=id=>S.ov.merges[id]||id,fmt=d=>new Date(d+'T00:00').toLocaleDateString(S.pt?'pt-BR':'en-US',{day:'2-digit',month:'short',year:'numeric'});
-const name=x=>S.F.get(mid(x.id))?.name||x.name,ini=n=>n.split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const name=x=>S.F.get(mid(x.id))?.name||x.name,ini=n=>String(n||'').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 const av=(id,n,c='')=>{const im=S.me.ph[id]||S.F.get(mid(id))?.img;return `<span class="ring ${c}"><span${im?` style="background:url('${esc(im)}') center top/cover"`:''}>${im?'':esc(ini(n))}</span></span>`};
-const empty=()=>`<p class="empty">${S.ev.length?T('Nothing found.','Nada encontrado.'):T('No data yet. On GitHub, open Actions, choose "Atualizar base UFC" and click Run workflow.','Ainda não há dados. No GitHub, abra Actions, escolha "Atualizar base UFC" e clique em Run workflow.')}</p>`;
+const empty=()=>`<p class="empty">${S.ev.length?T('Nothing found.','Nada encontrado.'):location.protocol==='file:'?T('Opened via file:// — Browsers block local JSON loading. Run "python -m http.server 8000" and open http://localhost:8000, or use GitHub Pages.','Arquivo aberto direto via file:// — O navegador bloqueia a leitura dos JSONs locais por segurança. Rode "python -m http.server 8000" na pasta ou abra pelo GitHub Pages.'):T('No data yet. On GitHub, open Actions, choose "Atualizar base UFC" and click Run workflow.','Ainda não há dados. No GitHub, abra Actions, escolha "Atualizar base UFC" e clique em Run workflow.')}</p>`;
 const LB={KD:['Knockdowns','Knockdowns'],'Sig. str.':['Significant strikes','Golpes significativos'],'Total str.':['Total strikes','Golpes totais'],Td:['Takedowns','Quedas'],'Sub. att':['Submission attempts','Finalizações tentadas'],'Rev.':['Reversals','Viradas'],Ctrl:['Control time','Controle'],Head:['Head','Cabeça'],Body:['Body','Corpo'],Leg:['Leg','Perna'],Distance:['Distance','Distância'],Clinch:['Clinch','Clinch'],Ground:['Ground','Solo']};
 const lb=k=>LB[k][S.pt?1:0];
 const YR=31557600000,U=400/Math.LN10;
 
 async function init(){
- const g=async n=>{try{const r=await fetch('data/'+n+'.json',{cache:'no-cache'});return r.ok?r.json():null}catch{return null}};
- const [ev,fg,fi,ov,meta,up]=await Promise.all(['events','fights','fighters','overrides','meta','upcoming'].map(g));
- if(ov)S.ov={merges:{},div:{},exclude:[],...ov};
- S.ev=ev||[];S.meta=meta||{};S.up=(up&&up.events)||[];(fi||[]).forEach(f=>S.F.set(f.id,f));
- S.fg=(fg||[]).filter(f=>!S.ov.exclude.includes(f.id)).map(f=>({...f,div:S.ov.div[f.id]||f.div}));
- $('#lg').onclick=()=>{S.pt=!S.pt;try{localStorage.sumulaLang=S.pt?'pt':'en'}catch{}route()};
- if(window.XLOAD)await XLOAD();
- if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
- addEventListener('hashchange',route);route();
+ try{
+  const g=async n=>{try{const r=await fetch('data/'+n+'.json',{cache:'no-cache'});return r.ok?await r.json():null}catch{return null}};
+  const [ev,fg,fi,ov,meta,up]=await Promise.all(['events','fights','fighters','overrides','meta','upcoming'].map(g));
+  if(ov)S.ov={merges:{},div:{},exclude:[],...ov};
+  S.ev=ev||[];S.meta=meta||{};S.up=(up&&up.events)||[];(fi||[]).forEach(f=>S.F.set(f.id,f));
+  S.fg=(fg||[]).filter(f=>!S.ov.exclude.includes(f.id)).map(f=>({...f,div:S.ov.div[f.id]||f.div}));
+  $('#lg').onclick=()=>{S.pt=!S.pt;try{localStorage.sumulaLang=S.pt?'pt':'en'}catch{}route()};
+  if(window.XLOAD)await window.XLOAD();
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+  addEventListener('hashchange',route);
+  route();
+ }catch(err){
+  M(`<div class="card" style="padding:1rem"><b class="dn">Erro ao iniciar aplicativo:</b><p class="mu sm">${esc(err?.message||err)}</p></div>`);
+ }
 }
 
 /* ---------- Rating engine: Whole-History Rating (Coulom, 2008) ---------- */
@@ -770,7 +775,7 @@ function route(){
  const pval=z=>2*(1-.5*(1+erf(Math.abs(z)/Math.SQRT2))),wil=(k,n)=>{if(!n)return[0,1];const z=1.96,p=k/n,d=1+z*z/n,c=p+z*z/(2*n),a=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[(c-a)/d,(c+a)/d]};
  const ppf=v=>(v*100).toFixed(1)+'%',sg2=v=>(v>=0?'+':'')+v.toFixed(1);
  const prevLoad=window.XLOAD;
- window.XLOAD=async()=>{if(prevLoad)await prevLoad();const g=async n=>{try{const r=await fetch('data/'+n+'.json',{cache:'no-cache'});return r.ok?r.json():null}catch{return null}};
+ window.XLOAD=async()=>{if(prevLoad)await prevLoad();const g=async n=>{try{const r=await fetch('data/'+n+'.json',{cache:'no-cache'});return r.ok?await r.json():null}catch{return null}};
   const [c,l]=await Promise.all([g('cards'),g('live')]);Z.cards=c&&c.cards;Z.live=l&&l.fights;Z.lm=l&&l.model;Z.cb=l&&l.comebacks};
  const fmap=()=>Z._fm||(Z._fm=new Map(S.fg.map(f=>[f.id,f])));
 
