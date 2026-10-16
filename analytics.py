@@ -10,6 +10,7 @@ Roda logo depois do scraper.py e grava arquivos leves em data/:
 
 Usa somente a biblioteca padrão do Python.
 """
+import bisect
 import json
 import math
 import re
@@ -570,7 +571,7 @@ def run_cards(fights, fighters):
     for i, d in pools.items():
         members[d].append(i)
 
-    out = {}
+    raw = {}
     for d, ids in members.items():
         if d == "ALL":
             ids = list(met)
@@ -607,39 +608,107 @@ def run_cards(fights, fighters):
             peg = z_to_fifa_rating(z["peg"][k], sos_adj * 0.80)
             car = z_to_fifa_rating(z["car"][k], sos_adj * 0.60)
 
-            # Cálculo Científico do Overall (OVR):
+            # ----- Overall (OVR): 1ª passagem, nota BRUTA em escala livre -----
+            # A nota final só é fechada depois, quando toda a população já foi pontuada
+            # (ver calibrate_ovr): assim o intervalo 48-98 é sempre ocupado por inteiro.
+
             # 1) Nota Técnica ponderando as especialidades (impede que striker puro ou grappler puro seja punido)
             s_attrs = sorted([tro, dfn, lut, sub, peg, car], reverse=True)
             tech_ovr = (0.30 * s_attrs[0] + 0.25 * s_attrs[1] + 0.20 * s_attrs[2] +
                         0.12 * s_attrs[3] + 0.08 * s_attrs[4] + 0.05 * s_attrs[5])
 
-            # 2) Nota de Dominância/ELO (Combina ELO Atual, Pico de Carreira e Top 3 Vitórias)
+            # 2) Dominância/ELO: posição RELATIVA na população, não limiares absolutos.
+            #    (o ELO de pico real do acervo chega a ~1820, então cortes fixos de
+            #     1780/1830 eram inalcançáveis e achatavam todo mundo no mesmo valor)
             elo_comp = 0.50 * elo_cur + 0.30 * elo_pk + 0.20 * qw_elo
-            z_elo = (elo_comp - 1520.0) / 115.0
-            elo_ovr = z_to_fifa_rating(z_elo, low=54.0, high=96.0, k=0.80)
 
-            # 3) Bônus de Currículo em Disputas de Cinturão (Title Equity)
-            title_bonus = min(5.5, tw * 1.35 + (0.6 if tf > 0 and tw == 0 else 0.0))
+            # 3) Currículo em disputas de cinturão, com retorno decrescente
+            title_bonus = TITLE_CAP * (1.0 - math.exp(-TITLE_RATE * tw)) + (0.8 if tf > 0 and tw == 0 else 0.0)
 
-            raw_ovr = 0.42 * tech_ovr + 0.53 * elo_ovr + title_bonus
+            raw[i] = {"tech": tech_ovr, "elo_comp": elo_comp, "pk": elo_pk,
+                      "title": title_bonus, "n": f["n"], "attrs": [tro, dfn, lut, sub, peg, car], "d": d}
 
-            # 4) Gatekeeping Científico de Tier:
-            # - Sem vitória em disputa de cinturão (tw == 0) e sem pico histórico de elite (<1780): teto = 88 (Contender)
-            # - Contender nº 1 histórico sem cinturão (tw == 0, mas pico >= 1780): teto = 90
-            # - Campeão (tw >= 1): pode chegar a 91-97 conforme defesas de título e dominância
-            if tw == 0 and elo_pk < 1780:
-                ovr = min(88, int(round(raw_ovr)))
-            elif tw == 0:
-                ovr = min(90, int(round(raw_ovr)))
-            elif tw == 1 and elo_pk < 1830:
-                ovr = min(92, max(88, int(round(raw_ovr))))
-            else:
-                ovr = min(97, max(90, int(round(raw_ovr))))
+    return calibrate_ovr(raw)
 
-            out[i] = [ovr, tro, dfn, lut, sub, peg, car, d]
 
-    return {"v": 2, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "names": ["ovr", "tro", "def", "lut", "sub", "peg", "car"], "min_fights": CARD_MIN_FIGHTS, "cards": out}
+# ---------- 6b) Calibração do OVR na população inteira ----------
+# Sem isto o OVR vira um amontoado: as notas brutas ficam num intervalo estreito e
+# qualquer teto/piso fixo cola dezenas de lutadores no MESMO número. Aqui a nota
+# bruta é convertida em posição percentil e a posição é esticada por uma normal,
+# o que garante: (a) intervalo completo OVR_LOW..OVR_HIGH, (b) poucos no topo e
+# poucos no fundo, muitos no meio, (c) nenhum buraco na escala.
+OVR_LOW, OVR_HIGH = 48, 98
+OVR_MU, OVR_SD = 72.0, 8.2        # centro e dispersão da curva final
+W_TECH, W_ELO = 0.42, 0.53        # peso da nota técnica e da dominância
+TITLE_CAP, TITLE_RATE = 6.0, 0.55  # bônus máximo de cinturão e velocidade de saturação
+LEGACY_BONUS = 3.5                # prêmio para o pico de ELO no topo 10% histórico
+PRIOR_N = 4                       # lutas-fantasma: puxa cartel curto para a média
+
+
+def _ranker(values):
+    """Devolve f(v) = percentil de v na população (média entre empates)."""
+    s = sorted(values)
+    n = float(len(s)) or 1.0
+    def rank(v):
+        return (bisect.bisect_left(s, v) + bisect.bisect_right(s, v)) / (2.0 * n)
+    return rank
+
+
+def _probit(p):
+    """Inversa da normal padrão (algoritmo de Acklam). Converte percentil em z."""
+    p = min(1.0 - 1e-6, max(1e-6, p))
+    a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00]
+    b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+         6.680131188771972e+01, -1.328068155288572e+01]
+    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00]
+    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00]
+    lo = 0.02425
+    if p < lo:
+        q = math.sqrt(-2 * math.log(p))
+        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
+    if p > 1 - lo:
+        q = math.sqrt(-2 * math.log(1 - p))
+        return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
+    q, r = p - 0.5, (p - 0.5) ** 2
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)
+
+
+def calibrate_ovr(raw):
+    """2ª passagem: nota bruta -> percentil -> OVR final na escala 48-98."""
+    if not raw:
+        return None
+    ids = list(raw)
+    p_elo = _ranker([raw[i]["elo_comp"] for i in ids])
+    p_pk = _ranker([raw[i]["pk"] for i in ids])
+
+    score = {}
+    for i in ids:
+        r = raw[i]
+        # dominância já na escala da nota (percentil esticado sobre o intervalo)
+        elo_ovr = OVR_LOW + (OVR_HIGH - OVR_LOW) * p_elo(r["elo_comp"])
+        # prêmio de legado: só para quem esteve no topo 10% de pico histórico
+        legacy = LEGACY_BONUS * max(0.0, p_pk(r["pk"]) - 0.90) / 0.10
+        s = W_TECH * r["tech"] + W_ELO * elo_ovr + r["title"] + legacy
+        # encolhimento por amostra: cartel curto não ocupa extremo da escala
+        score[i] = (s * r["n"] + OVR_MU * PRIOR_N) / (r["n"] + PRIOR_N)
+
+    p_score = _ranker(list(score.values()))
+    out = {}
+    for i in ids:
+        v = OVR_MU + OVR_SD * _probit(p_score(score[i]))
+        ovr = int(round(min(float(OVR_HIGH), max(float(OVR_LOW), v))))
+        out[i] = [ovr, *raw[i]["attrs"], raw[i]["d"]]
+
+    vals = [v[0] for v in out.values()]
+    return {"v": 3, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "names": ["ovr", "tro", "def", "lut", "sub", "peg", "car"],
+            "min_fights": CARD_MIN_FIGHTS,
+            "ovr_scale": {"low": OVR_LOW, "high": OVR_HIGH, "mu": OVR_MU, "sd": OVR_SD,
+                          "w_tech": W_TECH, "w_elo": W_ELO, "title_cap": TITLE_CAP,
+                          "observed": [min(vals), max(vals)], "n": len(vals)},
+            "cards": out}
 
 
 # ---------- 7) validação estatística do motor (Brier Score, Log-Loss e Calibração) ----------
