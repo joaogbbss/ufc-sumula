@@ -130,7 +130,7 @@ const S = {
   ev: [], fg: [], F: new Map(),
   ov: {merges:{}, div:{}, exclude:[]},
   meta: {},
-  P: {vol:80, fin:1, title:.25, tw:1, min:3, act:2},
+  P: {vol:80, fin:1, title:.25, tw:1, min:1, act:2},
   mode: 'cur', div: 'ALL', pt: true,
   sim: {a:'', b:'', m:'cur', d:'ALL'},
   ps: {}, cache: new Map(), lg: null,
@@ -138,7 +138,8 @@ const S = {
   up: [], simLast: null
 };
 
-try { Object.assign(S.P, JSON.parse(localStorage.sumulaP3 || '{}')); } catch {}
+/* sumulaP4: o mínimo de lutas padrão caiu de 3 para 1; preferências antigas (P3) são aproveitadas, menos esse campo */
+try { const o = JSON.parse(localStorage.sumulaP4 || 'null'); if (o) Object.assign(S.P, o); else { const { min, ...r } = JSON.parse(localStorage.sumulaP3 || '{}'); Object.assign(S.P, r); } } catch {}
 try { Object.assign(S.me, JSON.parse(localStorage.sumulaMe || '{}')); } catch {}
 try { if (localStorage.sumulaLang) S.pt = localStorage.sumulaLang === 'pt'; } catch {}
 
@@ -311,6 +312,43 @@ function getE(d) {
     if (S.cache.size > 20) S.cache.clear();
     S.cache.set(k, whr(scope(d), S.P));
   }
+  return S.cache.get(k);
+}
+
+/* Divisões de cada lutador: cartel, última luta e cinturões POR categoria.
+   A força (WHR) é sempre a da carreira inteira; a divisão só decide quem aparece em cada lista. */
+const NONSTD = new Set(['Catch Weight', 'Open Weight', 'Outros']);
+function dm() {
+  if (S.dmc && S.dmc.n === S.fg.length) return S.dmc.m;
+  const m = new Map();
+  for (const f of S.fg) {
+    if (f.res === 'nc') continue;
+    for (const s of ['a', 'b']) {
+      const id = mid(f[s].id);
+      if (!m.has(id)) m.set(id, new Map());
+      const g = m.get(id), x = g.get(f.div) || {n:0, w:0, l:0, d:0, last:'', tw:0};
+      g.set(f.div, x); x.n++;
+      if (f.date > x.last) x.last = f.date;
+      if (f.res === s) { x.w++; if (f.title) x.tw++; } else if (f.res === 'draw') x.d++; else x.l++;
+    }
+  }
+  S.dmc = {n: S.fg.length, m};
+  return m;
+}
+/* divisão atual = a da luta mais recente em categoria oficial; principal = a com mais lutas */
+function divOf(id, main) {
+  const g = dm().get(id); if (!g) return '';
+  let best = '', key = '';
+  for (const [d, x] of g) {
+    if (NONSTD.has(d)) continue;
+    const k = main ? String(x.n).padStart(4, '0') + x.last : x.last;
+    if (k > key) { key = k; best = d; }
+  }
+  return best || [...g.keys()][0];
+}
+function holdoutAll(P) {
+  const k = 'ho|' + JSON.stringify(P);
+  if (!S.cache.has(k)) S.cache.set(k, holdout(scope('ALL'), P));
   return S.cache.get(k);
 }
 
@@ -618,18 +656,21 @@ function scoreHtml() {
 }
 
 function p4p(hist) {
-  const P = S.P, cut = P.act ? new Date(Date.now() - P.act * YR).toISOString().slice(0, 10) : '', m = new Map();
-  for (const d of STD) {
-    const rs = getE(d).rows.filter(x => x.n >= P.min && (hist || !cut || x.last >= cut));
+  const P = S.P, cut = P.act ? new Date(Date.now() - P.act * YR).toISOString().slice(0, 10) : '', pools = new Map(), out = [];
+  for (const x of getE('ALL').rows) {
+    if (x.n < P.min || (!hist && cut && x.last < cut)) continue;
+    const d = divOf(x.id, hist);              /* atual: onde luta hoje; histórico: onde fez a carreira */
+    if (!STD.includes(d)) continue;
+    if (!pools.has(d)) pools.set(d, []);
+    pools.get(d).push(x);
+  }
+  for (const [d, rs] of pools) {
     if (rs.length < 8) continue;
     const v = x => hist ? x.hs : x.cur, mu = rs.reduce((a, x) => a + v(x), 0) / rs.length;
     const sd = Math.sqrt(rs.reduce((a, x) => a + (v(x) - mu) ** 2, 0) / rs.length) || 1;
-    for (const x of rs) {
-      const o = m.get(x.id);
-      if (!o || x.n > o.n) m.set(x.id, {...x, v: (v(x) - mu) / sd, div:d});
-    }
+    for (const x of rs) out.push({...x, v: (v(x) - mu) / sd, div: d});
   }
-  return [...m.values()];
+  return out;
 }
 
 function runT(ids, d, hist) {
@@ -816,24 +857,36 @@ function vRank() {
   <p><b>${T('Strength', 'Força')}:</b> ${T('Whole-History Rating (Coulom, 2008) estimates each fighter’s rating at every fight using the entire history, before and after it, so a win over someone who later became elite is worth more. Win chance follows the Bradley–Terry/Elo logistic curve (1952, 1978); ratings drift slowly over time like a random walk (Glickman, 1999).', 'O Whole-History Rating (Coulom, 2008) estima a nota de cada lutador em cada luta usando todo o histórico, antes e depois dela, então uma vitória sobre quem depois virou elite vale mais. A chance de vitória segue a curva logística de Bradley–Terry/Elo (1952, 1978), e a nota varia devagar no tempo como um passeio aleatório (Glickman, 1999).')}</p>
   <p><b>${T('Current', 'Atual')}:</b> ${T('rating at the last fight, only fighters active in the last N years.', 'nota na última luta, só de quem lutou nos últimos N anos.')}</p>
   <p><b>${T('All-time', 'Histórico')}:</b> ${T('ranks résumés, not strength. A win is worth 1 − p and a loss −p, where p is the chance that a reference elite fighter (top 15% of the division) would beat that same opponent at that time.', 'ordena campanhas, não força. Vitória vale 1 − p e derrota −p, onde p é a chance de um lutador de elite de referência (top 15% da divisão) vencer aquele rival na época.')}</p>
-  <p><b>Pound-for-pound:</b> ${T('each division is rated on its own and every fighter gets a z-score: how many standard deviations above the average of his division.', 'cada divisão é avaliada separadamente e cada lutador recebe um z-score: quantos desvios-padrão ele está acima da média da divisão.')}</p></details>`);
+  <p><b>${T('Divisions', 'Divisões')}:</b> ${T('strength always comes from the whole UFC career; the division only decides who is listed. A fighter who competed in several weight classes appears in every one of them (in the Current view, only where he fought inside the activity window), with his record and belts in that class. Fewer than 3 UFC fights is marked provisional: the rating is pulled toward the average until more evidence arrives.', 'a força vem sempre da carreira inteira no UFC; a divisão só decide quem aparece na lista. Quem lutou em mais de uma categoria aparece em todas (na visão Atual, só onde lutou dentro da janela de atividade), com o cartel e os cinturões daquela categoria. Menos de 3 lutas no UFC aparece como provisório: a nota é puxada para a média até haver mais evidência.')}</p>
+  <p><b>Pound-for-pound:</b> ${T('every fighter is compared with the fighters of his current division (career division in All-time) and gets a z-score: how many standard deviations above that average.', 'cada lutador é comparado com os da sua divisão atual (divisão da carreira, no Histórico) e recebe um z-score: quantos desvios-padrão acima da média dela.')}</p></details>`);
   $('#dv').value = S.div; $('#md').value = S.mode;
   const draw = () => {
-    const p4 = S.div === 'P4P', dv = p4 ? 'ALL' : S.div, L = scope(dv), E = getE(dv), v = holdout(L, P), hist = S.mode === 'hist';
-    const cut = P.act ? new Date(Date.now() - P.act * YR).toISOString().slice(0, 10) : '';
-    const r = (p4 ? p4p(hist) : E.rows.filter(x => x.n >= P.min && (hist || !cut || x.last >= cut)).map(x => ({...x, v: hist ? x.hs : x.cur}))).sort((a, b) => b.v - a.v).slice(0, 150);
+    const p4 = S.div === 'P4P', dv = p4 ? 'ALL' : S.div, E = getE('ALL'), v = holdoutAll(P), hist = S.mode === 'hist';
+    const cut = P.act ? new Date(Date.now() - P.act * YR).toISOString().slice(0, 10) : '', DM = dm();
+    /* na divisão: quem lutou nela (visão Atual: dentro da janela de atividade, NAQUELA divisão) */
+    const inDiv = x => { if (dv === 'ALL') return true; const g = DM.get(x.id)?.get(dv); return !!g && (hist || !cut || g.last >= cut); };
+    const r = (p4 ? p4p(hist) : E.rows.filter(x => x.n >= P.min && (hist || !cut || x.last >= cut) && inDiv(x)).map(x => ({...x, v: hist ? x.hs : x.cur}))).sort((a, b) => b.v - a.v).slice(0, 150);
+    /* linha extra: cartel na divisão escolhida, outras divisões e selo de provisório */
+    const dline = x => {
+      const g = DM.get(x.id); if (!g) return '';
+      const oth = [...g].filter(([d]) => d !== dv && !NONSTD.has(d)).sort((a, b) => a[1].last < b[1].last ? 1 : -1).map(([d, y]) => `${esc(d)}${y.tw ? ' 🏆' + (y.tw > 1 ? y.tw : '') : ''}`);
+      const here = dv !== 'ALL' && g.get(dv) ? `${esc(dv)}: ${g.get(dv).w}-${g.get(dv).l}-${g.get(dv).d}${g.get(dv).tw ? ' 🏆' + (g.get(dv).tw > 1 ? g.get(dv).tw : '') : ''}` : '';
+      const prov = x.n < 3 ? `<b class="dn">${T('provisional', 'provisório')}</b>` : '';
+      const bits = [here, oth.length ? (dv === 'ALL' ? '' : T('also ', 'também ')) + oth.join(', ') : '', prov].filter(Boolean);
+      return bits.length ? `<br>${bits.join(' · ')}` : '';
+    };
     $('#cal').textContent = v && v.n ? T(`Blind test: with data up to ${fmt(v.cut)}, the favorite won ${(v.ok / v.n * 100).toFixed(1)}% of ${v.n.toLocaleString('en-US')} later fights, log-loss ${(v.ll / v.n).toFixed(3)}.`, `Teste cego: com dados até ${fmt(v.cut)}, o favorito venceu em ${(v.ok / v.n * 100).toFixed(1)}% de ${v.n.toLocaleString('pt-BR')} lutas seguintes, log-loss ${(v.ll / v.n).toFixed(3)}.`) : '';
     const hi = r[0]?.v, lo = r.at(-1)?.v;
-    $('#rk').innerHTML = r.length ? r.map((x, i) => `<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i + 1}</span></span><span class="nm">${S.me.fav[x.id] ? '★ ' : ''}${esc(S.F.get(x.id)?.name || x.id)}<small>${x.w}-${x.l}-${x.d}, ${T('last fight', 'última luta')} ${fmt(x.last)}</small><i class="mb"><b style="width:${hi === lo ? 100 : (x.v - lo) / (hi - lo) * 100}%"></b></i></span><span class="rt">${p4 ? x.v.toFixed(2) + 'σ' : Math.round(x.v)}<small>${p4 ? esc(x.div) : hist ? `${T('peak rating', 'nota máxima')} ${Math.round(x.pk)} ${T('in', 'em')} ${x.pkd.slice(0, 4)}${x.cq + x.df ? `<br>${T('belt', 'cinturão')}: ${x.cq} ${T('won', 'conq.')}, ${x.df} ${T('def.', 'def.')}` : ''}` : `${T('peak', 'pico')} ${Math.round(x.pk)}`}</small></span></a>`).join('') : empty();
+    $('#rk').innerHTML = r.length ? r.map((x, i) => `<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i + 1}</span></span><span class="nm">${S.me.fav[x.id] ? '★ ' : ''}${esc(S.F.get(x.id)?.name || x.id)}<small>${x.w}-${x.l}-${x.d} UFC, ${T('last fight', 'última luta')} ${fmt(x.last)}${dline(x)}</small><i class="mb"><b style="width:${hi === lo ? 100 : (x.v - lo) / (hi - lo) * 100}%"></b></i></span><span class="rt">${p4 ? x.v.toFixed(2) + 'σ' : Math.round(x.v)}<small>${p4 ? esc(x.div) : hist ? `${T('peak rating', 'nota máxima')} ${Math.round(x.pk)} ${T('in', 'em')} ${x.pkd.slice(0, 4)}${x.cq + x.df ? `<br>${T('belt', 'cinturão')}: ${x.cq} ${T('won', 'conq.')}, ${x.df} ${T('def.', 'def.')}` : ''}` : `${T('peak', 'pico')} ${Math.round(x.pk)}`}</small></span></a>`).join('') : empty();
     $('#tn8').innerHTML = r.length >= 8 ? `<button id="t8" style="margin-top:.4rem">${T('Simulate an 8-fighter tournament (top 8 of this list)', 'Simular um torneio de 8 (top 8 desta lista)')}</button><div id="t8o"></div>` : '';
-    const bt = $('#t8'); if (bt) bt.onclick = () => runT(r.slice(0, 8).map(x => x.id), dv, hist);
+    const bt = $('#t8'); if (bt) bt.onclick = () => runT(r.slice(0, 8).map(x => x.id), 'ALL', hist);
   };
   $('#dv').onchange = e => { S.div = e.target.value; draw(); };
   $('#md').onchange = e => { S.mode = e.target.value; draw(); };
   let tm;
   document.querySelectorAll('input[data-p]').forEach(i => i.oninput = e => {
     P[e.target.dataset.p] = +e.target.value || 0;
-    try { localStorage.sumulaP3 = JSON.stringify(P); } catch {}
+    try { localStorage.sumulaP4 = JSON.stringify(P); } catch {}
     clearTimeout(tm); tm = setTimeout(draw, 400);
   });
   draw();
@@ -1078,7 +1131,7 @@ function tune() {
     if (i >= jobs.length) {
       Object.assign(S.P, keep); res.sort((a, b) => a.ll - b.ll); const b = res[0];
       out.innerHTML = res.slice(0, 5).map(r => `<div class="tb${r === b ? ' best' : ''}" style="grid-template-columns:1fr 1fr 1fr"><span>${T('volatility', 'volatilidade')} ${r.v}</span><span>${T('method', 'método')} ${r.f}</span><span>log-loss ${r.ll.toFixed(4)}</span></div>`).join('') + `<button id="ap" style="margin-top:.6rem">${T('Apply the best', 'Aplicar a melhor')} (${b.v}, ${b.f})</button>`;
-      $('#ap').onclick = () => { S.P.vol = b.v; S.P.fin = b.f; try { localStorage.sumulaP3 = JSON.stringify(S.P); } catch {} S.cache.clear(); S.lab = null; vLab(); };
+      $('#ap').onclick = () => { S.P.vol = b.v; S.P.fin = b.f; try { localStorage.sumulaP4 = JSON.stringify(S.P); } catch {} S.cache.clear(); S.lab = null; vLab(); };
       return;
     }
     const [v, f] = jobs[i++]; S.P.vol = v; S.P.fin = f;
@@ -1121,7 +1174,7 @@ function route() {
 
 /* ======== MÓDULO RAIO-X / LABORATÓRIO ESTATÍSTICO ======== */
 (function() {
-  const BASE = 1500, X = {d:null, err:false, tab:'xray', a:'', b:'', div:'ALL', min:5, act:3, msig:400, rk:'elo', ds:'ko', ca:'Lightweight', cb:'Heavyweight'};
+  const BASE = 1500, X = {d:null, err:false, tab:'xray', a:'', b:'', div:'ALL', min:1, act:3, msig:400, rk:'elo', ds:'ko', ca:'Lightweight', cb:'Heavyweight'};
   const nm = id => S.F.get(id)?.name || id, f1 = v => v == null ? '—' : v.toFixed(1), f2 = v => v == null ? '—' : v.toFixed(2), sum = a => a.reduce((x, y) => x + y, 0), fr = id => X.d && X.d.fighters[mid(id)];
   const dvs = () => Object.keys(X.d.divisions).filter(k => k !== 'ALL').sort(), YRMS = 31557600000;
   async function ld() {
@@ -1131,7 +1184,7 @@ function route() {
   }
   function mu(a, b) {
     const A = fr(a), B = fr(b), sh = f => BASE + (f.e - BASE) * f.n / (f.n + 3), ea = sh(A), eb = sh(B), p = 1 / (1 + 10 ** ((eb - ea) / 400)), L = X.d.league;
-    const dv = A.div === B.div ? A.div : 'ALL', bm = X.d.divisions[dv] || X.d.divisions.ALL;
+    const dv = A.div === B.div ? A.div : ((A.divs || []).map(d => d[0]).find(d => (B.divs || []).some(e => e[0] === d) && !['Catch Weight', 'Open Weight', 'Outros'].includes(d)) || 'ALL'), bm = X.d.divisions[dv] || X.d.divisions.ALL;
     const mp = (at, df) => {
       const k = 5, sw = sum(at.w), sl = sum(df.l), lg = L.k100 || 1;
       const v = bm.m.map((s, i) => { s = Math.max(s, .01); return ((at.w[i] + k * s) / (sw + k)) * ((df.l[i] + k * s) / (sl + k)) / s; });
@@ -1184,7 +1237,7 @@ function route() {
   <label>${T('Active in the last N years (0 = all)', 'Ativo nos últimos N anos (0 = todos)')}<input data-xf="act" type="number" min="0" value="${X.act}"></label></div><div id="xl"></div>`;
   function fillRank() {
     const cut = X.act ? new Date(Date.now() - X.act * YRMS).toISOString().slice(0, 10) : '', dl = X.rk === 'dli';
-    const r = Object.entries(X.d.fighters).filter(([i, f]) => (X.div === 'ALL' || f.div === X.div) && f.n >= X.min && (!cut || f.last >= cut) && (!dl || ((f.sl || 0) >= X.msig && f.dli != null))).sort((x, y) => dl ? y[1].dli - x[1].dli : y[1].e - x[1].e).slice(0, 60);
+    const r = Object.entries(X.d.fighters).filter(([i, f]) => { const g = X.div === 'ALL' ? null : (f.divs || []).find(d => d[0] === X.div); return (X.div === 'ALL' || g || (!f.divs && f.div === X.div)) && f.n >= X.min && (!cut || (g ? g[5] : f.last) >= cut); }).filter(([i, f]) => (!dl || ((f.sl || 0) >= X.msig && f.dli != null))).sort((x, y) => dl ? y[1].dli - x[1].dli : y[1].e - x[1].e).slice(0, 60);
     $('#xl').innerHTML = r.length ? r.map(([id, f], i) => `<a class="card rk" href="#/fighter/${id}"><span class="ring"><span>${i + 1}</span></span><span class="nm">${S.me.fav[id] ? '★ ' : ''}${esc(nm(id))}<small>${dl ? `${f.kd} KD / ${f.sl} sig` : `${sum(f.w)}-${sum(f.l)}-${f.d}, ${T('avg rival', 'rival médio')} ${Math.round(f.opp || 0)}`}</small></span><span class="rt">${dl ? f.dli : Math.round(f.e)}<small>${dl ? f2(f.ks) + ' KD/100' : T('peak', 'máx') + ' ' + Math.round(f.pk)}</small></span></a>`).join('') : `<p class="empty">${T('No fighter matches these filters.', 'Nenhum lutador com esses filtros.')}</p>`;
   }
   function tDiv() {
@@ -1348,10 +1401,13 @@ function route() {
   const TIER = o => o >= 93 ? ['legend', T('Legend', 'Lenda')] : o >= 89 ? ['elite', T('Elite', 'Elite')] : o >= 82 ? ['gold', T('Contender', 'Contender')] : o >= 74 ? ['silver', T('Veteran', 'Veterano')] : ['bronze', T('Prospect', 'Prospecto')];
   const AK = ['tro', 'def', 'lut', 'sub', 'peg', 'car'], AL = () => ({tro:T('STR', 'TRO'), def:T('DEF', 'DEF'), lut:T('WRE', 'LUT'), sub:'SUB', peg:T('PWR', 'PEG'), car:T('CAR', 'CAR')});
   const CC = {legend:['#fff2a8', '#e0a800'], elite:['#ffe484', '#c9920e'], gold:['#f3d27a', '#a67c1e'], silver:['#e6ebf2', '#8e98a8'], bronze:['#e0a877', '#8a5428']};
+  /* divisões do card (cards.json v3: c[9], atual primeiro); cai para o grupo antigo c[7] */
+  const cDivs = c => Array.isArray(c[9]) && c[9].length ? c[9] : (c[7] === 'ALL' ? [] : [c[7]]);
+  const cLabel = c => (cDivs(c).join(' · ') || T('All divisions', 'Todas as divisões')) + (c[8] != null && c[8] < 4 ? ` · ${c[8]} ${T(c[8] === 1 ? 'UFC fight' : 'UFC fights', c[8] === 1 ? 'luta no UFC' : 'lutas no UFC')} (${T('provisional', 'provisório')})` : '');
   function cardHtml(id) {
     const c = Z.cards && Z.cards[id], p = S.F.get(id); if (!c || !p) return '';
     const t = TIER(c[0]), L = AL();
-    return `<div class="fc ${t[0]}"><div class="fct"><div class="fco">${c[0]}<small>${T('OVR', 'GER')}</small><em>${t[1]}</em></div>${av(id, p.name, 'big')}</div><div class="fcn">${esc(p.name)}</div><div class="fcd">${esc(c[7] === 'ALL' ? T('All divisions', 'Todas as divisões') : c[7])}${p.country ? ` • ${esc(p.country)}` : ''}</div>
+    return `<div class="fc ${t[0]}"><div class="fct"><div class="fco">${c[0]}<small>${T('OVR', 'GER')}</small><em>${t[1]}</em></div>${av(id, p.name, 'big')}</div><div class="fcn">${esc(p.name)}</div><div class="fcd">${esc(cLabel(c))}${p.country ? ` • ${esc(p.country)}` : ''}</div>
     ${AK.map((k, i) => `<div class="fca"><b>${L[k]}</b><i><u style="width:${c[i + 1]}%"></u></i><span>${c[i + 1]}</span></div>`).join('')}<div class="fcf">SÚMULA UFC</div></div>`;
   }
   function radar(a, b) {
@@ -1382,7 +1438,7 @@ function route() {
       x.fillStyle = '#14110a'; x.textAlign = 'left'; let fs = 96; x.font = `900 ${fs}px ${F}`;
       while (x.measureText(p.name.toUpperCase()).width > 760 && fs > 40) { fs -= 4; x.font = `900 ${fs}px ${F}`; }
       x.fillText(p.name.toUpperCase(), 70, 540);
-      x.font = '500 34px Archivo,Arial,sans-serif'; x.globalAlpha = .7; x.fillText(c[7] === 'ALL' ? T('All divisions', 'Todas as divisões') : c[7], 72, 592); x.globalAlpha = 1;
+      x.font = '500 34px Archivo,Arial,sans-serif'; x.globalAlpha = .7; { const lb = cLabel(c); let fz = 34; x.font = `500 ${fz}px Archivo,Arial,sans-serif`; while (x.measureText(lb).width > 760 && fz > 18) { fz -= 2; x.font = `500 ${fz}px Archivo,Arial,sans-serif`; } x.fillText(lb, 72, 592); } x.globalAlpha = 1;
       AK.forEach((k, i) => {
         const y = 700 + i * 80; x.font = `800 50px ${F}`; x.fillText(L[k], 70, y);
         x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(220, y - 34, 520, 30);
@@ -1414,11 +1470,11 @@ function route() {
   };
   function tCards() {
     if (!Z.cards) return `<p class="empty">${T('cards.json not found.', 'cards.json não encontrado.')}</p>`;
-    const L = AL(), cdivs = [...new Set(Object.values(Z.cards).map(c => c[7]).filter(d => d !== 'ALL'))].sort();
+    const L = AL(), cdivs = [...new Set(Object.values(Z.cards).flatMap(c => cDivs(c)))].filter(d => !['Catch Weight', 'Open Weight', 'Outros'].includes(d)).sort();
     const sOpts = [[0, T('Overall (OVR)', 'Geral (GER)')], ...AK.map((k, i) => [i + 1, L[k]])];
-    const topList = Object.entries(Z.cards).filter(([id, c]) => Z.cdiv === 'ALL' || c[7] === Z.cdiv).sort((x, y) => y[1][Z.csort] - x[1][Z.csort] || y[1][0] - x[1][0]).slice(0, 50);
+    const topList = Object.entries(Z.cards).filter(([id, c]) => Z.cdiv === 'ALL' || cDivs(c).includes(Z.cdiv)).sort((x, y) => y[1][Z.csort] - x[1][Z.csort] || y[1][0] - x[1][0]).slice(0, 50);
     let h = `<p class="mu sm">${T('Scientific FIFA-style attributes on a full 48–98 scale: z-score by division, strength of schedule (rival ELO), Bayesian shrinkage and title equity. The overall is calibrated against the whole population, so every grade from 48 to 98 is occupied and the best and worst are real extremes, not caps.', 'Atributos científicos estilo FIFA em escala cheia de 48 a 98: z-score por divisão, força do calendário (ELO dos rivais), encolhimento bayesiano e currículo de cinturão. O overall é calibrado contra a população inteira, então toda nota de 48 a 98 é ocupada e o melhor e o pior são extremos de verdade, não tetos.')}</p><div class="xs">${slot('a', T('Fighter A', 'Lutador A'), 'c')}${slot('b', T('Compare with (optional)', 'Comparar com (opcional)'), 'c')}</div>`;
-    if (Z.a && !Z.cards[Z.a]) h += `<p class="dn sm">${T('This fighter has no card yet (fewer than 4 fights).', 'Este lutador ainda não tem card (menos de 4 lutas).')}</p>`;
+    if (Z.a && !Z.cards[Z.a]) h += `<p class="dn sm">${T('This fighter has no card yet (no UFC fight with recorded statistics).', 'Este lutador ainda não tem card (nenhuma luta no UFC com estatísticas registradas).')}</p>`;
     if (Z.a && Z.cards[Z.a]) {
       h += `<div class="xs"><div>${cardHtml(Z.a)}</div>${Z.b && Z.cards[Z.b] ? `<div>${cardHtml(Z.b)}</div>` : ''}</div>${radar(Z.a, Z.b && Z.cards[Z.b] ? Z.b : null)}
       <div class="acts" style="margin-top:.8rem"><button data-zimg="${Z.a}">${T('Share card as image', 'Compartilhar card como imagem')}</button><label class="btn">${T('Add photo', 'Adicionar foto')}<input type="file" accept="image/*" data-zph="${Z.a}" hidden></label><a class="btn" href="#/fighter/${Z.a}">${T('Open profile', 'Abrir ficha')}</a></div>`;

@@ -127,7 +127,7 @@ def run_elo(fights, pre_out=None):
     def get(i):
         if i not in st:
             st[i] = {"r": BASE, "pk": BASE, "n": 0, "opp": [], "wins_opp": [], "w": [0] * 4, "l": [0] * 4,
-                     "d": 0, "tw": 0, "tf": 0, "last": "", "divs": Counter()}
+                     "d": 0, "tw": 0, "tf": 0, "last": "", "divs": Counter(), "dv": {}}
         return st[i]
 
     for f in fights:
@@ -163,13 +163,45 @@ def run_elo(fights, pre_out=None):
                 B["tw"] += 1
         else:
             A["d"] += 1; B["d"] += 1
-        for X, d in ((A, da), (B, db)):
+        for X, d, side in ((A, da, "a"), (B, db, "b")):
             X["r"] += d
             X["pk"] = max(X["pk"], X["r"])
             X["n"] += 1
             X["last"] = f["date"]
             X["divs"][f["div"]] += 1
+            # cartel separado por divisão: um lutador pertence a TODAS as divisões
+            # em que lutou (ex.: campeão de duas categorias aparece nas duas)
+            g = X["dv"].setdefault(f["div"], {"n": 0, "w": 0, "l": 0, "d": 0, "last": "", "tw": 0})
+            g["n"] += 1
+            g["last"] = f["date"]
+            if f["res"] == side:
+                g["w"] += 1
+                g["tw"] += 1 if is_title else 0
+            elif f["res"] == "draw":
+                g["d"] += 1
+            else:
+                g["l"] += 1
     return st
+
+
+# divisões "de verdade": catchweight / open weight não definem onde o lutador compete
+NONSTD = {"Catch Weight", "Open Weight", "Outros"}
+
+
+def division_profile(e):
+    """Divisão atual, divisão principal e a lista completa de divisões de um lutador.
+
+    - div      : divisão ATUAL = a da luta mais recente em categoria oficial
+    - div_main : divisão com mais lutas (usada para comparar estatísticas entre pares)
+    - divs     : [[divisão, lutas, V, D, E, última luta, cinturões]] da mais recente para a mais antiga
+    """
+    items = sorted(e["dv"].items(), key=lambda kv: kv[1]["last"], reverse=True)
+    std = [k for k, _ in items if k not in NONSTD]
+    cur = std[0] if std else items[0][0]
+    main_std = [k for k, _ in e["divs"].most_common() if k not in NONSTD]
+    main = main_std[0] if main_std else e["divs"].most_common(1)[0][0]
+    divs = [[k, g["n"], g["w"], g["l"], g["d"], g["last"], g["tw"]] for k, g in items]
+    return cur, main, divs
 
 
 # ---------- 2) DLI: dano e letalidade ----------
@@ -470,7 +502,7 @@ def run_live(fights, pre):
 
 
 # ---------- 6) cards de atributos científicos (Z-Score + SoS + Gatekeeping de Título) ----------
-CARD_MIN_FIGHTS, CARD_MIN_MIN = 4, 20.0
+CARD_MIN_FIGHTS, CARD_MIN_MIN = 1, 0.0   # 1 luta basta: o encolhimento bayesiano puxa amostra curta para a média
 # Pesos internos de cada atributo:
 # tro: [volume_por_min (2), precisao (1.2), kd_rate (0.8)]
 # def: [def_str (1.5), -sapm (1.2), def_td (1.2), -kas_queixo (1.5)]
@@ -541,7 +573,7 @@ def run_cards(fights, fighters):
     met = {}
     for i, x in A.items():
         f = fighters.get(i)
-        if not f or f["n"] < CARD_MIN_FIGHTS or x["mn"] < CARD_MIN_MIN or "ks" not in f:
+        if not f or f["n"] < CARD_MIN_FIGHTS or x["mn"] <= CARD_MIN_MIN or "ks" not in f:
             continue
         mn = x["mn"]
         sh = lambda v, g, k=K: (v + g * k) / (mn + k)
@@ -564,7 +596,7 @@ def run_cards(fights, fighters):
 
     groups = defaultdict(list)
     for i in met:
-        groups[fighters[i]["div"]].append(i)
+        groups[fighters[i].get("div_main", fighters[i]["div"])].append(i)
     big = {d: ids for d, ids in groups.items() if len(ids) >= 12}
     pools = {i: (d if d in big else "ALL") for d, ids in groups.items() for i in ids}
     members = defaultdict(list)
@@ -626,7 +658,8 @@ def run_cards(fights, fighters):
             title_bonus = TITLE_CAP * (1.0 - math.exp(-TITLE_RATE * tw)) + (0.8 if tf > 0 and tw == 0 else 0.0)
 
             raw[i] = {"tech": tech_ovr, "elo_comp": elo_comp, "pk": elo_pk,
-                      "title": title_bonus, "n": f["n"], "attrs": [tro, dfn, lut, sub, peg, car], "d": d}
+                      "title": title_bonus, "n": f["n"], "attrs": [tro, dfn, lut, sub, peg, car], "d": d,
+                      "divs": [x[0] for x in f.get("divs", []) if x[0] not in NONSTD] or [f["div"]]}
 
     return calibrate_ovr(raw)
 
@@ -643,6 +676,7 @@ W_TECH, W_ELO = 0.42, 0.53        # peso da nota técnica e da dominância
 TITLE_CAP, TITLE_RATE = 6.0, 0.55  # bônus máximo de cinturão e velocidade de saturação
 LEGACY_BONUS = 3.5                # prêmio para o pico de ELO no topo 10% histórico
 PRIOR_N = 4                       # lutas-fantasma: puxa cartel curto para a média
+PROVISIONAL_N = 4                 # abaixo disso o card é marcado como provisório na interface
 
 
 def _ranker(values):
@@ -699,12 +733,13 @@ def calibrate_ovr(raw):
     for i in ids:
         v = OVR_MU + OVR_SD * _probit(p_score(score[i]))
         ovr = int(round(min(float(OVR_HIGH), max(float(OVR_LOW), v))))
-        out[i] = [ovr, *raw[i]["attrs"], raw[i]["d"]]
+        # [ovr, 6 atributos, grupo de comparação, nº de lutas UFC, divisões (atual primeiro)]
+        out[i] = [ovr, *raw[i]["attrs"], raw[i]["d"], raw[i]["n"], raw[i]["divs"]]
 
     vals = [v[0] for v in out.values()]
     return {"v": 3, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "names": ["ovr", "tro", "def", "lut", "sub", "peg", "car"],
-            "min_fights": CARD_MIN_FIGHTS,
+            "names": ["ovr", "tro", "def", "lut", "sub", "peg", "car", "pool", "n", "divs"],
+            "min_fights": CARD_MIN_FIGHTS, "provisional_below": PROVISIONAL_N,
             "ovr_scale": {"low": OVR_LOW, "high": OVR_HIGH, "mu": OVR_MU, "sd": OVR_SD,
                           "w_tech": W_TECH, "w_elo": W_ELO, "title_cap": TITLE_CAP,
                           "observed": [min(vals), max(vals)], "n": len(vals)},
@@ -770,13 +805,14 @@ def main():
         d = dmg.get(i)
         wins = sum(e["w"])
         top3 = sorted(e["wins_opp"], reverse=True)[:3]
+        cur_div, main_div, all_divs = division_profile(e)
         row = {"n": e["n"], "e": round(e["r"], 1), "pk": round(e["pk"], 1),
                "opp": r1(sum(e["opp"]) / len(e["opp"])) if e["opp"] else None,
                "qw": r1(sum(top3) / len(top3)) if top3 else None,
                "w": e["w"], "l": e["l"], "d": e["d"],
                "tw": e["tw"], "tf": e["tf"],
                "last": e["last"],
-               "div": e["divs"].most_common(1)[0][0],
+               "div": cur_div, "div_main": main_div, "divs": all_divs,
                "fin": round((e["w"][0] + e["w"][1]) / wins, 3) if wins else None}
         if d and d["fs"]:
             sl, sa, kd, ka = d["sl"], d["sa"], d["kd"], d["ka"]

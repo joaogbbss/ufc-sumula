@@ -52,7 +52,11 @@
      combinadas com o ELO — mercado pesa mais porque já embute lesão,
      corte de peso e notícia de bastidor, que não estão nos dados. */
   function prob(f) {
-    const A = an(f.a.id), B = an(f.b.id);
+    let A = an(f.a.id), B = an(f.b.id);
+    // estreante no UFC: entra com a nota-base (1500 e 0 lutas = sem informação),
+    // desde que o rival tenha histórico; dois estreantes ficam sem número
+    const deb = {e: BASE, n: 0};
+    if (A && !B) B = deb; else if (B && !A) A = deb;
     let pElo = null;
     if (A && B) {
       const sh = x => BASE + (x.e - BASE) * x.n / (x.n + 3);
@@ -66,14 +70,24 @@
     return { p: 0.35 * pElo + 0.65 * pMkt, src: 'both' };
   }
 
-  const recOf = id => {
-    const a = an(id);
-    if (a) {
-      const s = x => x.reduce((m, n) => m + n, 0);
-      return `${s(a.w)}-${s(a.l)}-${a.d}`;
-    }
-    return ((F(id) || {}).record || '').trim() || '—';
+  const sum = x => x.reduce((m, n) => m + n, 0);
+  // cartel UFC: só lutas no UFC (analytics.json); vazio = estreia
+  const recUfc = id => { const a = an(id); return a ? `${sum(a.w)}-${sum(a.l)}-${a.d}` : ''; };
+  // cartel profissional completo, como publicado na ficha do ufcstats (inclui NC quando houver)
+  const recMma = id => String((F(id) || {}).record || '').replace(/^record:\s*/i, '').trim();
+  const nUfc = id => { const a = an(id); return a ? a.n : 0; };
+  // texto curto para tabela e imagem: "MMA 17-0-0 · UFC 9-0-0"
+  const recLine = id => {
+    const m = recMma(id), u = recUfc(id), b = [];
+    if (m) b.push('MMA ' + m);
+    b.push(u ? 'UFC ' + u : T('UFC debut', 'estreia no UFC'));
+    return b.join('  ·  ');
   };
+  // siglas usadas por fãs e imprensa (W = feminino)
+  const AB = {Strawweight: 'SW', Flyweight: 'FLW', Bantamweight: 'BW', Featherweight: 'FW', Lightweight: 'LW',
+              Welterweight: 'WW', Middleweight: 'MW', 'Light Heavyweight': 'LHW', Heavyweight: 'HW'};
+  const abbr = d => d.startsWith("Women's ") ? 'W-' + (AB[d.slice(8)] || d.slice(8)) : (AB[d] || d);
+  const divsOf = id => { const a = an(id); return a && a.divs ? a.divs.map(d => d[0]).filter(d => !['Catch Weight', 'Open Weight', 'Outros'].includes(d)) : []; };
 
   /* ---------- BBCode para o fórum ---------- */
   function bb() {
@@ -82,24 +96,25 @@
     L.push('[I]' + fmt(e.date) + (e.location ? ' — ' + e.location : '') + '[/I]');
     L.push('');
     L.push('[TABLE]');
-    L.push('[TR][TH]Bout[/TH][TH]Div[/TH][TH]OVR[/TH][TH]Record[/TH][TH]Win %[/TH][/TR]');
+    L.push('[TR][TH]Bout[/TH][TH]Div[/TH][TH]OVR[/TH][TH]MMA record[/TH][TH]UFC record[/TH][TH]Win %[/TH][/TR]');
     e.fights.forEach(f => {
       const { p } = prob(f), ca = cd(f.a.id), cb2 = cd(f.b.id);
       const pa = p == null ? '—' : pct(p), pb = p == null ? '—' : pct(1 - p);
       L.push(`[TR][TD][B]${nm(f.a)}[/B] vs ${nm(f.b)}${f.title ? ' [B](TITLE)[/B]' : ''}[/TD]` +
              `[TD]${f.div}[/TD][TD]${ca ? ca[0] : '—'} / ${cb2 ? cb2[0] : '—'}[/TD]` +
-             `[TD]${recOf(f.a.id)} / ${recOf(f.b.id)}[/TD][TD]${pa} / ${pb}[/TD][/TR]`);
+             `[TD]${recMma(f.a.id) || '—'} / ${recMma(f.b.id) || '—'}[/TD]` +
+             `[TD]${recUfc(f.a.id) || 'debut'} / ${recUfc(f.b.id) || 'debut'}[/TD][TD]${pa} / ${pb}[/TD][/TR]`);
     });
     L.push('[/TABLE]');
     L.push('');
     L.push('[SIZE=1][I]Ratings & win probabilities: ELO adjusted for strength of schedule' +
            (Q.cd ? ', OVR on a 48–98 population-calibrated scale' : '') +
-           '. Probabilities, not predictions. Source: ufcstats.com[/I][/SIZE]');
+           '. MMA record = full pro record; UFC record = UFC bouts only. UFC debutants start at the baseline rating. Probabilities, not predictions. Source: ufcstats.com[/I][/SIZE]');
     return L.join('\n');
   }
 
   /* ---------- desenho ---------- */
-  const PW = 1020, PH = 212, GAP = 14, PAD = 42, HEAD = 250, FOOT = 104;
+  const PW = 1020, PH = 240, GAP = 14, PAD = 42, HEAD = 250, FOOT = 120;
 
   function octPath(x, cx, cy, r) {
     x.beginPath();
@@ -138,7 +153,7 @@
     x.font = `800 21px ${FB}`;
     x.fillText((f.div || '').toUpperCase() + (f.title ? '  •  TITLE BOUT' : ''), X + 20, Y + 25);
 
-    const my = Y + 36, mh = PH - 36, cy = my + mh / 2;
+    const my = Y + 36, mh = PH - 36, cy = my + mh / 2 - 12;
     const PHO = 74, CX = X + PW / 2;
 
     // retrato + nome + OVR de um lado
@@ -162,18 +177,26 @@
       // largura livre até o selo de OVR, com folga para o nome nunca encostar nele
       const avail = PW / 2 - PHO - (cd(fg.id) ? 182 : 96);
       fitText(x, nm(fg).toUpperCase(), avail, 40);
-      x.fillText(nm(fg).toUpperCase(), tx, cy - 8);
-      x.fillStyle = MUT; x.font = `500 21px ${FB}`;
+      x.fillText(nm(fg).toUpperCase(), tx, cy - 14);
       const c = key === 'a' ? ca : cb2, a2 = an(fg.id);
-      const bits = [recOf(fg.id)];
-      if (a2 && a2.dli != null) bits.push('DLI ' + a2.dli);
+      // linha 1: cartel completo de MMA + cartel no UFC
+      x.fillStyle = TXT; fitText(x, recLine(fg.id), avail + 40, 21, 600, FB);
+      x.fillText(recLine(fg.id), tx, cy + 14);
+      // linha 2: índices do UFC (ou aviso de estreia / amostra curta)
+      const bits = [];
       if (a2 && a2.e != null) bits.push('ELO ' + Math.round(a2.e));
-      x.fillText(bits.join('  ·  '), tx, cy + 22);
+      if (a2 && a2.dli != null) bits.push('DLI ' + a2.dli);
+      const dv = divsOf(fg.id);
+      if (dv.length > 1) bits.push(dv.map(abbr).join(' + '));
+      if (!a2) bits.push(T('no UFC data yet', 'sem dados no UFC ainda'));
+      else if (a2.n < 3) bits.push(T('provisional', 'provisório'));
+      x.fillStyle = MUT; fitText(x, bits.join('  ·  '), avail + 40, 19, 500, FB);
+      x.fillText(bits.join('  ·  '), tx, cy + 40);
       if (c) {                                   // selo de OVR
         const ox = dir < 0 ? X + PW / 2 - 92 : X + PW / 2 + 60;
         x.fillStyle = col; x.textAlign = 'center';
         x.font = `900 46px ${FD}`; x.fillText(String(c[0]), ox + 16, cy + 2);
-        x.fillStyle = MUT; x.font = `700 15px ${FB}`; x.fillText('OVR', ox + 16, cy + 22);
+        x.fillStyle = MUT; x.font = `700 15px ${FB}`; x.fillText(c[8] != null && c[8] < 4 ? 'OVR*' : 'OVR', ox + 16, cy + 22);
       }
     };
     side('a', -1); side('b', 1);
@@ -191,9 +214,11 @@
       x.fillText(pct(p), bx, by - 8);
       x.textAlign = 'right'; x.fillStyle = BLUE;
       x.fillText(pct(1 - p), bx + bw, by - 8);
-      if (src === 'both' || src === 'mkt') {
+      const debut = !an(f.a.id) || !an(f.b.id);
+      const lbl = [src === 'mkt' ? 'market odds' : src === 'both' ? 'ELO + market' : '', debut ? T('debut at baseline', 'estreante na nota-base') : ''].filter(Boolean).join(' · ');
+      if (lbl) {
         x.textAlign = 'center'; x.fillStyle = MUT; x.font = `600 14px ${FB}`;
-        x.fillText(src === 'mkt' ? 'market odds' : 'ELO + market', CX, by - 10);
+        x.fillText(lbl, CX, by - 10);
       }
     } else {
       x.textAlign = 'center'; x.fillStyle = MUT; x.font = `600 17px ${FB}`;
@@ -260,12 +285,18 @@
     // rodapé
     const fy = H - FOOT + 46;
     x.textAlign = 'left'; x.fillStyle = MUT; x.font = `500 21px ${FB}`;
-    x.fillText(T('ELO adjusted for strength of schedule' + (Q.cd ? ' · OVR 48–98 population-calibrated' : '') +
-                 ' · probabilities, not predictions',
-                 'ELO ajustado ao nível de oposição' + (Q.cd ? ' · OVR 48–98 calibrado na população' : '') +
-                 ' · probabilidades, não previsões'), PAD + 6, fy);
-    x.textAlign = 'right';
-    x.fillText('ufcstats.com · ' + new Date().toLocaleDateString(S.pt ? 'pt-BR' : 'en-US'), W - PAD - 6, fy);
+    const src = 'ufcstats.com · ' + new Date().toLocaleDateString(S.pt ? 'pt-BR' : 'en-US');
+    const foot = T('MMA = full pro record · UFC = UFC bouts · ELO adjusted for opposition' + (Q.cd ? ' · OVR 48–98 (* provisional)' : '') + ' · probabilities, not predictions',
+                   'MMA = cartel profissional completo · UFC = só lutas no UFC · ELO ajustado à oposição' + (Q.cd ? ' · OVR 48–98 (* provisório)' : '') + ' · probabilidades, não previsões');
+    x.fillStyle = MUT; x.font = `500 21px ${FB}`;
+    const room = W - PAD * 2 - 12, wf = x.measureText(foot).width, ws = x.measureText(src).width;
+    if (wf + ws + 40 <= room) {                       // cabe numa linha: texto à esquerda, fonte à direita
+      x.fillText(foot, PAD + 6, fy);
+      x.textAlign = 'right'; x.fillText(src, W - PAD - 6, fy);
+    } else {                                          // formato estreito: duas linhas
+      fitText(x, foot, room, 21, 500, FB); x.fillText(foot, PAD + 6, fy - 14);
+      x.font = `500 21px ${FB}`; x.fillText(src, PAD + 6, fy + 16);
+    }
     return cv;
   }
 
