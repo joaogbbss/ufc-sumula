@@ -1417,7 +1417,7 @@ function route() {
     const L = AL(), cdivs = [...new Set(Object.values(Z.cards).map(c => c[7]).filter(d => d !== 'ALL'))].sort();
     const sOpts = [[0, T('Overall (OVR)', 'Geral (GER)')], ...AK.map((k, i) => [i + 1, L[k]])];
     const topList = Object.entries(Z.cards).filter(([id, c]) => Z.cdiv === 'ALL' || c[7] === Z.cdiv).sort((x, y) => y[1][Z.csort] - x[1][Z.csort] || y[1][0] - x[1][0]).slice(0, 50);
-    let h = `<p class="mu sm">${T('Scientific FIFA-style attributes (48–98) weighted by z-score, strength of schedule (rival ELO), Bayesian shrinkage and championship gatekeeping (93+ Legend requires title defenses/GOAT peak; non-champions cap at 88–90).', 'Atributos científicos estilo FIFA (48–98) ponderados por z-score, força do calendário (ELO dos rivais), encolhimento bayesiano e trava de cinturão (Lenda 93+ exige defesas de título/pico histórico; sem cinturão o teto é 88–90).')}</p><div class="xs">${slot('a', T('Fighter A', 'Lutador A'), 'c')}${slot('b', T('Compare with (optional)', 'Comparar com (opcional)'), 'c')}</div>`;
+    let h = `<p class="mu sm">${T('Scientific FIFA-style attributes on a full 48–98 scale: z-score by division, strength of schedule (rival ELO), Bayesian shrinkage and title equity. The overall is calibrated against the whole population, so every grade from 48 to 98 is occupied and the best and worst are real extremes, not caps.', 'Atributos científicos estilo FIFA em escala cheia de 48 a 98: z-score por divisão, força do calendário (ELO dos rivais), encolhimento bayesiano e currículo de cinturão. O overall é calibrado contra a população inteira, então toda nota de 48 a 98 é ocupada e o melhor e o pior são extremos de verdade, não tetos.')}</p><div class="xs">${slot('a', T('Fighter A', 'Lutador A'), 'c')}${slot('b', T('Compare with (optional)', 'Comparar com (opcional)'), 'c')}</div>`;
     if (Z.a && !Z.cards[Z.a]) h += `<p class="dn sm">${T('This fighter has no card yet (fewer than 4 fights).', 'Este lutador ainda não tem card (menos de 4 lutas).')}</p>`;
     if (Z.a && Z.cards[Z.a]) {
       h += `<div class="xs"><div>${cardHtml(Z.a)}</div>${Z.b && Z.cards[Z.b] ? `<div>${cardHtml(Z.b)}</div>` : ''}</div>${radar(Z.a, Z.b && Z.cards[Z.b] ? Z.b : null)}
@@ -1513,5 +1513,6 @@ function route() {
 
 init();
 </script>
+  <script src="sherdog.js"></script>
 </body>
 </html>
