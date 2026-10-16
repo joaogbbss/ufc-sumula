@@ -746,6 +746,44 @@ def calibrate_ovr(raw):
             "cards": out}
 
 
+# ---------- 6c) Estimativa pré-UFC para quem ainda não tem luta no UFC ----------
+# Sem luta no UFC não há estatística de golpes/quedas, então não existe OVR de verdade.
+# Para não deixar o estreante em branco, o card recebe uma ESTIMATIVA transparente:
+# parte do OVR típico de quem tem 1-2 lutas no UFC e ajusta pelo cartel profissional
+# (taxa de vitória encolhida e experiência). Sempre marcada como "EST" na interface.
+REC_RE = re.compile(r"(\d+)\s*-\s*(\d+)(?:\s*-\s*(\d+))?")
+
+
+def parse_record(rec):
+    m = REC_RE.search(str(rec or ""))
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)) if m else None
+
+
+def estimate_debuts(cards, analytics_fighters):
+    fp = DATA / "fighters.json"
+    if not fp.exists() or not cards:
+        return {}
+    people = json.loads(fp.read_text("utf-8"))
+    early = sorted(v[0] for v in cards.values() if len(v) > 8 and v[8] is not None and v[8] <= 2)
+    base = early[len(early) // 2] if len(early) >= 20 else 66
+    est = {}
+    for p in people:
+        i = p.get("id")
+        if not i or i in cards or (analytics_fighters.get(i) or {}).get("n"):
+            continue
+        r = parse_record(p.get("record"))
+        if not r:
+            continue
+        w, l, d = r
+        wr = (w + 2.0) / (w + l + 4.0)              # taxa de vitória encolhida (2 V + 2 D fantasmas)
+        exp = w + l + d
+        v = base + 10.0 * (wr - 0.75) + max(-3.0, min(3.0, (exp - 12) * 0.3))
+        ovr = int(round(max(OVR_LOW + 4, min(base + 6, v))))
+        prior = round(BASE + max(-40.0, min(40.0, 150.0 * (wr - 0.75))), 1)   # nota-base para a probabilidade
+        est[i] = [ovr, w, l, d, prior]
+    return est
+
+
 # ---------- 7) validação estatística do motor (Brier Score, Log-Loss e Calibração) ----------
 def run_validation(fights, pre_elo):
     """Avalia o poder preditivo fora da amostra do ELO pré-luta (sem data leakage)."""
@@ -850,7 +888,7 @@ def main():
         print(f"decisions: erro ({ex}); decisions.json não foi atualizado.")
     for nome, fn in (
         ("live", lambda: run_live(fights, pre_elo)),
-        ("cards", lambda: run_cards(fights, fighters)),
+        ("cards", lambda: (lambda r: r and {**r, "est": estimate_debuts(r["cards"], fighters)})(run_cards(fights, fighters))),
         ("validation", lambda: run_validation(fights, pre_elo)),
     ):
         try:
