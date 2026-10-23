@@ -152,9 +152,12 @@ const mid = id => S.ov.merges[id] || id;
 const fmt = d => new Date(d + 'T00:00').toLocaleDateString(S.pt ? 'pt-BR' : 'en-US', {day:'2-digit', month:'short', year:'numeric'});
 const name = x => S.F.get(mid(x.id))?.name || x.name;
 const ini = n => String(n || '').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+// Foto do lutador: 1) a que você colocou; 2) a VERIFICADA (data/photos.json); 3) a do scraper, enquanto ainda não foi auditada
+const photoOf = id => { const k = mid(id); return S.me.ph[id] || S.me.ph[k] || S.pu?.[k] || (S.rej?.has(k) ? null : S.F.get(k)?.img) || null; };
+// As iniciais ficam SEMPRE por baixo; se a foto não carregar, ela some e as iniciais aparecem (nunca mais octógono vazio)
 const av = (id, n, c = '') => {
-  const im = S.me.ph[id] || S.F.get(mid(id))?.img;
-  return `<span class="ring ${c}"><span${im ? ` style="background:url('${esc(im)}') center top/cover"` : ''}>${im ? '' : esc(ini(n))}</span></span>`;
+  const im = photoOf(id);
+  return `<span class="ring ${c}"><span>${esc(ini(n))}${im ? `<img src="${esc(im)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top">` : ''}</span></span>`;
 };
 const empty = () => `<p class="empty">${
   S.ev.length
@@ -196,7 +199,8 @@ async function fetchJson(n) {
 }
 
 async function init() {
-  const [ev, fg, fi, ov, meta, up] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming'].map(fetchJson));
+  const [ev, fg, fi, ov, meta, up, ph] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos'].map(fetchJson));
+    S.pu = (ph && ph.photos) || null; S.rej = ph && ph.rej ? new Set(ph.rej) : null;   // fotos verificadas pelo photos.py
   if (ov) S.ov = {merges:{}, div:{}, exclude:[], ...ov};
   S.ev = ev || [];
   S.meta = meta || {};
@@ -1447,7 +1451,7 @@ function route() {
       });
       x.globalAlpha = .55; x.font = `800 34px ${F}`; x.fillText('SÚMULA UFC', 70, 1200); x.globalAlpha = 1; fin();
     };
-    const im = S.me.ph[id] || p?.img;
+    const im = photoOf(id);
     if (im) { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => draw(i); i.onerror = () => draw(null); i.src = im; }
     else draw(null);
   }

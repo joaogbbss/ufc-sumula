@@ -1,0 +1,43 @@
+name: Ondas de fotos
+
+# Uma "onda" por execução: cada uma tenta uma fonte/estratégia nos lutadores que ainda não têm foto
+# verificada, começando pelos dos próximos eventos. Rode várias vezes e a cobertura só cresce.
+on:
+  schedule:
+    - cron: "17 */4 * * *"        # a cada 4 horas
+  workflow_dispatch:
+    inputs:
+      wave:
+        description: "auto, all, 1 a 5, ou nomes: audit,espn,wikidata,ufc,relaxed"
+        default: "auto"
+      limit:
+        description: "máximo de lutadores nesta execução"
+        default: "600"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dados-ufc               # serializa com o workflow principal se ele usar o mesmo grupo
+  cancel-in-progress: false
+
+jobs:
+  fotos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Rodar a onda
+        run: python photos.py --wave "${{ github.event.inputs.wave || 'auto' }}" --limit "${{ github.event.inputs.limit || '600' }}" --max-minutes 35
+        continue-on-error: true   # se uma fonte cair, nada mais é afetado
+      - name: Salvar
+        if: always()
+        run: |
+          git config user.name "ufc-bot"
+          git config user.email "ufc-bot@users.noreply.github.com"
+          git add data/photos.json data/photos_report.json
+          git diff --cached --quiet || git commit -m "Fotos: onda $(date -u +%F-%H%M)"
+          for i in 1 2 3; do git pull --rebase origin "${{ github.ref_name }}" && git push && break || sleep 5; done

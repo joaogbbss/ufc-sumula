@@ -67,16 +67,29 @@ def _start():
     _page = _ctx.new_page()
 
 
+def _ok(html):
+    """Página completa e real: sem a verificação anti-robô, com corpo e tamanho de página de verdade.
+    (Sem isso, o scraper aceitava o ESQUELETO da página durante o recarregamento e achava '0 eventos'.)"""
+    return bool(html) and CHALLENGE not in html and "</body>" in html.lower() and len(html) > 1500
+
+
 def _solve(url):
+    """Abre a página no navegador e espera a verificação terminar E a página real carregar por inteiro."""
     global _solved
     _page.goto(url, wait_until="domcontentloaded", timeout=60000)
-    for _ in range(90):
+    for i in range(120):
         time.sleep(1)
+        if i in (25, 60, 90):  # se travou num esqueleto, reabre (o cookie da verificação já existe)
+            try:
+                _page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            except Exception:
+                pass
         try:
+            _page.wait_for_load_state("load", timeout=5000)
             html = _page.content()
-        except Exception:
+        except Exception:  # a página está recarregando
             continue
-        if CHALLENGE not in html:
+        if _ok(html):
             _solved += 1
             if _solved <= 3:
                 print(f"Verificação do site resolvida ({_solved}).")
@@ -84,20 +97,21 @@ def _solve(url):
     return ""
 
 
-def get(url, tries=4):
+def get(url, tries=5):
     if _ctx is None:
         _start()
     for i in range(tries):
         try:
             html = None
-            r = _ctx.request.get(url, timeout=30000)
+            r = _ctx.request.get(url, timeout=30000)  # rápido, usa os cookies do navegador
             if r.status == 200:
                 html = r.text()
-            if html is None or CHALLENGE in html:
+            if not _ok(html):
                 html = _solve(url)
-            if html and CHALLENGE not in html:
+            if _ok(html):
                 time.sleep(DELAY)
                 return BeautifulSoup(html, "lxml")
+            print(f"aviso: página incompleta em {url} ({len(html or '')} bytes), tentativa {i + 1}")
         except Exception as ex:
             print(f"aviso: tentativa {i + 1} falhou em {url}: {str(ex)[:120]}")
         time.sleep(3 * (i + 1))
