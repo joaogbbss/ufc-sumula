@@ -4,7 +4,7 @@
    Todo resultado traz validação e tamanho de amostra; onde um modelo não prevê além do acaso, a tela diz isso. */
 (function () {
   'use strict';
-  const X = { tab: 'mkt', d: {}, jg: { f: null, sc: [], rev: false }, sc: '', cd: [], ca: '', cb: '', sy: '', pp: 2 };
+  const X = { tab: 'mkt', os: 'z', or: 'finz', cs: 'elo', kb: 1000, km: 4.5, d: {}, jg: { f: null, sc: [], rev: false }, sc: '', cd: [], ca: '', cb: '', sy: '', pp: 2 };
   const sum = a => a.reduce((x, y) => x + y, 0), p0 = v => (v * 100).toFixed(0) + '%', p1 = v => (v * 100).toFixed(1) + '%';
   const nm = id => (S.F.get(id) || {}).name || id, fm = () => X._fm || (X._fm = new Map(S.fg.map(f => [f.id, f])));
   const sg = z => 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
@@ -17,7 +17,7 @@
     const g = async n => { if (n in X.d) return; try { const r = await fetch('data/' + n + '.json', { cache: 'no-cache' }); X.d[n] = r.ok ? await r.json() : null; } catch { X.d[n] = null; } };
     await Promise.all(names.map(g));
   }
-  const TABS = () => [['mkt', T('Market', 'Mercado')], ['jg', T('Be the judge', 'Seja o juiz')], ['sc', 'Scouting'], ['cd', T('Dream card', 'Card dos sonhos')], ['sy', T('Styles', 'Estilos')], ['pp', T('Prospects', 'Prospectos')]];
+  const TABS = () => [['mkt', T('Market', 'Mercado')], ['jg', T('Be the judge', 'Seja o juiz')], ['sc', 'Scouting'], ['cd', T('Dream card', 'Card dos sonhos')], ['sy', T('Styles', 'Estilos')], ['pp', T('Prospects', 'Prospectos')], ['of', T('Judges & refs', 'Juízes e árbitros')], ['cp', T('Camps', 'Academias')]];
   const miss = f => `<p class="empty">${T('File ' + f + '.json not found. Run the workflow so the scripts generate it (extras.py needs analytics.py to run before it).', 'Arquivo ' + f + '.json não encontrado. Rode o workflow para os scripts gerarem (o extras.py precisa que o analytics.py rode antes).')}</p>`;
   const slot = (k, lbl) => { const id = X[k], p = S.F.get(id); return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${lbl}</div>${p ? `<div class="sel">${typeof av === 'function' ? av(id, p.name, 'sm') : ''}<b>${esc(p.name)}</b><button data-xc="${k}">×</button></div>` : `<input data-xq="${k}" type="search" placeholder="${T('Search a fighter…', 'Buscar lutador…')}"><div class="res" id="xs${k}"></div>`}</div>`; };
 
@@ -34,7 +34,8 @@
     const dis = []; M.forEach((p, i) => { if (Math.abs(p - K[i]) >= .08) { const x = p > K[i]; dis.push({ pm: x ? K[i] : 1 - K[i], y: x ? Y[i] : 1 - Y[i] }); } });
     const dz = dis.length ? sum(dis.map(o => o.y - o.pm)) / Math.sqrt(sum(dis.map(o => o.pm * (1 - o.pm)))) : 0;
     const src = Object.values(H).reduce((a, h) => (a[h[3]] = (a[h[3]] || 0) + 1, a), {});
-    return { n, model: met(M), mkt: met(K), md, z: se ? md / se : 0, dis: dis.length, dz, dwin: dis.length ? sum(dis.map(o => o.y)) / dis.length : 0, dexp: dis.length ? sum(dis.map(o => o.pm)) / dis.length : 0, src };
+    const lastY = Object.keys(cal).sort().pop();
+    return { set: { M, K, Y }, clast: cal[lastY], n, model: met(M), mkt: met(K), md, z: se ? md / se : 0, dis: dis.length, dz, dwin: dis.length ? sum(dis.map(o => o.y)) / dis.length : 0, dexp: dis.length ? sum(dis.map(o => o.pm)) / dis.length : 0, src };
   }
   function tMkt() {
     const E = mktEval(); let h = `<p class="mu sm">${T('The honest test of a model: does it keep up with the betting market? Probabilities are compared on fights that already happened. This is information, not a betting tip.', 'O teste honesto de um modelo: ele acompanha o mercado de apostas? As probabilidades são comparadas em lutas que já aconteceram. É informação, não dica de aposta.')}</p>`;
@@ -47,12 +48,35 @@
        <div class="card" style="padding:.8rem 1.1rem"><b>${T('When the model disagrees with the market (8+ points)', 'Quando o modelo discorda do mercado (8+ pontos)')}</b><p>${E.dis} ${T('fights', 'lutas')}. ${T('The side the model liked more won', 'O lado que o modelo preferia venceu')} <b>${p0(E.dwin)}</b> ${T('of the time; the market implied', 'das vezes; o mercado indicava')} <b>${p0(E.dexp)}</b>. ${Math.abs(E.dz) < 2 ? T('The disagreements carry no extra information (z = ' + E.dz.toFixed(1) + '): when they differ, trust the market.', 'As discordâncias não trazem informação extra (z = ' + E.dz.toFixed(1) + '): quando divergem, confie no mercado.') : E.dz > 0 ? T('The disagreements were informative (z = ' + E.dz.toFixed(1) + ').', 'As discordâncias foram informativas (z = ' + E.dz.toFixed(1) + ').') : T('The disagreements were WRONG more often than the market (z = ' + E.dz.toFixed(1) + ').', 'As discordâncias erraram MAIS que o mercado (z = ' + E.dz.toFixed(1) + ').')}</p></div>`;
     }
     const ups = (S.up || []).flatMap(e => (e.fights || []).filter(f => f.mkt_pa != null).map(f => ({ e, f })));
-    h += `<h2>${T('Upcoming fights: model x market', 'Próximas lutas: modelo x mercado')}</h2>` + (ups.length ? ups.map(({ e, f }) => {
-      const ia = mid(f.a.id), ib = mid(f.b.id), pr = typeof probs === 'function' ? probs(ia, ib) : null, pm = pr ? ({ Elo: pr.pE, WHR: pr.pW, Stats: pr.pS, Blend: pr.pB })[pr.best] : null, d = pm == null ? null : pm - f.mkt_pa;
+    const SF = stackFit(E), bk = Math.max(0, +X.kb || 0), mg = Math.max(0, Math.min(15, +X.km || 0)) / 100;
+    h += `<h2>${T('Upcoming fights: model x market', 'Próximas lutas: modelo x mercado')}</h2>`;
+    h += `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Stake calculator (fractional Kelly)', 'Calculadora de aporte (Kelly fracionário)')}</b>
+      <p class="mu sm">${T('An arithmetic illustration, not advice. The Kelly formula gives the stake that grows a bankroll fastest IF the probability used is right. Here the probability is the market’s, nudged toward the model ONLY as far as the model proved useful on past fights.', 'Uma ilustração aritmética, não um conselho. A fórmula de Kelly dá o aporte que faz a banca crescer mais rápido SE a probabilidade usada estiver certa. Aqui a probabilidade é a do mercado, puxada para o modelo SÓ até onde o modelo provou ser útil em lutas passadas.')}</p>
+      ${SF.n >= 200 ? `<p class="${SF.use > 0 ? '' : 'dn'}"><b>${T('Weight the data gives the model', 'Peso que os dados dão ao modelo')}: ${SF.use > 0 ? p0(SF.use) : '0%'}</b> <span class="mu sm">(${T('fitted', 'ajustado')} ${(SF.b * 100).toFixed(0)}% ± ${(SF.se * 100).toFixed(0)}%, z = ${SF.z.toFixed(1)}, ${SF.n} ${T('fights', 'lutas')}). ${SF.use > 0 ? T('The model added information beyond the market, so a reduced weight is used.', 'O modelo trouxe informação além do mercado, então um peso reduzido é usado.') : T('The model has NOT shown it adds information beyond the market: stakes below are zero by construction.', 'O modelo NÃO mostrou que acrescenta informação além do mercado: os aportes abaixo são zero por construção.')}</span></p>` : `<p class="dn">${T('Not enough historical odds to test whether the model adds anything beyond the market: stakes stay at zero.', 'Sem odds históricas suficientes para testar se o modelo acrescenta algo ao mercado: os aportes ficam em zero.')}</p>`}
+      <div class="ctl"><label>${T('Bankroll', 'Banca')}<input data-xkb="1" type="number" min="0" step="100" value="${X.kb}"></label><label>${T('Bookmaker margin (%)', 'Margem da casa (%)')}<input data-xkm="1" type="number" min="0" max="15" step="0.5" value="${X.km}"></label></div>
+      <p class="mu sm">${T('Quarter-Kelly, capped at 5% of the bankroll. The margin is an ASSUMPTION: real prices differ from the average market probability. Betting involves risk of loss; never stake money you cannot afford to lose.', 'Um quarto de Kelly, limitado a 5% da banca. A margem é uma SUPOSIÇÃO: os preços reais diferem da probabilidade média do mercado. Apostar envolve risco de perda; nunca aposte dinheiro que você não pode perder.')}</p></div>`;
+    h += ups.length ? ups.map(({ e, f }) => {
+      const ia = mid(f.a.id), ib = mid(f.b.id), pr = typeof probs === 'function' ? probs(ia, ib) : null, pe = pr ? pr.pE : null;
+      const pm = pe == null ? null : sg((E.clast || Math.LN10) / Math.LN10 * lg(pe)), d = pm == null ? null : pm - f.mkt_pa;
+      let side = '';
+      if (pm != null) {
+        const ps = sg(lg(f.mkt_pa) + SF.use * (lg(pm) - lg(f.mkt_pa))), rows = [[f.a.name || nm(ia), ps, f.mkt_pa], [f.b.name || nm(ib), 1 - ps, 1 - f.mkt_pa]].map(([n, p, k]) => { const o = 1 / Math.min(.995, k * (1 + mg)), ev = p * o - 1, kf = ev > 0 ? Math.min(.05, .25 * ev / (o - 1)) : 0; return { n, p, o, ev, kf }; });
+        const best = rows.sort((x, y) => y.kf - x.kf)[0];
+        side = best.kf > 0 ? `<p class="up"><b>+EV</b>: ${esc(best.n)}. ${T('Combined probability', 'Probabilidade combinada')} ${p1(best.p)}, ${T('odds', 'odds')} ${best.o.toFixed(2)}, EV ${(best.ev * 100).toFixed(1)}%. ${T('Quarter-Kelly', 'Um quarto de Kelly')}: <b>${(best.kf * 100).toFixed(1)}%</b> ${T('of the bankroll', 'da banca')}${bk ? ` (${(bk * best.kf).toFixed(0)})` : ''}.</p>` : `<p class="mu sm">${T('No positive expected value after the margin, or no demonstrated edge: stake 0.', 'Sem valor esperado positivo depois da margem, ou sem vantagem demonstrada: aporte 0.')}</p>`;
+      }
       return `<div class="card" style="padding:.7rem 1.1rem"><div class="sr"><b style="color:var(--gd)">${esc(f.a.name || nm(ia))}</b><span class="mu sm">${esc(e.name || '')}</span><b style="color:var(--cb)">${esc(f.b.name || nm(ib))}</b></div>
-       <div class="sr"><span>${T('Market', 'Mercado')} ${p0(f.mkt_pa)}</span><span></span><span>${p0(1 - f.mkt_pa)}</span></div>${pm == null ? `<p class="mu sm">${T('No model rating for one of them.', 'Sem nota do modelo para um deles.')}</p>` : `<div class="sr"><span>${T('Model', 'Modelo')} ${p0(pm)}</span><span class="lb ${Math.abs(d) >= .08 ? 'dn' : 'mu'}">${d >= 0 ? '+' : ''}${(d * 100).toFixed(0)} pp</span><span>${p0(1 - pm)}</span></div>`}</div>`;
-    }).join('') : `<p class="mu sm">${T('No upcoming fight with market odds yet.', 'Nenhuma próxima luta com odds de mercado ainda.')}</p>`);
+       <div class="sr"><span>${T('Market', 'Mercado')} ${p0(f.mkt_pa)}</span><span></span><span>${p0(1 - f.mkt_pa)}</span></div>${pm == null ? `<p class="mu sm">${T('No model rating for one of them.', 'Sem nota do modelo para um deles.')}</p>` : `<div class="sr"><span>${T('Model', 'Modelo')} ${p0(pm)}</span><span class="lb ${Math.abs(d) >= .08 ? 'dn' : 'mu'}">${d >= 0 ? '+' : ''}${(d * 100).toFixed(0)} pp</span><span>${p0(1 - pm)}</span></div>`}${side}</div>`;
+    }).join('') : `<p class="mu sm">${T('No upcoming fight with market odds yet.', 'Nenhuma próxima luta com odds de mercado ainda.')}</p>`;
     return h;
+  }
+  const lg = p => { p = Math.min(.999, Math.max(.001, p)); return Math.log(p / (1 - p)); };
+  /* quanto peso os dados dão ao modelo: regressão logística do resultado com deslocamento logit(mercado) e variável logit(modelo) - logit(mercado) */
+  function stackFit(E) {
+    if (!E.set || E.set.Y.length < 200) return { b: 0, se: 0, z: 0, use: 0, n: E.set ? E.set.Y.length : 0 };
+    const { M, K, Y } = E.set, d = M.map((p, i) => lg(p) - lg(K[i])), o = K.map(lg); let b = 0, h = 0;
+    for (let it = 0; it < 30; it++) { let g = 0; h = 0; for (let i = 0; i < Y.length; i++) { const p = sg(o[i] + b * d[i]); g += d[i] * (Y[i] - p); h += d[i] * d[i] * p * (1 - p); } if (!h) break; const st = g / h; b += st; if (Math.abs(st) < 1e-8) break; }
+    const se = h ? 1 / Math.sqrt(h) : 0, z = se ? b / se : 0;
+    return { b, se, z, use: z >= 2 ? Math.max(0, Math.min(1, b - se)) : 0, n: Y.length };
   }
 
   /* ================= 2) SEJA O JUIZ ================= */
@@ -173,6 +197,42 @@
     return h;
   }
 
+
+  /* ================= 7) JUÍZES E ÁRBITROS ================= */
+  const zc = z => z == null ? '<span class="mu">—</span>' : `<span class="${Math.abs(z) > 3.3 ? 'dn' : 'mu'}">${z > 0 ? '+' : ''}${z.toFixed(1)}</span>`;
+  function tOf() {
+    const D = X.d.judges; if (!D) return miss('judges');
+    const jr = Object.entries(D.judges).sort((a, b) => X.os === 'z' ? b[1].rs - a[1].rs : (b[1][X.os] ?? -99) - (a[1][X.os] ?? -99)).slice(0, 25);
+    const rr = Object.entries(D.refs).sort((a, b) => Math.abs(b[1][X.or] ?? 0) - Math.abs(a[1][X.or] ?? 0)).slice(0, 25), L = D.league;
+    const bt = (k, cur, set, l) => `<button data-${set}="${k}" class="pk${cur === k ? ' on' : ''}">${l}</button>`;
+    let h = `<p class="mu sm">${T('How often each official deviates from what the league does. “z” counts standard deviations from the expected value; only |z| above 3.3 is flagged, because with dozens of officials a few values near 2 appear by chance. Patterns here are hypotheses, not accusations.', 'Quanto cada oficial se desvia do que a liga faz. “z” conta desvios-padrão do valor esperado; só |z| acima de 3,3 é sinalizado, porque com dezenas de oficiais alguns valores perto de 2 aparecem por acaso. Os padrões aqui são hipóteses, não acusações.')}</p>
+     <h2>${T('Judges', 'Juízes')}</h2><div class="acts">${bt('z', X.os, 'xos', T('Dissent rate', 'Dissidência'))}${bt('spz', X.os, 'xos', T('Split decisions', 'Decisões divididas'))}${bt('c2z', X.os, 'xos', T('Questionable decisions', 'Decisões questionáveis'))}</div>
+     <p class="mu sm">${T('League', 'Liga')}: ${D.league.cards.toLocaleString(S.pt ? 'pt-BR' : 'en-US')} ${T('cards', 'cartões')}, ${p1(L.dis)} ${T('vote against the official winner', 'votam contra o vencedor oficial')}${L.c2f ? `; ${T('in questionable fights', 'nas lutas questionáveis')} ${p0(L.c2f)} ${T('still favor the official winner', 'ainda favorecem o vencedor oficial')}` : ''}.</p>
+     <div class="card" style="padding:.4rem .9rem;overflow-x:auto"><div class="tb hd" style="min-width:34rem;grid-template-columns:1.6fr .6fr 1fr 1fr 1.2fr"><span>${T('Judge', 'Juiz')}</span><span>${T('Cards', 'Cartões')}</span><span>${T('Dissent (shrunk)', 'Dissidência (ajustada)')}</span><span>${T('In splits', 'Nas divididas')}</span><span>${T('Questionable', 'Questionáveis')}</span></div>
+     ${jr.map(([n, v]) => `<div class="tb" style="min-width:34rem;grid-template-columns:1.6fr .6fr 1fr 1fr 1.2fr"><span>${esc(n)}</span><span>${v.n}</span><span>${p1(v.rs)} ${zc(v.z)}</span><span>${v.sp >= 10 ? `${v.spd}/${v.sp} ` : ''}${zc(v.spz)}</span><span>${v.c2 ? `${v.c2f}/${v.c2} ` : ''}${zc(v.c2z)}${v.c3 ? ` <span class="mu sm">(${v.c3f}/${v.c3} ${T('robbery', 'roubo')})</span>` : ''}</span></div>`).join('')}</div>
+     <p class="mu sm">${T('Questionable = fights where the stats model gave the official winner under 35%. The ratio is cards that still went to the official winner; a high z means this judge sides with the official winner there more than the league does.', 'Questionáveis = lutas em que o modelo de estatísticas deu ao vencedor oficial menos de 35%. A razão é de cartões que ainda foram para o vencedor oficial; z alto = este juiz fica do lado do vencedor oficial ali mais que a liga.')}${D.has_cls ? '' : ' ' + T('(decisions.json missing: this column is empty)', '(decisions.json ausente: esta coluna fica vazia)')}</p>
+     <h2>${T('Referees', 'Árbitros')}</h2><div class="acts">${bt('finz', X.or, 'xor', T('Finishes', 'Finalizações'))}${bt('koz', X.or, 'xor', 'KO/TKO')}${bt('subz', X.or, 'xor', T('Submissions', 'Finalizações (sub)'))}${bt('sz', X.or, 'xor', T('Stoppage timing', 'Hora da parada'))}</div>
+     <p class="mu sm">${T('League finish rate', 'Taxa de finalização da liga')} ${p1(L.fin)}. ${T('Expected values come from a model using each fight’s fighters (finishing tendency, rating gap, title, era), so a referee is not blamed for refereeing finishers.', 'Os valores esperados vêm de um modelo com os lutadores de cada luta (tendência a finalizar, diferença de nota, cinturão, era), então um árbitro não é culpado por apitar finalizadores.')}</p>
+     <div class="card" style="padding:.4rem .9rem;overflow-x:auto"><div class="tb hd" style="min-width:38rem;grid-template-columns:1.5fr .5fr 1.2fr .8fr .8fr 1.3fr"><span>${T('Referee', 'Árbitro')}</span><span>${T('Fights', 'Lutas')}</span><span>${T('Finish: real / expected', 'Finaliz.: real / esperado')}</span><span>KO</span><span>Sub</span><span>${T('Stoppage timing', 'Hora da parada')}</span></div>
+     ${rr.map(([n, v]) => `<div class="tb" style="min-width:38rem;grid-template-columns:1.5fr .5fr 1.2fr .8fr .8fr 1.3fr"><span>${esc(n)}</span><span>${v.n}</span><span>${p0(v.fin)} / ${p0(v.fine)} ${zc(v.finz)}</span><span>${zc(v.koz)}</span><span>${zc(v.subz)}</span><span>${v.sz == null ? '<span class="mu">—</span>' : `${v.sz < -3.3 ? T('early', 'precoce') : v.sz > 3.3 ? T('late', 'tardia') : ''} ${zc(v.sz)} <span class="mu sm">(${v.sn})</span>`}</span></div>`).join('')}</div>
+     <p class="mu sm">${T('Stoppage timing compares how many significant strikes the losing fighter absorbed before a TKO stoppage with other stoppages in the same round. Negative = stops earlier than usual, positive = later. It is a proxy: fighter style also matters.', 'A hora da parada compara quantos golpes significativos o perdedor absorveu antes de uma parada por TKO com outras paradas no mesmo round. Negativo = para mais cedo que o normal, positivo = mais tarde. É uma aproximação: o estilo dos lutadores também pesa.')}</p>`;
+    return h;
+  }
+
+  /* ================= 8) ACADEMIAS ================= */
+  function tCp() {
+    const C = X.d.camps; if (!C) return miss('camps');
+    const k = X.cs, rows = Object.values(C.teams).filter(t => k === 'dw' ? t.dw != null : k === 'elo' ? t.elo != null : true).sort((a, b) => k === 'elo' ? b.elo - a.elo : k === 'dw' ? b.dw - a.dw : k === 'tw' ? b.tw - a.tw || b.tf - a.tf : k === 'ch' ? b.ch - a.ch || b.tw - a.tw : b.nf - a.nf).slice(0, 30);
+    const bt = (v, l) => `<button data-xcs="${v}" class="pk${k === v ? ' on' : ''}">${l}</button>`;
+    let h = `<p class="mu sm">${T('Training camps ranked by their current strength and by how their fighters did when the rating system knew nothing about them.', 'Academias ranqueadas pela força atual e por como seus lutadores foram quando o sistema de notas ainda não sabia nada sobre eles.')}</p>
+     <div class="card" style="padding:.6rem 1.1rem"><p class="mu sm">${T('Coverage', 'Cobertura')}: <b>${C.coverage[0]}</b> ${T('of', 'de')} ${C.coverage[1]} ${T('fighters have a gym on record (it comes from ESPN, so some are missing). The gym is the CURRENT one, applied to the whole career.', 'lutadores têm academia registrada (vem da ESPN, então alguns faltam). A academia é a ATUAL, aplicada à carreira inteira.')}</p></div>
+     <div class="acts">${bt('elo', T('Current strength', 'Força atual'))}${bt('dw', T('Debut performance', 'Desempenho na estreia'))}${bt('tw', T('Titles', 'Cinturões'))}${bt('ch', T('Champions', 'Campeões'))}${bt('nf', T('Size', 'Tamanho'))}</div>
+     <div class="card" style="padding:.4rem .9rem;overflow-x:auto"><div class="tb hd" style="min-width:40rem;grid-template-columns:1.7fr .7fr .8fr 1.3fr .9fr .9fr"><span>${T('Gym', 'Academia')}</span><span>${T('Active/total', 'Ativos/total')}</span><span>${T('Mean ELO', 'ELO médio')}</span><span>${T('First 3 fights vs expected', '3 primeiras lutas vs esperado')}</span><span>${T('Title wins/fights', 'Vitórias/lutas de cinturão')}</span><span>${T('Champions', 'Campeões')}</span></div>
+     ${rows.map(t => `<div class="tb" style="min-width:40rem;grid-template-columns:1.7fr .7fr .8fr 1.3fr .9fr .9fr"><span><b>${esc(t.name)}</b><br><span class="mu sm">${(t.top || []).map(i => esc(nm(i))).join(', ')}</span></span><span>${t.act}/${t.nf}</span><span>${t.elo == null ? '—' : Math.round(t.elo)}</span><span>${t.dw == null ? '<span class="mu">—</span>' : `<span class="${Math.abs(t.dw) > t.ds ? (t.dw > 0 ? 'up' : 'dn') : 'mu'}">${t.dw > 0 ? '+' : ''}${t.dw.toFixed(1)}</span> <span class="mu sm">±${t.ds.toFixed(1)} (${t.dn})</span>`}</span><span>${t.tw}/${t.tf}</span><span>${t.ch}</span></div>`).join('')}</div>
+     <p class="mu sm">${T('First 3 fights vs expected = points above what the rating system expected, per 100 fights, centered on the league. A colored value is outside the margin of error. This is the honest measure of a gym: in later fights the rating has already learned the fighter, so the gap tends to vanish. Small gyms are noisy: read the ± and the n.', '3 primeiras lutas vs esperado = pontos acima do que o sistema de notas esperava, por 100 lutas, centrado na liga. Valor colorido = fora da margem de erro. É a medida honesta de uma academia: nas lutas seguintes a nota já aprendeu o lutador, então a diferença tende a sumir. Academias pequenas são ruidosas: leia o ± e o n.')}</p>`;
+    return h;
+  }
+
   /* ================= imagens para compartilhar ================= */
   function shareImg(kind) {
     const cv = document.createElement('canvas'), W = 1080; cv.width = W; const F = '"Big Shoulders Display",Impact,"Arial Narrow",sans-serif', B = 'Archivo,Arial,sans-serif';
@@ -191,20 +251,22 @@
   }
 
   /* ================= tela e rota ================= */
-  const VIEW = { mkt: tMkt, jg: tJg, sc: tSc, cd: tCd, sy: tSy, pp: tPp };
-  const DATA = { mkt: ['market'], jg: ['decisions'], sc: ['analytics', 'cards', 'styles'], cd: ['excitement'], sy: ['styles'], pp: ['prospects'] };
+  const VIEW = { mkt: tMkt, jg: tJg, sc: tSc, cd: tCd, sy: tSy, pp: tPp, of: tOf, cp: tCp };
+  const DATA = { mkt: ['market'], jg: ['decisions'], sc: ['analytics', 'cards', 'styles'], cd: ['excitement'], sy: ['styles'], pp: ['prospects'], of: ['judges'], cp: ['camps'] };
   async function draw() {
     const el = document.querySelector('#xx'); if (!el) return;
     await need(DATA[X.tab]); if (!document.querySelector('#xx')) return;
     el.innerHTML = `<div class="seg">${TABS().map(([k, l]) => `<button data-xt="${k}" class="${X.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>` + VIEW[X.tab]() + `<p class="mu sm" style="margin-top:1rem">${T('Everything here is exploratory and validated on past data: patterns are hypotheses, not proof.', 'Tudo aqui é exploratório e validado em dados passados: padrões são hipóteses, não provas.')}</p>`;
     const m = document.querySelector('#m');
     m.onclick = e => {
-      const t = e.target.closest('[data-xt],[data-xp],[data-xc],[data-xj],[data-xjr],[data-xjn],[data-xsh],[data-xad],[data-xrm]'); if (!t) return; const d = t.dataset;
+      const t = e.target.closest('[data-xt],[data-xp],[data-xc],[data-xj],[data-xjr],[data-xjn],[data-xsh],[data-xad],[data-xrm],[data-xos],[data-xor],[data-xcs]'); if (!t) return; const d = t.dataset;
       if (d.xt) { X.tab = d.xt; draw(); } else if (d.xp) { const [k, id] = d.xp.split(':'); X[k] = id; draw(); } else if (d.xc) { X[d.xc] = ''; draw(); }
       else if (d.xj) { const [i, v] = d.xj.split(':'); X.jg.sc[+i] = +v; draw(); } else if (d.xjr) { X.jg.rev = true; draw(); } else if (d.xjn) { jNew(); draw(); }
       else if (d.xsh) shareImg(d.xsh); else if (d.xad != null) { X.cd.push({ a: mid(X.ca), b: mid(X.cb), t: d.xad === '1' }); X.ca = X.cb = ''; draw(); }
+      else if (d.xos) { X.os = d.xos; draw(); } else if (d.xor) { X.or = d.xor; draw(); } else if (d.xcs) { X.cs = d.xcs; draw(); }
       else if (d.xrm) { const [a, b] = d.xrm.split(':'); X.cd = X.cd.filter(o => !(o.a === a && o.b === b)); draw(); }
     };
+    m.onchange = e => { const kb = e.target.closest('[data-xkb]'), km = e.target.closest('[data-xkm]'); if (kb) { X.kb = Math.max(0, +kb.value || 0); draw(); } else if (km) { X.km = Math.max(0, Math.min(15, +km.value || 0)); draw(); } };
     m.oninput = e => {
       const q = e.target.closest('[data-xq]');
       if (q) { const k = q.dataset.xq, t = q.value.toLowerCase().trim(), r = document.querySelector('#xs' + k); const cards = (X.d.cards || {}).cards, exf = (X.d.excitement || {}).fighters, an = (X.d.analytics || {}).fighters;
@@ -214,6 +276,47 @@
     };
   }
   async function view() { document.querySelector('#m').innerHTML = `<h1>Extras</h1><div id="xx"><p class="mu">${T('Loading…', 'Carregando…')}</p></div>`; await draw(); }
+
+  /* ================= MMA MATH: menor cadeia de vitórias (BFS) ================= */
+  const XM = { fast: false, a: '', b: '', G: {} };
+  const isFin = m => /^(ko|tko|sub)/i.test(m || '');
+  function graph(fast) {
+    const key = fast ? 'f' : 'a', c = XM.G[key]; if (c && c.n === S.fg.length) return c.g;
+    const g = new Map();
+    for (const f of S.fg) {
+      if (f.res !== 'a' && f.res !== 'b') continue; if (fast && !isFin(f.method)) continue;
+      const w = mid((f.res === 'a' ? f.a : f.b).id), l = mid((f.res === 'a' ? f.b : f.a).id); if (w === l) continue;
+      if (!g.has(w)) g.set(w, new Map()); const m = g.get(w), old = m.get(l); if (!old || f.date > old.date) m.set(l, f);   /* várias lutas entre o mesmo par: fica a mais recente */
+    }
+    XM.G[key] = { n: S.fg.length, g }; return g;
+  }
+  function chain(a, b, fast) {
+    const g = graph(fast), dist = new Map([[a, 0]]), preds = new Map(); let fr = [a], found = false;
+    for (let d = 0; d < 8 && fr.length && !found; d++) {
+      const nx = [];
+      for (const u of fr) for (const [v, f] of g.get(u) || []) { if (!dist.has(v)) { dist.set(v, d + 1); preds.set(v, [[u, f]]); nx.push(v); if (v === b) found = true; } else if (dist.get(v) === d + 1) preds.get(v).push([u, f]); }
+      fr = nx;
+    }
+    if (!dist.has(b)) return null;
+    const out = []; const walk = (v, tail) => { if (out.length >= 3) return; if (v === a) { out.push(tail); return; } for (const [u, f] of preds.get(v)) walk(u, [[u, v, f], ...tail]); };
+    walk(b, []); return { len: dist.get(b), paths: out };
+  }
+  function inner() {
+    const a = XM.a, b = XM.b, direct = S.fg.filter(f => (mid(f.a.id) === a && mid(f.b.id) === b) || (mid(f.a.id) === b && mid(f.b.id) === a));
+    const mt = f => `${esc(f.method || '')}${f.round ? ', R' + esc(f.round) : ''}, ${esc((f.date || '').slice(0, 4))}`;
+    const dir = (x, y) => {
+      const r = chain(x, y, XM.fast);
+      if (!r) return `<p class="mu sm">${esc(nm(x))} → ${esc(nm(y))}: ${T('no chain of wins within 8 steps' + (XM.fast ? ' (try turning off the finishes-only filter)' : ''), 'nenhuma cadeia de vitórias em até 8 passos' + (XM.fast ? ' (tente desligar o filtro de finalizações)' : ''))}.</p>`;
+      return `<p><b>${esc(nm(x))} → ${esc(nm(y))}</b> <span class="mu sm">(${r.len} ${r.len === 1 ? T('step', 'passo') : T('steps', 'passos')}${r.paths.length > 1 ? ', ' + r.paths.length + ' ' + T('shortest routes shown', 'rotas mais curtas mostradas') : ''})</span></p>` + r.paths.map(p => `<div class="card" style="padding:.5rem .9rem;margin-bottom:.4rem">${p.map(([u, v, f]) => `<div class="sr" style="grid-template-columns:1fr auto 1fr"><span>${esc(nm(u))}</span><span class="lb">${T('beat', 'venceu')}</span><span>${esc(nm(v))}</span></div><div class="mu sm" style="text-align:center">${mt(f)}</div>`).join('')}</div>`).join('');
+    };
+    return `${direct.length ? `<p>${T('They have fought', 'Eles já lutaram')}: ${direct.map(f => `${esc(nm(mid((f.res === 'a' ? f.a : f.b).id)))} ${f.res === 'draw' ? '=' : T('won', 'venceu')} (${mt(f)})`).join('; ')}.</p>` : dir(a, b) + dir(b, a)}
+     <p class="mu sm">${T('A chain of wins is not a prediction: styles, weight changes and years pass between the links. It is a conversation starter.', 'Uma cadeia de vitórias não é uma previsão: estilos, mudanças de peso e anos passam entre os elos. É um assunto de bar.')}</p>`;
+  }
+  XM.html = (a, b) => { a = a && mid(a); b = b && mid(b); if (!a || !b || a === b || !S.fg || !S.fg.length) return ''; XM.a = a; XM.b = b; return `<div class="card" style="padding:.8rem 1.1rem;margin-top:.8rem" id="xm"><b>MMA Math</b> <span class="mu sm">${T('shortest chain of wins between them', 'menor cadeia de vitórias entre eles')}</span>
+     <div class="acts"><button id="xmf" class="pk${XM.fast ? ' on' : ''}" onclick="XM.tog()">${T('Finishes only (fast routes)', 'Só finalizações (vias rápidas)')}</button></div><div id="xmb">${inner()}</div></div>`; };
+  XM.tog = () => { XM.fast = !XM.fast; const b = document.querySelector('#xmb'), bt = document.querySelector('#xmf'); if (b) b.innerHTML = inner(); if (bt) bt.classList.toggle('on', XM.fast); };
+  XM.chain = chain;
+  window.XM = XM;
   const pT = window.XT, pV = window.XV;
   window.XT = () => [...(pT ? pT() : []), ['extras', 'Extras']];
   window.XV = { ...(pV || {}), extras: view };

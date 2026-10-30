@@ -146,7 +146,7 @@ def walk(fights):
             if T and T.get(me) and T.get(op) and mnt:
                 sd = (num(T[me].get("Sig. str.")) - num(T[op].get("Sig. str."))) / mnt
                 X["sl"] += num(T[me].get("Sig. str.")); X["mn"] += mnt
-            X["h"].append({"d": f["date"], "opp": opp_e, "s": sc, "fw": 1 if (sc == 1 and kind in ("ko", "sub")) else 0, "sd": sd})
+            X["h"].append({"d": f["date"], "opp": opp_e, "s": sc, "x": e if me == "a" else 1 - e, "fw": 1 if (sc == 1 and kind in ("ko", "sub")) else 0, "sd": sd})
             X["n"] += 1; X["fin"] += kind in ("ko", "sub"); X["last"] = f["date"]
             X["h"][-1]["e"] = X["e"]
     return st, snaps
@@ -382,15 +382,168 @@ def run_prospects(fights, st, snaps):
     print(f"prospects: coorte {len(cohort)}, {len(out)} prospectos; validação: skill {1 - brier / brier0:+.3f} sobre a taxa-base (0 = nada além do acaso)")
 
 
+# ---------- 5) JUÍZES E ÁRBITROS ----------
+CARD = re.compile(r"([^\d]+?)\s*(\d{2})\s*-\s*(\d{2})")
+
+
+def parse_cards(detail):
+    out = []
+    for m in CARD.finditer(detail or ""):
+        name, x, y = re.sub(r"^[\s.,;:]+|[\s.,;:]+$", "", m.group(1)), int(m.group(2)), int(m.group(3))
+        if name and 20 <= x <= 50 and 20 <= y <= 50 and abs(x - y) <= 5: out.append((name, x, y))
+    return out
+
+
+def dec_sub(method):
+    m = (method or "").lower()
+    return "split" if "split" in m else "majority" if "majority" in m else "unanimous" if "unanimous" in m else "other"
+
+
+def detect_order(fights):
+    listed = wf = 0
+    for f in fights:
+        if klass(f.get("method")) != "dec" or dec_sub(f.get("method")) != "unanimous": continue
+        sc = [(x, y) for _, x, y in parse_cards(f.get("detail"))]
+        if len(sc) < 2: continue
+        listed += all(((x - y) if f["res"] == "a" else (y - x)) > 0 for x, y in sc); wf += all(x > y for x, y in sc)
+    return "winner_first" if wf > listed else "listed"
+
+
+def zbin(obs, n, r): return (obs - n * r) / math.sqrt(n * r * (1 - r)) if n and 0 < r < 1 else 0.0
+
+
+def run_judges(fights, snaps):
+    dec = load(DATA / "decisions.json", {})
+    cls_of = {i: v[1] for i, v in (dec.get("fights") or {}).items()}
+    order = (dec.get("model") or {}).get("judge_order") or detect_order(fights)
+    J = defaultdict(lambda: {"n": 0, "dis": 0, "sp": 0, "spd": 0, "c2": 0, "c2f": 0, "c3": 0, "c3f": 0})
+    tot = {"n": 0, "dis": 0, "c2": 0, "c2f": 0}
+    for f in fights:
+        if klass(f.get("method")) != "dec" or f["res"] not in ("a", "b"): continue
+        cards = parse_cards(f.get("detail"))
+        if len(cards) < 2: continue
+        sp, c = dec_sub(f.get("method")) in ("split", "majority"), cls_of.get(f["id"])
+        for name, x, y in cards:
+            w, l = (x, y) if order == "winner_first" else ((x, y) if f["res"] == "a" else (y, x))
+            agree = w > l; j = J[name]
+            j["n"] += 1; j["dis"] += not agree; tot["n"] += 1; tot["dis"] += not agree
+            if sp: j["sp"] += 1; j["spd"] += not agree
+            if c is not None and c >= 2:
+                j["c2"] += 1; j["c2f"] += agree; tot["c2"] += 1; tot["c2f"] += agree
+                if c == 3: j["c3"] += 1; j["c3f"] += agree
+    r0 = tot["dis"] / tot["n"] if tot["n"] else 0.0; r2 = tot["c2f"] / tot["c2"] if tot["c2"] else None; K = 40
+    judges = {}
+    for name, j in J.items():
+        if j["n"] < 20: continue
+        judges[name] = {"n": j["n"], "dis": j["dis"], "r": round(j["dis"] / j["n"], 4), "rs": round((j["dis"] + K * r0) / (j["n"] + K), 4), "z": round(zbin(j["dis"], j["n"], r0), 2),
+                        "sp": j["sp"], "spd": j["spd"], "spz": round(zbin(j["spd"], j["sp"], 1 / 3), 2) if j["sp"] >= 10 else None,
+                        "c2": j["c2"], "c2f": j["c2f"], "c2z": round(zbin(j["c2f"], j["c2"], r2), 2) if r2 and j["c2"] >= 10 else None, "c3": j["c3"], "c3f": j["c3f"]}
+    # --- árbitros ---
+    rows, lg = [], [s["fa"] for s in snaps if s["fa"] is not None] + [s["fb"] for s in snaps if s["fb"] is not None]
+    lgf = sum(lg) / len(lg) if lg else 0.5
+    for s in snaps:
+        f = s["f"]
+        if not (f.get("ref") or "").strip(): continue
+        p = 1 / (1 + 10 ** ((s["eb"] - s["ea"]) / 400.0)); yr = (int(f["date"][:4]) - 2015) / 10.0; k = klass(f.get("method"))
+        ft = ((s["fa"] if s["fa"] is not None else lgf) + (s["fb"] if s["fb"] is not None else lgf)) / 2
+        rows.append(([1.0, 1 - abs(2 * p - 1), ft, 1.0 if f.get("title") else 0.0, yr, yr * yr, math.log(1 + min(s["na"], s["nb"]))], k, f))
+    refs, lgr = {}, {}
+    if len(rows) >= 400:
+        X = [r[0] for r in rows]; fits = {t: fit_lr(X, [1 if (r[1] in ("ko", "sub") if t == "fin" else r[1] == t) else 0 for r in rows]) for t in ("fin", "ko", "sub")}
+        per = defaultdict(lambda: {"n": 0, "o": defaultdict(int), "e": defaultdict(float), "v": defaultdict(float), "dn": 0, "ds": 0})
+        for x, k, f in rows:
+            r = per[f["ref"].strip()]; r["n"] += 1
+            for t, m in fits.items():
+                p = lr_p(m, x); y = (k in ("ko", "sub")) if t == "fin" else (k == t)
+                r["o"][t] += y; r["e"][t] += p; r["v"][t] += p * (1 - p)
+            if k == "dec" and f["id"] in cls_of: r["dn"] += 1; r["ds"] += cls_of[f["id"]] >= 2
+        # timing da parada: golpes absorvidos pelo perdedor numa parada por TKO, comparado com outras paradas no mesmo round
+        stop, buckets = defaultdict(list), defaultdict(list)
+        for x, k, f in rows:
+            T = f.get("totals")
+            if k == "ko" and T and T.get("a") and T.get("b"):
+                win = "a" if f["res"] == "a" else "b"; ab = math.log(1 + num(T[win].get("Sig. str.")))
+                try: b = min(int(f.get("round") or 1), 4)
+                except ValueError: continue
+                buckets[b].append(ab); stop[f["ref"].strip()].append((b, ab))
+        bm = {b: sum(v) / len(v) for b, v in buckets.items() if len(v) >= 20}
+        allres = [ab - bm[b] for v in stop.values() for b, ab in v if b in bm]; sd_all = math.sqrt(sum(r * r for r in allres) / len(allres)) if allres else 1.0
+        dn_t = sum(r["dn"] for r in per.values()); ds_t = sum(r["ds"] for r in per.values()); rd = ds_t / dn_t if dn_t else None
+        for name, r in per.items():
+            if r["n"] < 30: continue
+            res = [ab - bm[b] for b, ab in stop.get(name, []) if b in bm]
+            ent = {"n": r["n"]}
+            for t in ("fin", "ko", "sub"):
+                ent[t] = round(r["o"][t] / r["n"], 4); ent[t + "e"] = round(r["e"][t] / r["n"], 4); ent[t + "z"] = round((r["o"][t] - r["e"][t]) / math.sqrt(r["v"][t]), 2) if r["v"][t] > 0 else 0.0
+            ent["sn"] = len(res); ent["si"] = round(sum(res) / len(res), 3) if len(res) >= 10 else None; ent["sz"] = round(sum(res) / len(res) / (sd_all / math.sqrt(len(res))), 2) if len(res) >= 10 else None
+            ent["dn"] = r["dn"]; ent["ds"] = r["ds"]; ent["dz"] = round(zbin(r["ds"], r["dn"], rd), 2) if rd and r["dn"] >= 15 else None
+            refs[name] = ent
+        lgr = {"fin": round(sum(1 for r in rows if r[1] in ("ko", "sub")) / len(rows), 4), "ko": round(sum(1 for r in rows if r[1] == "ko") / len(rows), 4), "sub": round(sum(1 for r in rows if r[1] == "sub") / len(rows), 4), "dsus": round(rd, 4) if rd else None}
+    if not judges and not refs: print("judges: sem placares de juízes nem árbitros; nada gerado."); return
+    save("judges.json", {"v": 1, "order": order, "league": {"cards": tot["n"], "dis": round(r0, 4), "c2f": round(r2, 4) if r2 else None, **lgr}, "judges": judges, "refs": refs, "has_cls": bool(cls_of)})
+    flag = lambda D, k, th=3.3: sum(1 for v in D.values() if v.get(k) is not None and abs(v[k]) > th)
+    print(f"judges: {len(judges)} juízes ({tot['n']} cartões, ordem {order}), {len(refs)} árbitros; sinais fortes (|z|>3,3): juízes {flag(judges, 'z')}, árbitros {flag(refs, 'finz')}")
+
+
+# ---------- 6) ACADEMIAS (CAMPS) ----------
+ALIAS = {"att": "american top team", "american top team att": "american top team", "aka": "american kickboxing academy", "american kickboxing academy aka": "american kickboxing academy",
+         "tam": "team alpha male", "alpha male": "team alpha male", "jackson wink": "jackson wink mma", "jackson winks mma": "jackson wink mma", "jackson s mma": "jackson wink mma",
+         "xtreme couture": "xtreme couture mma", "kings mma": "kings mma", "chute boxe": "chute boxe academy", "chute boxe academy": "chute boxe academy", "brazilian top team": "brazilian top team", "btt": "brazilian top team",
+         "city kickboxing": "city kickboxing", "tristar": "tristar gym", "tristar gym": "tristar gym", "sanford mma": "sanford mma", "fortis mma": "fortis mma", "roufusport": "roufusport mma", "roufusport mma": "roufusport mma"}
+
+
+def run_camps(fights, st):
+    fighters = {f["id"]: f for f in load(DATA / "fighters.json", [])}
+    ov = load(DATA / "overrides.json", {}); merges = ov.get("merges", {})
+    custom = {norm(k): norm(v) for k, v in load(DATA / "camp_alias.json", {}).items()}          # opcional: o usuário pode corrigir nomes
+    raw, group = defaultdict(Counter), {}
+    for i, fg in fighters.items():
+        t = norm(fg.get("team") or "")
+        if not t or i not in st: continue
+        key = custom.get(t) or ALIAS.get(t) or t; group[merges.get(i, i)] = key; raw[key][str(fg["team"]).strip()] += 1
+    seen = [i for i, v in st.items() if v["n"] >= 1]; cov = sum(1 for i in seen if i in group)
+    if cov < 30: print(f"camps: só {cov} lutadores com academia (o team vem da ESPN); nada gerado."); return
+    last = max(v["last"] for v in st.values()); act_cut = (date.fromisoformat(last) - timedelta(days=730)).isoformat()
+    allx = [(x["s"] - x["x"]) for i, v in st.items() for x in v["h"]]; mu_all = sum(allx) / len(allx)
+    deb = [(x["s"] - x["x"]) for i, v in st.items() for x in v["h"][:3]]; mu_deb = sum(deb) / len(deb)
+    teams = defaultdict(lambda: {"f": [], "dn": 0, "dr": 0.0, "dv": 0.0, "an": 0, "ar": 0.0, "av": 0.0, "tw": 0, "tf": 0, "ch": set()})
+    for i, v in st.items():
+        g = group.get(i)
+        if not g: continue
+        t = teams[g]; t["f"].append(i)
+        for k, x in enumerate(v["h"]):
+            t["an"] += 1; t["ar"] += x["s"] - x["x"] - mu_all; t["av"] += x["x"] * (1 - x["x"])
+            if k < 3: t["dn"] += 1; t["dr"] += x["s"] - x["x"] - mu_deb; t["dv"] += x["x"] * (1 - x["x"])
+    for f in fights:
+        if not f.get("title"): continue
+        for side in ("a", "b"):
+            g = group.get(f[side]["id"])
+            if g:
+                teams[g]["tf"] += 1
+                if f["res"] == side: teams[g]["tw"] += 1; teams[g]["ch"].add(f[side]["id"])
+    out = {}
+    for g, t in teams.items():
+        if len(t["f"]) < 3: continue
+        actv = sorted((i for i in t["f"] if st[i]["last"] >= act_cut), key=lambda i: -st[i]["e"])
+        out[g] = {"name": raw[g].most_common(1)[0][0], "nf": len(t["f"]), "act": len(actv), "elo": round(sum(st[i]["e"] for i in actv) / len(actv), 1) if actv else None, "top": actv[:3],
+                  "pk": round(max(st[i]["e"] for i in t["f"]), 0), "fights": sum(st[i]["n"] for i in t["f"]),
+                  "dn": t["dn"], "dw": round(100 * t["dr"] / t["dn"], 2) if t["dn"] >= 10 else None, "ds": round(196 * math.sqrt(t["dv"]) / t["dn"], 2) if t["dn"] >= 10 else None,
+                  "aw": round(100 * t["ar"] / t["an"], 2) if t["an"] else None, "as": round(196 * math.sqrt(t["av"]) / t["an"], 2) if t["an"] else None,
+                  "tw": t["tw"], "tf": t["tf"], "ch": len(t["ch"])}
+    save("camps.json", {"v": 1, "coverage": [cov, len(seen)], "last": last, "teams": out})
+    print(f"camps: {len(out)} academias com 3+ lutadores; {cov} de {len(seen)} lutadores com academia identificada")
+
+
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--odds-csv"); ap.add_argument("--only", default="market,excitement,styles,prospects")
+    ap = argparse.ArgumentParser(); ap.add_argument("--odds-csv"); ap.add_argument("--only", default="market,excitement,styles,prospects,judges,camps")
     a = ap.parse_args(); only = set(a.only.split(","))
     fights = load_fights()
     if not fights: print("extras: data/fights.json ausente ou vazio; nada a fazer."); return 0
     st, snaps = walk(fights)
     csv_path = a.odds_csv or (str(DATA / "odds_history.csv") if (DATA / "odds_history.csv").exists() else None)   # basta subir o CSV em data/odds_history.csv
     for name, fn in (("market", lambda: run_market(fights, csv_path)), ("excitement", lambda: run_excitement(fights, st, snaps)),
-                     ("styles", lambda: run_styles(fights, st, snaps)), ("prospects", lambda: run_prospects(fights, st, snaps))):
+                     ("styles", lambda: run_styles(fights, st, snaps)), ("prospects", lambda: run_prospects(fights, st, snaps)),
+                     ("judges", lambda: run_judges(fights, snaps)), ("camps", lambda: run_camps(fights, st))):
         if name in only:
             try: fn()
             except Exception as ex: print(f"{name}: erro ({ex}); arquivo não foi atualizado.")   # um bloco nunca derruba os outros

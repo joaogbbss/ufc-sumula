@@ -1057,7 +1057,7 @@ function vSim(a, b) {
   $('#sm').value = q.m; $('#sd').value = q.d;
   $('#sm').onchange = e => { q.m = e.target.value; vSim(); };
   $('#sd').onchange = e => { q.d = e.target.value; vSim(); };
-  $('#out').innerHTML = simOut(q);
+  $('#out').innerHTML = simOut(q) + (window.XM ? window.XM.html(q.a, q.b) : '');
   const sb = $('#shr'); if (sb) sb.onclick = shareCard;
   $('#m').oninput = e => {
     const i = e.target.closest('[data-q]'); if (!i) return;
@@ -1499,8 +1499,16 @@ function route() {
       const fs = S.fg.filter(f => (f.res === 'a' || f.res === 'b') && (mid(f.a.id) === id || mid(f.b.id) === id)).sort((a, b) => b.date < a.date ? -1 : 1);
       h += fs.map(f => { const on = Z.fl.has(f.id), ow = f.res === 'a' ? f.a : f.b, ol = f.res === 'a' ? f.b : f.a, w = on ? ol : ow, l = on ? ow : ol; return `<div class="h" style="grid-template-columns:5.5rem 1fr auto"><span class="mu">${fmt(f.date)}</span><span><b>${esc(name(w))}</b> ${T('beat', 'venceu')} ${esc(name(l))}<br><span class="mu sm">${esc(f.method)}, ${esc(f.div)}</span></span><button data-ztf="${f.id}" class="pk${on ? ' on' : ''}">${on ? T('Flipped', 'Invertida') : T('Flip', 'Inverter')}</button></div>`; }).join('');
     }
-    h += `<div class="acts" style="margin-top:.8rem"><button id="ztr" ${Z.fl.size ? '' : 'disabled'}>${T('Recalculate history', 'Recalcular a história')} (${Z.fl.size})</button>${Z.fl.size ? `<button data-ztc="1">${T('Clear flips', 'Limpar inversões')}</button>` : ''}</div><div id="zt"></div>`;
+    h += `<div class="acts" style="margin-top:.8rem"><button id="ztr" ${Z.fl.size ? '' : 'disabled'}>${T('Recalculate history', 'Recalcular a história')} (${Z.fl.size})</button>${Z.fl.size ? `<button data-ztc="1">${T('Clear flips', 'Limpar inversões')}</button>` : ''}<button data-ztrob="1">${T('Reverse all suspected robberies', 'Inverter todas as decisões suspeitas')}${Z.dj && Z.dj.fights ? ' (' + Object.values(Z.dj.fights).filter(v => v[1] === 3).length + ')' : ''}</button></div><div id="zt"></div>`;
     return h;
+  }
+  /* inverte de uma vez todas as lutas que o decisions.json classifica como "possível roubo" (classe 3) e recalcula o WHR inteiro */
+  async function zRob() {
+    const j = Z.dj || (Z.dj = await fetchJson('decisions'));
+    if (!j || !j.fights) { alert(T('decisions.json not found.', 'decisions.json não encontrado.')); return; }
+    const by = fmap();
+    for (const [id, v] of Object.entries(j.fights)) { const f = by.get(id); if (v[1] === 3 && f && (f.res === 'a' || f.res === 'b')) Z.fl.add(id); }
+    draw(); tmRun();
   }
   function tmRun() {
     const el = $('#zt'); if (!el) return;
@@ -1534,7 +1542,7 @@ function route() {
     if (Z.tab === 'cross') zres();
     const m = $('#m');
     m.onclick = e => {
-      const t = e.target.closest('[data-zt],[data-zp],[data-zc],[data-zimg],[data-ztf],[data-ztc],#ztr'); if (!t) return;
+      const t = e.target.closest('[data-zt],[data-zp],[data-zc],[data-zimg],[data-ztf],[data-ztc],[data-ztrob],#ztr'); if (!t) return;
       const d = t.dataset;
       if (d.zt) { Z.tab = d.zt; draw(); }
       else if (d.zp) { const [s, id] = d.zp.split(':'); Z[s] = id; draw(); scrollTo({top:0, behavior:'smooth'}); }
@@ -1542,6 +1550,7 @@ function route() {
       else if (d.zimg) cardImg(d.zimg);
       else if (d.ztf) { Z.fl.has(d.ztf) ? Z.fl.delete(d.ztf) : Z.fl.add(d.ztf); draw(); }
       else if (d.ztc) { Z.fl.clear(); draw(); }
+      else if (d.ztrob) zRob();
       else if (t.id === 'ztr') tmRun();
     };
     m.oninput = e => {
