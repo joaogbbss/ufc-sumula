@@ -24,6 +24,9 @@ jobs:
       - name: Gerar análises (data/analytics.json)
         run: python analytics.py
         continue-on-error: true   # se falhar, os dados do scraper ainda são salvos
+      - name: Extras
+        run: python extras.py
+        continue-on-error: true
       - name: Salvar dados no repositório
         if: always()
         run: |
