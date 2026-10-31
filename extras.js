@@ -4,7 +4,7 @@
    Todo resultado traz validação e tamanho de amostra; onde um modelo não prevê além do acaso, a tela diz isso. */
 (function () {
   'use strict';
-  const X = { tab: 'mkt', os: 'z', or: 'finz', cs: 'elo', kb: 1000, km: 4.5, d: {}, jg: { f: null, sc: [], rev: false }, sc: '', cd: [], ca: '', cb: '', sy: '', pp: 2 };
+  const X = { tab: 'mkt', os: 'z', or: 'finz', cs: 'elo', kb: 1000, km: 4.5, pl: [], _rows: {}, d: {}, jg: { f: null, sc: [], rev: false }, sc: '', cd: [], ca: '', cb: '', sy: '', pp: 2 };
   const sum = a => a.reduce((x, y) => x + y, 0), p0 = v => (v * 100).toFixed(0) + '%', p1 = v => (v * 100).toFixed(1) + '%';
   const nm = id => (S.F.get(id) || {}).name || id, fm = () => X._fm || (X._fm = new Map(S.fg.map(f => [f.id, f])));
   const sg = z => 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
@@ -55,18 +55,38 @@
       ${SF.n >= 200 ? `<p class="${SF.use > 0 ? '' : 'dn'}"><b>${T('Weight the data gives the model', 'Peso que os dados dão ao modelo')}: ${SF.use > 0 ? p0(SF.use) : '0%'}</b> <span class="mu sm">(${T('fitted', 'ajustado')} ${(SF.b * 100).toFixed(0)}% ± ${(SF.se * 100).toFixed(0)}%, z = ${SF.z.toFixed(1)}, ${SF.n} ${T('fights', 'lutas')}). ${SF.use > 0 ? T('The model added information beyond the market, so a reduced weight is used.', 'O modelo trouxe informação além do mercado, então um peso reduzido é usado.') : T('The model has NOT shown it adds information beyond the market: stakes below are zero by construction.', 'O modelo NÃO mostrou que acrescenta informação além do mercado: os aportes abaixo são zero por construção.')}</span></p>` : `<p class="dn">${T('Not enough historical odds to test whether the model adds anything beyond the market: stakes stay at zero.', 'Sem odds históricas suficientes para testar se o modelo acrescenta algo ao mercado: os aportes ficam em zero.')}</p>`}
       <div class="ctl"><label>${T('Bankroll', 'Banca')}<input data-xkb="1" type="number" min="0" step="100" value="${X.kb}"></label><label>${T('Bookmaker margin (%)', 'Margem da casa (%)')}<input data-xkm="1" type="number" min="0" max="15" step="0.5" value="${X.km}"></label></div>
       <p class="mu sm">${T('Quarter-Kelly, capped at 5% of the bankroll. The margin is an ASSUMPTION: real prices differ from the average market probability. Betting involves risk of loss; never stake money you cannot afford to lose.', 'Um quarto de Kelly, limitado a 5% da banca. A margem é uma SUPOSIÇÃO: os preços reais diferem da probabilidade média do mercado. Apostar envolve risco de perda; nunca aposte dinheiro que você não pode perder.')}</p></div>`;
-    h += ups.length ? ups.map(({ e, f }) => {
-      const ia = mid(f.a.id), ib = mid(f.b.id), pr = typeof probs === 'function' ? probs(ia, ib) : null, pe = pr ? pr.pE : null;
-      const pm = pe == null ? null : sg((E.clast || Math.LN10) / Math.LN10 * lg(pe)), d = pm == null ? null : pm - f.mkt_pa;
-      let side = '';
+    const rowsU = ups.map(({ e, f }) => {
+      const ia = mid(f.a.id), ib = mid(f.b.id), pr = typeof probs === 'function' ? probs(ia, ib) : null, pe = pr ? pr.pE : null, k = `${e.id}:${ia}:${ib}`, na = f.a.name || nm(ia), nb = f.b.name || nm(ib);
+      const pm = pe == null ? null : sg((E.clast || Math.LN10) / Math.LN10 * lg(pe));
+      if (pm == null) return { e, f, k, na, nb, pm: null };
+      const ps = sg(lg(f.mkt_pa) + SF.use * (lg(pm) - lg(f.mkt_pa)));
+      const side = (n, p, pk, pmr) => { const o = 1 / Math.min(.995, pk * (1 + mg)), ev = p * o - 1, kf = ev > 0 && SF.use > 0 ? Math.min(.05, .25 * ev / (o - 1)) : 0; return { n, p, pk, pmr, o, ev, kf }; };
+      return { e, f, k, na, nb, pm, A: side(na, ps, f.mkt_pa, pm), B: side(nb, 1 - ps, 1 - f.mkt_pa, 1 - pm) };
+    });
+    X._rows = Object.fromEntries(rowsU.filter(r => r.pm != null).map(r => [r.k, r]));
+    h += rowsU.length ? rowsU.map(r => {
+      const { e, f, k, na, nb, pm } = r, d = pm == null ? null : pm - f.mkt_pa; let side = '';
       if (pm != null) {
-        const ps = sg(lg(f.mkt_pa) + SF.use * (lg(pm) - lg(f.mkt_pa))), rows = [[f.a.name || nm(ia), ps, f.mkt_pa], [f.b.name || nm(ib), 1 - ps, 1 - f.mkt_pa]].map(([n, p, k]) => { const o = 1 / Math.min(.995, k * (1 + mg)), ev = p * o - 1, kf = ev > 0 ? Math.min(.05, .25 * ev / (o - 1)) : 0; return { n, p, o, ev, kf }; });
-        const best = rows.sort((x, y) => y.kf - x.kf)[0];
-        side = best.kf > 0 ? `<p class="up"><b>+EV</b>: ${esc(best.n)}. ${T('Combined probability', 'Probabilidade combinada')} ${p1(best.p)}, ${T('odds', 'odds')} ${best.o.toFixed(2)}, EV ${(best.ev * 100).toFixed(1)}%. ${T('Quarter-Kelly', 'Um quarto de Kelly')}: <b>${(best.kf * 100).toFixed(1)}%</b> ${T('of the bankroll', 'da banca')}${bk ? ` (${(bk * best.kf).toFixed(0)})` : ''}.</p>` : `<p class="mu sm">${T('No positive expected value after the margin, or no demonstrated edge: stake 0.', 'Sem valor esperado positivo depois da margem, ou sem vantagem demonstrada: aporte 0.')}</p>`;
+        const best = [r.A, r.B].sort((x, y) => y.kf - x.kf || y.ev - x.ev)[0], mo = pm > f.mkt_pa ? r.A : r.B, evm = mo.pmr / mo.pk - 1, kn = .25 * Math.max(0, (mo.pmr - mo.pk) / (1 - mo.pk));
+        side = best.kf > 0 ? `<p class="up">${best.ev >= .05 ? '<span class="tag" style="background:var(--win)">EV ≥ 5%</span> ' : ''}<b>+EV</b>: ${esc(best.n)}. ${T('Combined probability', 'Probabilidade combinada')} ${p1(best.p)}, ${T('odds', 'odds')} ${best.o.toFixed(2)}, EV ${(best.ev * 100).toFixed(1)}%. ${T('Quarter-Kelly', 'Um quarto de Kelly')}: <b>${(best.kf * 100).toFixed(1)}%</b> ${T('of the bankroll', 'da banca')}${bk ? ` (${(bk * best.kf).toFixed(0)})` : ''}.</p>` : `<p class="mu sm">${T('No positive expected value after the margin, or no demonstrated edge: stake 0.', 'Sem valor esperado positivo depois da margem, ou sem vantagem demonstrada: aporte 0.')}</p>`;
+        side += `<p class="mu sm">${T('Model-only view (not validated, ignores the margin)', 'Visão só do modelo (sem validação, ignora a margem)')}: ${esc(mo.n)}, EV ${(evm * 100).toFixed(0)}%, ${T('plain quarter-Kelly', 'um quarto de Kelly simples')} ${p1(kn)}.</p><div class="acts"><button data-xpl="${k}" class="pk${X.pl.some(l => l.k === k) ? ' on' : ''}">+ Parlay</button></div>`;
       }
-      return `<div class="card" style="padding:.7rem 1.1rem"><div class="sr"><b style="color:var(--gd)">${esc(f.a.name || nm(ia))}</b><span class="mu sm">${esc(e.name || '')}</span><b style="color:var(--cb)">${esc(f.b.name || nm(ib))}</b></div>
+      return `<div class="card" style="padding:.7rem 1.1rem"><div class="sr"><b style="color:var(--gd)">${esc(na)}</b><span class="mu sm">${esc(e.name || '')}</span><b style="color:var(--cb)">${esc(nb)}</b></div>
        <div class="sr"><span>${T('Market', 'Mercado')} ${p0(f.mkt_pa)}</span><span></span><span>${p0(1 - f.mkt_pa)}</span></div>${pm == null ? `<p class="mu sm">${T('No model rating for one of them.', 'Sem nota do modelo para um deles.')}</p>` : `<div class="sr"><span>${T('Model', 'Modelo')} ${p0(pm)}</span><span class="lb ${Math.abs(d) >= .08 ? 'dn' : 'mu'}">${d >= 0 ? '+' : ''}${(d * 100).toFixed(0)} pp</span><span>${p0(1 - pm)}</span></div>`}${side}</div>`;
     }).join('') : `<p class="mu sm">${T('No upcoming fight with market odds yet.', 'Nenhuma próxima luta com odds de mercado ainda.')}</p>`;
+    /* ---- Parlay: probabilidade conjunta do modelo x do mercado, odd justa e EV da múltipla ---- */
+    X.pl = X.pl.filter(l => X._rows[l.k]);
+    const legs = X.pl.map(l => ({ l, sd: X._rows[l.k][l.s] }));
+    if (legs.length) {
+      const pr_ = a => a.reduce((x, y) => x * y, 1), P = pr_(legs.map(x => x.sd.p)), PM = pr_(legs.map(x => x.sd.pmr)), PK = pr_(legs.map(x => x.sd.pk)), O = pr_(legs.map(x => x.sd.o)), ev = P * O - 1, ok = legs.length >= 2;
+      const kf = ok && SF.use > 0 && ev > 0 ? Math.min(.05, .25 * ev / (O - 1)) : 0;
+      h += `<div class="card" style="padding:.8rem 1.1rem;position:sticky;bottom:.5rem;z-index:5;border:1px solid var(--gd)"><b>Parlay</b> <span class="mu sm">(${legs.length}/5)</span> <button data-xpc="1" class="pk" style="float:right">${T('Clear', 'Limpar')}</button>
+        ${legs.map(x => `<div class="sr" style="grid-template-columns:1fr auto auto"><span>${esc(x.sd.n)} <span class="mu sm">${p0(x.sd.p)}</span></span><button data-xpf="${x.l.k}" class="pk">⇄</button><button data-xpl="${x.l.k}" class="pk">×</button></div>`).join('')}
+        ${ok ? `<div class="tb hd" style="grid-template-columns:1fr 1fr 1fr"><span>${T('Model (raw)', 'Modelo (bruto)')}</span><span>${T('Evidence-weighted', 'Ponderada pela evidência')}</span><span>${T('Market (no vig)', 'Mercado (sem margem)')}</span></div><div class="tb" style="grid-template-columns:1fr 1fr 1fr"><span>${p1(PM)}</span><b>${p1(P)}</b><span>${p1(PK)}</span></div>
+        <p>${T('Fair odds', 'Odd justa')}: ${T('weighted', 'ponderada')} <b>${(1 / P).toFixed(2)}</b>, ${T('market', 'mercado')} ${(1 / PK).toFixed(2)}. ${T('Book price with the assumed margin', 'Preço da casa com a margem suposta')}: <b>${O.toFixed(2)}</b>. EV: <b class="${ev > 0 ? 'up' : 'dn'}">${(ev * 100).toFixed(1)}%</b>.
+        ${kf > 0 ? `${T('Quarter-Kelly', 'Um quarto de Kelly')}: <b>${(kf * 100).toFixed(1)}%</b> ${T('of the bankroll', 'da banca')}${bk ? ` (${(bk * kf).toFixed(0)})` : ''}.` : T('Stake 0: no demonstrated edge or negative EV.', 'Aporte 0: sem vantagem demonstrada ou EV negativo.')}</p>` : `<p class="mu sm">${T('Add 2 to 5 fights.', 'Adicione de 2 a 5 lutas.')}</p>`}
+        <p class="mu sm">${T('Assumes the fights are independent, and the bookmaker margin compounds on every leg, so a parlay amplifies any probability error. Arithmetic illustration, not advice.', 'Supõe lutas independentes, e a margem da casa se acumula em cada perna, então uma múltipla amplifica qualquer erro de probabilidade. Ilustração aritmética, não conselho.')}</p></div>`;
+    }
     return h;
   }
   const lg = p => { p = Math.min(.999, Math.max(.001, p)); return Math.log(p / (1 - p)); };
@@ -259,10 +279,12 @@
     el.innerHTML = `<div class="seg">${TABS().map(([k, l]) => `<button data-xt="${k}" class="${X.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>` + VIEW[X.tab]() + `<p class="mu sm" style="margin-top:1rem">${T('Everything here is exploratory and validated on past data: patterns are hypotheses, not proof.', 'Tudo aqui é exploratório e validado em dados passados: padrões são hipóteses, não provas.')}</p>`;
     const m = document.querySelector('#m');
     m.onclick = e => {
-      const t = e.target.closest('[data-xt],[data-xp],[data-xc],[data-xj],[data-xjr],[data-xjn],[data-xsh],[data-xad],[data-xrm],[data-xos],[data-xor],[data-xcs]'); if (!t) return; const d = t.dataset;
+      const t = e.target.closest('[data-xt],[data-xp],[data-xc],[data-xj],[data-xjr],[data-xjn],[data-xsh],[data-xad],[data-xrm],[data-xos],[data-xor],[data-xcs],[data-xpl],[data-xpf],[data-xpc]'); if (!t) return; const d = t.dataset;
       if (d.xt) { X.tab = d.xt; draw(); } else if (d.xp) { const [k, id] = d.xp.split(':'); X[k] = id; draw(); } else if (d.xc) { X[d.xc] = ''; draw(); }
       else if (d.xj) { const [i, v] = d.xj.split(':'); X.jg.sc[+i] = +v; draw(); } else if (d.xjr) { X.jg.rev = true; draw(); } else if (d.xjn) { jNew(); draw(); }
       else if (d.xsh) shareImg(d.xsh); else if (d.xad != null) { X.cd.push({ a: mid(X.ca), b: mid(X.cb), t: d.xad === '1' }); X.ca = X.cb = ''; draw(); }
+      else if (d.xpl) { const i = X.pl.findIndex(l => l.k === d.xpl); if (i >= 0) X.pl.splice(i, 1); else if (X.pl.length < 5) { const r = X._rows[d.xpl]; X.pl.push({ k: d.xpl, s: r && r.B.p > r.A.p ? 'B' : 'A' }); } draw(); }
+      else if (d.xpf) { const l = X.pl.find(x => x.k === d.xpf); if (l) l.s = l.s === 'A' ? 'B' : 'A'; draw(); } else if (d.xpc) { X.pl = []; draw(); }
       else if (d.xos) { X.os = d.xos; draw(); } else if (d.xor) { X.or = d.xor; draw(); } else if (d.xcs) { X.cs = d.xcs; draw(); }
       else if (d.xrm) { const [a, b] = d.xrm.split(':'); X.cd = X.cd.filter(o => !(o.a === a && o.b === b)); draw(); }
     };
