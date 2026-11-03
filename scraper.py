@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Scraper do UFC Stats (ufcstats.com) + Enriquecimento via ESPN API e BestFightOdds.
+"""Scraper do UFC Stats (ufcstats.com) + Enriquecimento via ESPN API.
 
 1ª execução: baixa tudo (eventos, lutas com estatísticas, lutadores).
 Demais execuções: só eventos novos + reprocessa os últimos N eventos
 (o site às vezes corrige resultados) + enriquece fichas com fotos PNG,
-país/bandeira, academia (ESPN API) e odds de mercado (BestFightOdds).
+país/bandeira e academia (ESPN API).
 Se o tempo acabar, salva o progresso e continua de onde parou na próxima execução.
 
 Uso: python scraper.py [--max-minutes 300] [--refresh 3] [--enrich-limit 150]
@@ -24,7 +24,6 @@ from playwright.sync_api import sync_playwright
 
 BASE = "http://ufcstats.com"
 ESPN_SEARCH_API = "https://site.web.api.espn.com/apis/common/v3/search"
-BFO_SEARCH_URL = "https://www.bestfightodds.com/search"
 OUT = Path("data")
 DELAY = 0.7
 
@@ -289,7 +288,7 @@ def parse_fighter(fid):
     return d
 
 
-# ---------- enriquecimento externo (ESPN API + BestFightOdds) ----------
+# ---------- enriquecimento externo (ESPN API) ----------
 
 def enrich_fighter_espn(fighter_dict):
     name = fighter_dict.get("name", "")
@@ -331,58 +330,6 @@ def enrich_fighter_espn(fighter_dict):
     return fighter_dict
 
 
-def american_to_prob(odd_str):
-    try:
-        v = float(str(odd_str).replace("+", "").strip())
-        if v < 0:
-            return (-v) / ((-v) + 100.0)
-        if v > 0:
-            return 100.0 / (v + 100.0)
-    except ValueError:
-        pass
-    return None
-
-
-def fetch_bfo_fighter_odds(fighter_name):
-    try:
-        r = S.get(f"{BFO_SEARCH_URL}?query={quote_plus(fighter_name)}", timeout=12)
-        if r.status_code != 200:
-            return {}
-        soup = BeautifulSoup(r.text, "lxml")
-        odds_map = {}
-        for tr in soup.select("table.odds-table tbody tr"):
-            th = tr.select_one("th a, td.oppcell a")
-            if not th:
-                continue
-            fname = norm_name(txt(th))
-            odds_cells = [txt(td) for td in tr.select("td.but-sg, td.moneyline") if re.match(r"^[+-]\d+$", txt(td))]
-            if fname and odds_cells:
-                probs = [american_to_prob(o) for o in odds_cells if american_to_prob(o)]
-                if probs:
-                    odds_map[fname] = sum(probs) / len(probs)
-        return odds_map
-    except Exception:
-        return {}
-
-
-def enrich_upcoming_odds(events_list):
-    for ev in events_list:
-        fights = ev.get("fights", [])
-        if not fights:
-            continue
-        main_a = fights[0]["a"]["name"]
-        odds_map = fetch_bfo_fighter_odds(main_a)
-        if not odds_map:
-            continue
-        for f in fights:
-            na, nb = norm_name(f["a"]["name"]), norm_name(f["b"]["name"])
-            pa, pb = odds_map.get(na), odds_map.get(nb)
-            if pa and pb and (pa + pb) > 0:
-                f["mkt_pa"] = round(pa / (pa + pb), 3)
-                f["mkt_pb"] = round(pb / (pa + pb), 3)
-    return events_list
-
-
 def upcoming(limit=3):
     soup = get(f"{BASE}/statistics/events/upcoming")
     evs, seen = [], set()
@@ -418,7 +365,7 @@ def upcoming(limit=3):
                     "div": division(cells),
                     "title": "title" in cells.lower()
                 })
-    return enrich_upcoming_odds(evs)
+    return evs
 
 
 # ---------- validação ----------

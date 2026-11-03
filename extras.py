@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """extras.py: cálculo em lote dos recursos extras. Só biblioteca padrão. Roda depois do scraper.py e do analytics.py.
 
-  market.json     odds de mercado: registro dos próximos eventos (abertura e fechamento) + odds históricas (CSV opcional)
   excitement.json modelo de "nota de espetáculo": quanto cada característica pré-luta eleva a chance de Fight of the Night
   styles.json     estilos (k-médias nos 6 atributos dos cards) e quem vence quem, já descontada a força (Elo)
   prospects.json  projeção de estreantes por analogia com carreiras do passado, com validação leave-one-out
 
 Todo modelo é validado FORA DA AMOSTRA e o resultado vai junto no JSON: se não prevê nada além do acaso, o app diz isso.
-Uso: python extras.py [--odds-csv arquivo.csv] [--only market,excitement,styles,prospects]
+Uso: python extras.py [--only excitement,styles,prospects,judges,camps]
 """
-import argparse, csv, json, math, random, re, sys, unicodedata, zlib
+import argparse, json, math, random, re, sys, unicodedata, zlib
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -164,69 +163,6 @@ def calib_slope(pairs):
         d = g / h; c += d
         if abs(d) < 1e-6: break
     return c
-
-
-# ---------- 1) MERCADO ----------
-def american(o):
-    try: o = float(str(o).replace("+", ""))
-    except ValueError: return None
-    if o == 0: return None
-    return 100 / (o + 100) if o > 0 else -o / (-o + 100)
-
-
-def devig(oa, ob):
-    pa, pb = american(oa), american(ob)
-    return None if pa is None or pb is None or pa + pb <= 0 else (pa / (pa + pb), pb / (pa + pb))
-
-
-def run_market(fights, csv_path=None):
-    store = load(DATA / "market.json", {"log": {}, "hist": {}})
-    log, hist = store.get("log", {}), store.get("hist", {})
-    today = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    # 1a) registro dos próximos eventos: guarda a abertura (1ª vez vista) e o fechamento (última)
-    for e in load(DATA / "upcoming.json", {}).get("events", []):
-        for ft in e.get("fights", []):
-            pa, pb = ft.get("mkt_pa"), ft.get("mkt_pb")
-            if pa is None or pb is None: continue
-            k = f"{e['id']}:{ft['a']['id']}:{ft['b']['id']}"
-            rec = log.setdefault(k, {"d": e["date"], "o": [pa, pb], "t0": today})
-            rec["c"] = [pa, pb]; rec["t1"] = today
-    # 1b) resolve: liga cada registro (e cada linha do CSV) à luta que aconteceu
-    by_pair = defaultdict(list)
-    for f in fights: by_pair[frozenset((f["a"]["id"], f["b"]["id"]))].append(f)
-    by_name = defaultdict(list)
-    for f in fights: by_name[frozenset((norm(f["a"]["name"]), norm(f["b"]["name"])))].append(f)
-    def near(fs, d):
-        try: dd = date.fromisoformat(d)
-        except (TypeError, ValueError): return None
-        c = [f for f in fs if abs((date.fromisoformat(f["date"]) - dd).days) <= 3]
-        return c[0] if len(c) == 1 else None
-    for k, rec in log.items():
-        _, ia, ib = k.split(":")
-        f = near(by_pair.get(frozenset((ia, ib)), []), rec["d"])
-        if f:
-            pa, pb = rec.get("c", rec["o"]); o = rec["o"]
-            if f["a"]["id"] != ia: pa, pb, o = pb, pa, [o[1], o[0]]
-            hist[f["id"]] = [round(pa, 4), round(pb, 4), round(o[0], 4), "log"]
-    n_csv = 0
-    if csv_path:
-        with open(csv_path, newline="", encoding="utf-8-sig") as fh:
-            rd = csv.DictReader(fh)
-            cols = {c.lower(): c for c in rd.fieldnames or []}
-            ca, cb = cols.get("r_fighter") or cols.get("fighter_a"), cols.get("b_fighter") or cols.get("fighter_b")
-            oa, ob = cols.get("r_odds") or cols.get("odds_a"), cols.get("b_odds") or cols.get("odds_b")
-            cd = cols.get("date")
-            if not all((ca, cb, oa, ob, cd)): print(f"market: CSV sem as colunas esperadas (R_fighter, B_fighter, R_odds, B_odds, date): {rd.fieldnames}"); 
-            else:
-                for row in rd:
-                    p = devig(row[oa], row[ob])
-                    if not p: continue
-                    f = near(by_name.get(frozenset((norm(row[ca]), norm(row[cb]))), []), row[cd][:10])
-                    if not f or f["id"] in hist and hist[f["id"]][3] == "log": continue
-                    pa, pb = (p if norm(f["a"]["name"]) == norm(row[ca]) else p[::-1])
-                    hist[f["id"]] = [round(pa, 4), round(pb, 4), round(pa, 4), "csv"]; n_csv += 1
-    save("market.json", {"v": 1, "updated": today, "log": log, "hist": hist})
-    print(f"market: {len(log)} lutas no registro, {len(hist)} com odds resolvidas ({n_csv} vindas do CSV)")
 
 
 # ---------- 2) ESPETÁCULO (Fight of the Night) ----------
@@ -535,13 +471,12 @@ def run_camps(fights, st):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--odds-csv"); ap.add_argument("--only", default="market,excitement,styles,prospects,judges,camps")
+    ap = argparse.ArgumentParser(); ap.add_argument("--only", default="excitement,styles,prospects,judges,camps")
     a = ap.parse_args(); only = set(a.only.split(","))
     fights = load_fights()
     if not fights: print("extras: data/fights.json ausente ou vazio; nada a fazer."); return 0
     st, snaps = walk(fights)
-    csv_path = a.odds_csv or (str(DATA / "odds_history.csv") if (DATA / "odds_history.csv").exists() else None)   # basta subir o CSV em data/odds_history.csv
-    for name, fn in (("market", lambda: run_market(fights, csv_path)), ("excitement", lambda: run_excitement(fights, st, snaps)),
+    for name, fn in (("excitement", lambda: run_excitement(fights, st, snaps)),
                      ("styles", lambda: run_styles(fights, st, snaps)), ("prospects", lambda: run_prospects(fights, st, snaps)),
                      ("judges", lambda: run_judges(fights, snaps)), ("camps", lambda: run_camps(fights, st))):
         if name in only:

@@ -117,10 +117,39 @@ footer{max-width:980px;margin:auto;padding:0 clamp(1rem,4vw,2rem) 1.5rem;font-si
 .up-ev .fight.open .st{display:block}
 .rdrow{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;margin:.3rem 0}
 .rdrow b{min-width:2rem}
+
+/* ---- reforma de UI/UX ---- */
+.up-fx .fa{display:flex;align-items:center;gap:.5rem;min-width:0}.up-fx .fa:last-child{justify-content:flex-end;text-align:right}
+.fa .ring{display:inline-block;vertical-align:middle;flex:none}.fx .fa>.ring{margin:0 .35rem}
+.fav{height:7px;background:var(--cb);overflow:hidden;margin:.6rem 0 .2rem}.fav i{display:block;height:100%;background:var(--gd)}
+.fvl{display:flex;justify-content:space-between;align-items:center;font-size:.85rem}
+.fa2{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.6rem;flex-wrap:wrap}.fa2 .pickbox{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+.xbar{display:inline-flex;gap:.3rem;flex-wrap:wrap;align-items:center;margin-left:auto;font-family:Archivo,sans-serif;text-transform:none;letter-spacing:0}
+.xbar button{font:700 .72rem Archivo,sans-serif;padding:.28rem .55rem;color:var(--mu);text-transform:none;letter-spacing:0}
+h2.xh{display:flex;align-items:center;flex-wrap:wrap;gap:.4rem .8rem}h1 .xbar{margin-left:.8rem;vertical-align:middle}.xrow{display:flex;justify-content:flex-end;margin:.2rem 0 .5rem}
+nav .more{display:none;flex:1;font:700 1.1rem var(--d);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);background:none;border:0;padding:.85rem 0;clip-path:none}
+nav .more.on{color:var(--gd);box-shadow:inset 0 3px var(--gd)}
+@media(max-width:759px){nav a.mo{display:none}nav .more{display:block}}
+.sheet{position:fixed;inset:0;z-index:40;display:none}.sheet.open{display:block}.sheet .bd{position:absolute;inset:0;background:rgba(0,0,0,.62)}
+.sheet .pn{position:absolute;left:0;right:0;bottom:0;max-height:86vh;overflow:auto;background:var(--s1);border-top:2px solid var(--gd);border-radius:18px 18px 0 0;padding:.9rem 1rem calc(1.2rem + env(safe-area-inset-bottom));max-width:620px;margin:auto}
+.sheet .grab{width:42px;height:4px;background:var(--ln);border-radius:2px;margin:0 auto .9rem}
+.sheet .gr{display:grid;grid-template-columns:repeat(2,1fr);gap:.6rem}
+.shc{display:flex;align-items:center;gap:.7rem;padding:1rem;background:var(--s2);clip-path:var(--ch);font:800 1.15rem var(--d);text-transform:uppercase;color:var(--tx)}.shc.on{background:var(--gd);color:#000}
+.sheet.gs .pn{top:0;bottom:auto;border-top:0;border-bottom:2px solid var(--gd);border-radius:0 0 18px 18px}
+.gsr{display:flex;align-items:center;gap:.7rem;padding:.55rem .8rem;margin:.4rem 0}.gsr .nm{flex:1;min-width:0;font:800 1.05rem var(--d);text-transform:uppercase}.gsr .nm small{display:block;font:400 .75rem Archivo;color:var(--mu);text-transform:none}
+.gsb{display:flex;gap:.3rem;flex-wrap:wrap}.gsb a{font:700 .75rem Archivo;padding:.3rem .6rem;background:var(--s2);clip-path:var(--ch);color:var(--tx)}
+#gsi{width:100%;margin-bottom:.4rem}
+.totop{position:fixed;right:1rem;bottom:calc(4.6rem + env(safe-area-inset-bottom));z-index:20;display:none;width:2.7rem;height:2.7rem;padding:0;font:900 1.3rem var(--d);background:var(--gd);color:#000;clip-path:var(--oct)}.totop.show{display:block}
+@media(min-width:760px){.totop{bottom:1.2rem}}
+.seg.jmp{position:sticky;top:0;z-index:6;background:var(--bg);padding:.5rem 0;margin-bottom:.6rem;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.seg.jmp::-webkit-scrollbar{display:none}.seg.jmp button{flex:none;white-space:nowrap}
+[id^=sc-],[id^=lb-]{scroll-margin-top:3.6rem}
+.tb.hd{color:var(--tx);background:var(--s2);font-weight:700;padding-left:.4rem;padding-right:.4rem}.tb:not(.hd){padding-left:.4rem;padding-right:.4rem}.tb:not(.hd):nth-child(even){background:color-mix(in srgb,var(--s2) 38%,transparent)}
+.spw{margin-top:.6rem}.spi{font-size:.85rem;color:var(--mu);min-height:1.4rem}.spc{position:relative}
+.spd{position:absolute;width:24px;height:24px;transform:translate(-50%,-50%);padding:0;background:transparent;clip-path:none;border-radius:50%}.spd::after{content:'';position:absolute;inset:8px;border-radius:50%;background:var(--gd)}.spd.on::after{inset:5px;background:#fff}
 </style>
 </head>
 <body>
-<div class="top"><span class="brand"><svg viewBox="0 0 40 40"><polygon points="12,1 28,1 39,12 39,28 28,39 12,39 1,28 1,12" fill="none" stroke="#f5c518" stroke-width="3"/><polygon points="14,9 26,9 31,14 31,26 26,31 14,31 9,26 9,14" fill="#f5c518"/></svg>SÚMULA <em>UFC</em></span><nav id="nv"></nav><button class="lg" id="lg">PT</button></div>
+<div class="top"><span class="brand"><svg viewBox="0 0 40 40"><polygon points="12,1 28,1 39,12 39,28 28,39 12,39 1,28 1,12" fill="none" stroke="#f5c518" stroke-width="3"/><polygon points="14,9 26,9 31,14 31,26 26,31 14,31 9,26 9,14" fill="#f5c518"/></svg>SÚMULA <em>UFC</em></span><nav id="nv"></nav><button class="lg" id="gs" aria-label="Buscar" title="/ ou Ctrl+K" style="margin-left:auto">🔍</button><button class="lg" id="lg">PT</button></div>
 <main id="m"><p class="mu" style="padding:2rem 0">Carregando base de dados do UFC…</p></main>
 <footer id="ft"></footer>
 
@@ -137,7 +166,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 <script>
 const $ = s => document.querySelector(s);
-const M = h => { $('#m').innerHTML = h; };
+const M = h => { $('#m').innerHTML = h; if (window.XEXP) window.XEXP.attach(); };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 const S = {
@@ -227,6 +256,7 @@ async function init() {
     try { localStorage.sumulaLang = S.pt ? 'pt' : 'en'; } catch {}
     route();
   };
+  uiInit();
   if (window.XLOAD) await window.XLOAD();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   addEventListener('hashchange', route);
@@ -666,10 +696,21 @@ function upxHtml(e, f, i, ia, ib, k, pr, pb) {
 function upEvent(e, idx, body, tm) {
   const open = S.upOpen[e.id] ?? idx === 0, n = e.fights.length;
   return `<details class="card up-ev" data-ev="${esc(e.id)}"${open ? ' open' : ''} style="margin-bottom:.9rem"><summary><span class="ue-t">${esc(e.name)}</span><span class="ue-b"><span class="mu sm">${fmt(e.date)}${e.location ? ', ' + esc(e.location) : ''}</span>
-    <span class="tag">${n} ${T('fights', 'lutas')}</span><span class="tag" style="background:var(--s2);color:var(--tx)">${tm.pk}/${n} ${T('picks', 'palpites')}</span>${tm.ev ? `<span class="tag" style="background:var(--win)">${tm.ev} +EV</span>` : ''}
-    ${tm.best ? `<span class="mu sm">★ ${esc(tm.best)}</span>` : ''}</span></summary><div class="ue-body">${body}</div></details>`;
+    <span class="tag">${n} ${T('fights', 'lutas')}</span><span class="tag" style="background:var(--s2);color:var(--tx)">${tm.pk}/${n} ${T('picks', 'palpites')}</span>
+    ${tm.best ? `<span class="mu sm">★ ${esc(tm.best)}</span>` : ''}<span class="xbar" data-xk="ev:${esc(e.id)}"></span></span></summary><div class="ue-body">${body}</div></details>`;
 }
-
+/* palpites do usuário em um evento futuro + probabilidades dos modelos (para PNG, CSV e texto) */
+function picksSpec(e) {
+  const P = v => v == null ? '—' : pc(v);
+  const rows = e.fights.map(f => {
+    const ia = mid(f.a.id), ib = mid(f.b.id), L = S.me.log[`${e.id}:${ia}:${ib}`], pr = probs(ia, ib), m = pr || (L && L.pE != null ? {pE: L.pE, pW: L.pW, pS: L.pS, pB: L.pB} : null);
+    return [`${lastName(f.a.name)} x ${lastName(f.b.name)}`, L && L.pick ? lastName(L.pick === 'a' ? f.a.name : f.b.name) : '—', m ? P(m.pE) : '—', m ? P(m.pW) : '—', m ? P(m.pS) : '—', m ? P(m.pB) : '—'];
+  });
+  const n = rows.filter(r => r[1] !== '—').length;
+  return {kind: 'table', share: true, title: T('My picks: ', 'Meus palpites: ') + e.name, file: 'palpites-' + XEXP.slug(e.name),
+    sub: `${fmt(e.date)}${e.location ? ' · ' + e.location : ''} · ${n}/${e.fights.length} ${T('picks', 'palpites')} · ${T('model probabilities refer to the first-named fighter', 'probabilidades dos modelos são do primeiro lutador citado')}`,
+    cols: [T('Fight', 'Luta'), T('My pick', 'Meu palpite'), 'Elo', 'WHR', T('Stats', 'Estat.'), T('Blend', 'Combinado')], rows};
+}
 function drawUp() {
   const el = $('#up');
   if (!el) return;
@@ -680,7 +721,7 @@ function drawUp() {
   if (el.querySelectorAll) el.querySelectorAll('details.up-ev').forEach(d => { S.upOpen[d.dataset.ev] = d.open; });   /* o redesenho não pode fechar o que o usuário abriu */
   const E = getE('ALL'), cut = new Date(Date.now() - 2 * YR).toISOString().slice(0, 10), act = E.rows.filter(x => x.last >= cut).map(x => x.cur).sort((a, b) => a - b);
   const pct = c => { let lo = 0, hi = act.length; while (lo < hi) { const m = (lo + hi) >> 1; act[m] < c ? lo = m + 1 : hi = m; } return act.length ? lo / act.length : .5; };
-  el.innerHTML = S.up.map((e, idx) => { const tm = {pk: 0, ev: 0, best: '', bs: -1}; const body = e.fights.map((f, i) => {
+  el.innerHTML = S.up.map((e, idx) => { const tm = {pk: 0, best: '', bs: -1}; XEXP.reg('ev:' + e.id, () => picksSpec(e)); const body = e.fights.map((f, i) => {
     const ia = mid(f.a.id), ib = mid(f.b.id), k = `${e.id}:${ia}:${ib}`, pr = probs(ia, ib);
     let L = S.me.log[k];
     if (pr && today <= e.date && !(L && L.t)) {
@@ -689,17 +730,17 @@ function drawUp() {
     }
     const pk = L?.pick, pb = pr ? pbest(pr) : 0;
     if (pk) tm.pk++;
-    if (pr && f.mkt_pa != null && Math.abs(pb - f.mkt_pa) >= .06) tm.ev++;
     if (pr) {   /* luta mais aguardada: equilíbrio da previsão + nível dos dois (percentil da nota WHR entre os ativos) */
       const ca = E.RM.get(ia)?.cur, cb = E.RM.get(ib)?.cur, sc = (1 - Math.abs(2 * pb - 1)) + ((ca != null ? pct(ca) : .4) + (cb != null ? pct(cb) : .4)) / 2;
       if (sc > tm.bs) { tm.bs = sc; tm.best = `${lastName(f.a.name)} x ${lastName(f.b.name)}`; }
     }
-    const mkt = f.mkt_pa != null ? `<span>${T('Market', 'Mercado')}: <b>${pc(f.mkt_pa)}</b> / <b>${pc(f.mkt_pb)}</b>${pr && Math.abs(pb - f.mkt_pa) >= .06 ? ` <span class="tag" style="background:var(--win)">+EV ${pb > f.mkt_pa ? esc(lastName(f.a.name)) : esc(lastName(f.b.name))}</span>` : ''}</span>` : '';
-    return `<div class="card fight${S.upX.has(k) ? ' open' : ''}"><div class="fx"><a class="fa" href="#/fighter/${ia}">${esc(f.a.name)}</a><span class="ring"><span>VS</span></span><a class="fa" href="#/fighter/${ib}">${esc(f.b.name)}</a></div>
-    <div class="fi"><span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${pr ? `<span>★ ${pr.best}: <b style="color:var(--gd)">${pc(pb)}</b> / <b style="color:var(--cb)">${pc(1 - pb)}</b></span><span>Elo ${pc(pr.pE)}, WHR ${pc(pr.pW)}, ${T('Stats', 'Estat.')} ${pc(pr.pS)}</span>` : `<span>${T('no rating yet', 'sem nota ainda')}</span>`}${mkt}
-    <span style="margin-left:auto"><button class="pk${S.upX.has(k) ? ' on' : ''}" data-upx="${k}">${T('X-Ray', 'Raio-X')}</button> <button class="pk${pk === 'a' ? ' on' : ''}" data-pick="${k}:a">${esc(lastName(f.a.name))}</button> <button class="pk${pk === 'b' ? ' on' : ''}" data-pick="${k}:b">${esc(lastName(f.b.name))}</button></span></div><div class="st" id="upx-${e.id}-${ia}-${ib}">${S.upX.has(k) ? upxHtml(e, f, i, ia, ib, k, pr, pb) : ''}</div></div>`;
+    return `<div class="card fight${S.upX.has(k) ? ' open' : ''}"><div class="fx up-fx"><a class="fa" href="#/fighter/${ia}">${av(ia, f.a.name, 'sm')}<span>${esc(f.a.name)}</span></a><span class="ring"><span>VS</span></span><a class="fa" href="#/fighter/${ib}"><span>${esc(f.b.name)}</span>${av(ib, f.b.name, 'sm')}</a></div>
+    ${pr ? `<div class="fav" role="img" aria-label="${pc(pb)} / ${pc(1 - pb)}"><i style="width:${(pb * 100).toFixed(1)}%"></i></div><div class="fvl"><b style="color:var(--gd)">${pc(pb)}</b><span class="mu">★ ${pr.best}</span><b style="color:var(--cb)">${pc(1 - pb)}</b></div>` : ''}
+    <div class="fi"><span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${pr ? `<span>Elo ${pc(pr.pE)} · WHR ${pc(pr.pW)} · ${T('Stats', 'Estat.')} ${pc(pr.pS)}</span>` : `<span>${T('no rating yet', 'sem nota ainda')}</span>`}</div>
+    <div class="fa2"><button class="pk${S.upX.has(k) ? ' on' : ''}" data-upx="${k}">🔍 ${T('X-Ray', 'Raio-X')}</button><span class="pickbox"><span class="mu sm">${T('Pick', 'Palpite')}:</span><button class="pk${pk === 'a' ? ' on' : ''}" data-pick="${k}:a">${esc(lastName(f.a.name))}</button><button class="pk${pk === 'b' ? ' on' : ''}" data-pick="${k}:b">${esc(lastName(f.b.name))}</button></span></div><div class="st" id="upx-${e.id}-${ia}-${ib}">${S.upX.has(k) ? upxHtml(e, f, i, ia, ib, k, pr, pb) : ''}</div></div>`;
   }).join(''); return upEvent(e, idx, body, tm); }).join('');
   if (dirty) saveMe();
+  if (window.XEXP) window.XEXP.attach();
 }
 
 function scoreBase() {
@@ -899,8 +940,11 @@ function judgesPanel() {
       if (d) { if (w !== l) { j.mc++; if (ok === (d[0] >= .5)) j.ma++; } if (d[1] === 3) { j.r3++; if (ok) j.r3f++; } }
     }
   }
-  const rows = [...J].filter(([, j]) => j.n >= 25).sort((a, b) => b[1].spd / (b[1].sp || 1) - a[1].spd / (a[1].sp || 1)).slice(0, 25), r0 = lsp ? lspd / lsp : 1 / 3;
-  return `<h2>${T('Judge audit: robbery & dissent index', 'Auditoria de juízes: índice de roubo e dissidência')}</h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
+  const all = [...J].filter(([, j]) => j.n >= 25).sort((a, b) => b[1].spd / (b[1].sp || 1) - a[1].spd / (a[1].sp || 1)), rows = all.slice(0, 25), r0 = lsp ? lspd / lsp : 1 / 3;
+  XEXP.reg('lab:judges', () => ({kind: 'table', title: T('Judge audit: robbery & dissent index', 'Auditoria de juízes: índice de roubo e dissidência'), file: 'auditoria-juizes', sub: T('Dissent = gave the win to the official loser in a split decision', 'Dissidência = deu a vitória ao perdedor oficial numa decisão dividida') + ` · ${T('league', 'liga')} ${pc(r0)}`,
+    cols: [T('Judge', 'Juiz'), T('Decisions', 'Decisões'), T('Split decisions', 'Decisões divididas'), T('Dissents', 'Dissidências'), T('Dissent rate', 'Taxa de dissidência'), 'z', T('Possible robberies judged', 'Possíveis roubos julgados'), T('Sided with official winner', 'A favor do vencedor oficial'), T('Agrees with model', 'Concorda com o modelo')],
+    rows: all.map(([n, j]) => [n, j.n, j.sp, j.spd, j.sp ? pc(j.spd / j.sp) : '—', j.sp >= 10 ? zbn(j.spd, j.sp, r0).toFixed(1) : '—', j.r3, j.r3f, j.mc ? pc(j.ma / j.mc) : '—'])}));
+  return `<h2>${T('Judge audit: robbery & dissent index', 'Auditoria de juízes: índice de roubo e dissidência')}<span class="xbar" data-xk="lab:judges"></span></h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
   ${rows.length ? `<div class="tb hd" style="min-width:34rem;grid-template-columns:1.5fr .6fr 1.2fr 1.2fr 1fr"><span>${T('Judge', 'Juiz')}</span><span>${T('Decisions', 'Decisões')}</span><span>${T('Dissent in split decisions', 'Dissidência em divididas')}</span><span>${T('Sided with official winner in possible robberies', 'A favor do vencedor oficial em possíveis roubos')}</span><span>${T('Agrees with model', 'Concorda com o modelo')}</span></div>
   ${rows.map(([n, j]) => `<div class="tb" style="min-width:34rem;grid-template-columns:1.5fr .6fr 1.2fr 1.2fr 1fr"><span>${esc(n)}</span><span>${j.n}</span><span>${j.sp ? `${j.spd}/${j.sp} (${pc(j.spd / j.sp)}) ${j.sp >= 10 ? zt(zbn(j.spd, j.sp, r0)) : ''}` : '—'}</span><span>${j.r3 ? `${j.r3f}/${j.r3}` : '—'}</span><span>${j.mc ? pc(j.ma / j.mc) : '—'}</span></div>`).join('')}` : `<p class="mu">${T('No judge with 25+ decisions parsed yet.', 'Nenhum juiz com 25+ decisões lidas ainda.')}</p>`}
   <p class="mu sm">${T(`In a 2–1 split one judge dissents by definition, so the league rate is ${pc(r0)}; z compares each judge with it. “Possible robbery” = the stats model gave the official winner under 15%. Patterns are hypotheses, not accusations.`, `Numa decisão dividida um juiz dissente por definição, então a taxa da liga é ${pc(r0)}; o z compara cada juiz com ela. “Possível roubo” = o modelo de estatísticas deu ao vencedor oficial menos de 15%. Os padrões são hipóteses, não acusações.`)}${S.dd ? '' : ' ' + T('(decisions.json missing: the last two columns stay empty)', '(decisions.json ausente: as duas últimas colunas ficam vazias)')}</p></div>`;
@@ -914,9 +958,12 @@ function refsPanel() {
     r.n++; r[k]++;
     if (k === 'KO' && (f.res === 'a' || f.res === 'b') && f.totals && f.totals[f.res]) { const v = num(f.totals[f.res]['Sig. str.']); r.ab += v; r.abn++; ab += v; abn++; }
   }
-  const lg = abn ? ab / abn : 0, rows = [...R].filter(([, r]) => r.n >= 40).sort((a, b) => b[1].n - a[1].n).slice(0, 25);
+  const lg = abn ? ab / abn : 0, all = [...R].filter(([, r]) => r.n >= 40).sort((a, b) => b[1].n - a[1].n), rows = all.slice(0, 25);
+  XEXP.reg('lab:refs', () => ({kind: 'table', title: T('Central referee profile', 'Perfil dos árbitros centrais'), file: 'perfil-arbitros', sub: T(`League average: ${lg.toFixed(0)} significant strikes before a KO/TKO stoppage`, `Média da liga: ${lg.toFixed(0)} golpes significativos antes da parada por KO/TKO`),
+    cols: [T('Referee', 'Árbitro'), T('Fights', 'Lutas'), 'KO/TKO', 'SUB', 'DEC', T('Strikes absorbed (mean)', 'Golpes absorvidos (média)'), T('KO/TKO fights with stats', 'KO/TKO com estatística')],
+    rows: all.map(([n, r]) => [n, r.n, pc(r.KO / r.n), pc(r.SUB / r.n), pc(r.DEC / r.n), r.abn ? (r.ab / r.abn).toFixed(1) : '—', r.abn])}));
   if (S.refSel) setTimeout(() => { const el = document.querySelector('.ref-sel'); if (el && el.scrollIntoView) el.scrollIntoView({block: 'center'}); }, 120);
-  return `<h2>${T('Central referee profile', 'Perfil dos árbitros centrais')}</h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
+  return `<h2>${T('Central referee profile', 'Perfil dos árbitros centrais')}<span class="xbar" data-xk="lab:refs"></span></h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
   ${rows.length ? `<div class="tb hd" style="min-width:36rem;grid-template-columns:1.5fr .6fr .7fr .7fr .7fr 1.5fr"><span>${T('Referee', 'Árbitro')}</span><span>${T('Fights', 'Lutas')}</span><span>KO/TKO</span><span>SUB</span><span>DEC</span><span>${T('Strikes absorbed before a KO/TKO stoppage', 'Golpes absorvidos antes da parada por KO/TKO')}</span></div>
   ${rows.map(([n, r]) => `<div class="tb${S.refSel === n ? ' ref-sel' : ''}" style="min-width:36rem;grid-template-columns:1.5fr .6fr .7fr .7fr .7fr 1.5fr${S.refSel === n ? ';outline:1px solid var(--gd)' : ''}"><span>${esc(n)}</span><span>${r.n}</span><span>${pc(r.KO / r.n)}</span><span>${pc(r.SUB / r.n)}</span><span>${pc(r.DEC / r.n)}</span><span>${r.abn >= 5 ? `${(r.ab / r.abn).toFixed(0)} <span class="mu sm">(${r.ab / r.abn - lg >= 0 ? '+' : ''}${(r.ab / r.abn - lg).toFixed(0)} ${T('vs league', 'vs liga')}, n=${r.abn})</span>` : '—'}</span></div>`).join('')}` : `<p class="mu">${T('No referee with 40+ fights on record yet.', 'Nenhum árbitro com 40+ lutas registradas ainda.')}</p>`}
   <p class="mu sm">${T(`League average: ${lg.toFixed(0)} significant strikes landed by the winner before the stoppage. Low = stops early, high = lets it run. Fighter style also matters, so this is a clue, not a verdict.`, `Média da liga: ${lg.toFixed(0)} golpes significativos acertados pelo vencedor antes da parada. Baixo = para cedo, alto = deixa rolar. O estilo dos lutadores também pesa, então é uma pista, não um veredito.`)}</p></div>`;
@@ -935,8 +982,11 @@ function campsPanel() {
     const p = sg(c * r.x[0]);
     for (const [id, y, pe] of [[r.ix, r.y, p], [r.iy, 1 - r.y, 1 - p]]) { const t = tm(id), x = t && g.get(t); if (x) { x.fn++; x.res += y - pe; x.v += pe * (1 - pe); } }
   }
-  const rows = [...g.values()].filter(x => x.n >= 4).sort((a, b) => (b.act ? b.sum / b.act : 0) - (a.act ? a.sum / a.act : 0)).slice(0, 30), tot = [...S.F.values()].filter(p => p.team).length;
-  return `<h2>${T('Gym ranking (camps)', 'Ranking de academias (camps)')}</h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
+  const all = [...g.values()].filter(x => x.n >= 4).sort((a, b) => (b.act ? b.sum / b.act : 0) - (a.act ? a.sum / a.act : 0)), rows = all.slice(0, 30), tot = [...S.F.values()].filter(p => p.team).length;
+  XEXP.reg('lab:camps', () => ({kind: 'table', title: T('Gym ranking (camps)', 'Ranking de academias (camps)'), file: 'ranking-academias', sub: T('Mean current WHR of active fighters · wins vs pre-fight Elo expectation', 'Nota WHR média dos ativos · vitórias vs expectativa do Elo pré-luta'),
+    cols: [T('Gym', 'Academia'), T('Rated fighters', 'Lutadores avaliados'), T('Active', 'Ativos'), T('Mean WHR (active)', 'WHR médio (ativos)'), T('Wins vs expected (pp)', 'Vitórias vs esperado (pp)'), '±', T('Title wins', 'Vitórias de cinturão')],
+    rows: all.map(x => [[...x.names].sort((a, b) => b[1] - a[1])[0][0], x.n, x.act, x.act ? Math.round(x.sum / x.act) : '—', x.fn ? (100 * x.res / x.fn).toFixed(1) : '—', x.fn ? (196 * Math.sqrt(x.v) / x.fn).toFixed(1) : '—', x.tw])}));
+  return `<h2>${T('Gym ranking (camps)', 'Ranking de academias (camps)')}<span class="xbar" data-xk="lab:camps"></span></h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
   ${rows.length ? `<div class="tb hd" style="min-width:38rem;grid-template-columns:1.8fr .7fr .9fr 1.3fr .8fr"><span>${T('Gym', 'Academia')}</span><span>${T('Fighters', 'Lutadores')}</span><span>${T('Mean WHR (active)', 'WHR médio (ativos)')}</span><span>${T('Wins vs expected', 'Vitórias vs esperado')}</span><span>${T('Title wins', 'Vit. de cinturão')}</span></div>
   ${rows.map(x => { const nm0 = [...x.names].sort((a, b) => b[1] - a[1])[0][0], d = x.fn ? 100 * x.res / x.fn : 0, ci = x.fn ? 196 * Math.sqrt(x.v) / x.fn : 0; return `<div class="tb" style="min-width:38rem;grid-template-columns:1.8fr .7fr .9fr 1.3fr .8fr"><span>${esc(nm0)}</span><span>${x.act}/${x.n}</span><span>${x.act ? Math.round(x.sum / x.act) : '—'}</span><span class="${Math.abs(d) > ci ? (d > 0 ? 'up' : 'dn') : 'mu'}">${d > 0 ? '+' : ''}${d.toFixed(1)} pp <span class="mu sm">±${ci.toFixed(1)}</span></span><span>${x.tw}</span></div>`; }).join('')}` : `<p class="mu">${T('No gym with 4+ rated fighters yet (the gym comes from ESPN).', 'Nenhuma academia com 4+ lutadores avaliados ainda (a academia vem da ESPN).')}</p>`}
   <p class="mu sm">${T(`${tot} fighters have a gym on record. “Wins vs expected” uses the pre-fight Elo (past only), so a gym’s fighters are mostly already rated at their level: values near zero are normal. The gym is the CURRENT one, applied to the whole career. “Active” = fought in the last 3 years.`, `${tot} lutadores têm academia registrada. “Vitórias vs esperado” usa o Elo pré-luta (só o passado), então os lutadores de uma academia já estão, em geral, avaliados no seu nível: valores perto de zero são normais. A academia é a ATUAL, aplicada à carreira inteira. “Ativo” = lutou nos últimos 3 anos.`)}</p></div>`;
@@ -957,16 +1007,36 @@ function ageInner() {
       const b = B[binOf(a)]; b.n++; b.w += y; b.e += pe; b.v += pe * (1 - pe); if (y === 0 && koL) b.ko++;
     }
   }
+  S._ageB = B;
   return `<div class="tb hd" style="grid-template-columns:.8fr .7fr 1.6fr 1.2fr"><span>${T('Age', 'Idade')}</span><span>${T('Fights', 'Lutas')}</span><span>${T('Wins vs expected', 'Vitórias vs esperado')}</span><span>${T('KO/TKO losses', 'Derrotas por KO/TKO')}</span></div>` +
     B.map((b, i) => { const d = b.n ? 100 * (b.w - b.e) / b.n : 0, ci = b.n ? 196 * Math.sqrt(b.v) / b.n : 0; return `<div class="tb" style="grid-template-columns:.8fr .7fr 1.6fr 1.2fr"><span><b>${AGE_BINS[i]}</b></span><span>${b.n}</span><span>${b.n >= 30 ? `<span class="${Math.abs(d) > ci ? (d > 0 ? 'up' : 'dn') : 'mu'}">${d > 0 ? '+' : ''}${d.toFixed(1)} pp</span> <span class="mu sm">±${ci.toFixed(1)} (${pc(b.w / b.n)} vs ${pc(b.e / b.n)})</span>` : '—'}</span><span>${b.n >= 30 ? pc(b.ko / b.n) : '—'}</span></div>`; }).join('');
 }
 function ageSel(v) { S.ageDiv = v; const el = document.getElementById('agep'); if (el) el.innerHTML = ageInner(); }
 function agePanel() {
   const divs = [...new Set(S.fg.map(f => f.div))].filter(d => d && !NONSTD.has(d)).sort(), sel = S.ageDiv || 'ALL';
-  return `<h2>${T('Age curve: the 35-year-old curse', 'Curva de idade: a maldição dos 35')}</h2><div class="card" style="padding:.8rem 1.1rem"><div class="ctl"><label>${T('Division', 'Divisão')}<select onchange="ageSel(this.value)"><option value="ALL"${sel === 'ALL' ? ' selected' : ''}>${T('All divisions', 'Todas as divisões')}</option><option value="LT"${sel === 'LT' ? ' selected' : ''}>${T('Lightweight and below', 'Peso Leve e abaixo')}</option><option value="WW"${sel === 'WW' ? ' selected' : ''}>${T('Welterweight', 'Peso Meio-Médio')}</option><option value="HV"${sel === 'HV' ? ' selected' : ''}>${T('Middleweight and above', 'Peso Médio e acima')}</option>${divs.map(d => `<option${sel === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select></label></div>
+  return `<h2>${T('Age curve: the 35-year-old curse', 'Curva de idade: a maldição dos 35')}<span class="xbar" data-xk="lab:age"></span></h2><div class="card" style="padding:.8rem 1.1rem"><div class="ctl"><label>${T('Division', 'Divisão')}<select onchange="ageSel(this.value)"><option value="ALL"${sel === 'ALL' ? ' selected' : ''}>${T('All divisions', 'Todas as divisões')}</option><option value="LT"${sel === 'LT' ? ' selected' : ''}>${T('Lightweight and below', 'Peso Leve e abaixo')}</option><option value="WW"${sel === 'WW' ? ' selected' : ''}>${T('Welterweight', 'Peso Meio-Médio')}</option><option value="HV"${sel === 'HV' ? ' selected' : ''}>${T('Middleweight and above', 'Peso Médio e acima')}</option>${divs.map(d => `<option${sel === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select></label></div>
   <div id="agep">${ageInner()}</div><p class="mu sm">${T('Win rate minus what the pre-fight Elo expected, by age on fight night (fighters with a known birth date). Older fighters who stay in the UFC are a selected group, so a mild curve can hide a steeper decline among those who left.', 'Taxa de vitória menos o que o Elo pré-luta esperava, pela idade no dia da luta (lutadores com data de nascimento conhecida). Lutadores mais velhos que continuam no UFC são um grupo selecionado, então uma curva suave pode esconder um declínio maior entre os que saíram.')}</p></div>`;
 }
-function labPanels() { try { return judgesPanel() + refsPanel() + campsPanel() + agePanel(); } catch (e) { return ''; } }
+function logSpec() {
+  const rows = [];
+  for (const [k, L] of Object.entries(S.me.log)) {
+    if (!L.a) continue;
+    const t = Date.parse(L.date), f = S.fg.find(f => f.res !== 'nc' && Math.abs(Date.parse(f.date) - t) <= 3 * 864e5 && ((mid(f.a.id) === L.a && mid(f.b.id) === L.b) || (mid(f.a.id) === L.b && mid(f.b.id) === L.a)));
+    const A = S.F.get(L.a)?.name || L.a, B = S.F.get(L.b)?.name || L.b, P = v => v == null ? '' : pc(v);
+    const win = !f ? '' : f.res === 'draw' ? T('Draw', 'Empate') : (mid((f.res === 'a' ? f.a : f.b).id) === L.a ? A : B);
+    rows.push([L.date, A, B, P(L.pE), P(L.pW), P(L.pS), P(L.pB), L.pick ? (L.pick === 'a' ? A : B) : '', win || T('pending', 'pendente'), f && f.res !== 'draw' && L.pick ? ((mid((f.res === 'a' ? f.a : f.b).id) === L.a) === (L.pick === 'a') ? T('yes', 'sim') : T('no', 'não')) : '', (L.rds || []).map(v => v == null ? '-' : v).join(' ')]);
+  }
+  rows.sort((a, b) => b[0] < a[0] ? -1 : 1);
+  return {kind: 'table', title: T('Prediction log and scorecard', 'Registro de previsões e placar'), file: 'registro-previsoes', sub: T('Probabilities refer to the first-named fighter · scorecard: A 10-8 = 2, A 10-9 = 1, 10-10 = 0, B = negative', 'Probabilidades do primeiro lutador citado · scorecard: A 10-8 = 2, A 10-9 = 1, 10-10 = 0, B = negativo'),
+    cols: [T('Date', 'Data'), T('Fighter A', 'Lutador A'), T('Fighter B', 'Lutador B'), 'Elo (A)', 'WHR (A)', T('Stats (A)', 'Estat. (A)'), T('Blend (A)', 'Combinado (A)'), T('My pick', 'Meu palpite'), T('Winner', 'Vencedor'), T('Pick correct', 'Acertou'), T('Rounds scored', 'Rounds pontuados')], rows};
+}
+function ageSpec() {
+  ageInner(); const B = S._ageB || [], sel = S.ageDiv || 'ALL';
+  return {kind: 'table', title: T('Age curve: the 35-year-old curse', 'Curva de idade: a maldição dos 35'), file: 'curva-de-idade', sub: `${T('Division', 'Divisão')}: ${sel}`,
+    cols: [T('Age', 'Idade'), T('Fights', 'Lutas'), T('Win rate', 'Vitórias'), T('Expected', 'Esperado'), T('Difference (pp)', 'Diferença (pp)'), '±', T('KO/TKO losses', 'Derrotas por KO/TKO')],
+    rows: B.map((b, i) => [AGE_BINS[i].replace('&lt;', '<'), b.n, b.n ? pc(b.w / b.n) : '—', b.n ? pc(b.e / b.n) : '—', b.n ? (100 * (b.w - b.e) / b.n).toFixed(1) : '—', b.n ? (196 * Math.sqrt(b.v) / b.n).toFixed(1) : '—', b.n ? pc(b.ko / b.n) : '—'])};
+}
+function labPanels() { XEXP.reg('lab:log', logSpec); XEXP.reg('lab:age', ageSpec); try { return judgesPanel() + refsPanel() + campsPanel() + agePanel(); } catch (e) { return ''; } }
 
 function extraLab() {
   const E = getE('ALL'), now = Date.now(), byId = new Map(S.fg.map(f => [f.id, f]));
@@ -984,7 +1054,7 @@ function extraLab() {
   ${rg.map(r => `<div class="tb"><span><a href="#/fighter/${r.id}">${esc(S.F.get(r.id)?.name || r.id)}</a><br><span class="mu sm">${esc(r.div)}</span></span><span>${r.start.slice(0, 4)}–${r.e ? r.e.slice(0, 4) : T('now', 'hoje')}</span><span>${Math.round(r.d)}</span><span>${r.def}</span></div>`).join('')}
   <p class="mu sm">${T('Reigns are inferred from title-fight results; a champion who vacated is closed at the last title activity.', 'Os reinados são deduzidos dos resultados das lutas de título; quem deixou o cinturão vago é encerrado na última atividade de título.')}</p></div>
   <h2>${T('Biggest upsets', 'Maiores zebras')}</h2><div class="card" style="padding:.6rem 1.1rem">${up.slice(0, 10).map(u => { const f = byId.get(u.n.f); return `<div class="h" style="grid-template-columns:1fr auto"><span><a href="#/event/${f?.ev}/${u.n.f}"><b>${esc(S.F.get(u.n.id)?.name || u.n.id)}</b></a> ${T('beat', 'venceu')} ${esc(S.F.get(u.g.o.id)?.name || u.g.o.id)}<br><span class="mu sm">${fmt(u.n.dt)}, ${esc(f?.method || '')}</span></span><b class="up">${pc(u.p)}</b></div>`; }).join('')}<p class="mu sm">${T('Pre-fight win chance of the winner according to the WHR rating (with hindsight). Only fighters with 3+ fights.', 'Chance de vitória do vencedor antes da luta segundo o WHR (com visão retrospectiva). Só lutadores com 3+ lutas.')}</p></div>
-  <h2>${T('Prediction log and scorecard', 'Registro de previsões e placar')}</h2><div class="card" style="padding:.8rem 1.1rem">${scoreHtml()}</div>` + labPanels() + (window.XL ? window.XL() : '');
+  <h2>${T('Prediction log and scorecard', 'Registro de previsões e placar')}<span class="xbar" data-xk="lab:log"></span></h2><div class="card" style="padding:.8rem 1.1rem">${scoreHtml()}</div>` + labPanels() + (window.XL ? window.XL() : '');
 }
 
 function shareCard() {
@@ -1075,7 +1145,7 @@ function statRows(f) {
 function refGo(a) { S.refSel = a.dataset.ref; }
 function fightRow(f) {
   const w = s => f.res === 'draw' || f.res === 'nc' ? '' : (f.res === s ? 'w' : 'l');
-  const side = s => `<a class="fa ${w(s)}" href="#/fighter/${mid(f[s].id)}">${esc(name(f[s]))}</a>`;
+  const side = s => `<a class="fa ${w(s)}" href="#/fighter/${mid(f[s].id)}">${s === 'a' ? av(mid(f[s].id), name(f[s]), 'sm') + ' ' : ''}${esc(name(f[s]))}${s === 'b' ? ' ' + av(mid(f[s].id), name(f[s]), 'sm') : ''}</a>`;
   const out = f.res === 'draw' ? T('Draw', 'Empate') : f.res === 'nc' ? T('No contest', 'Sem resultado') : esc(f.method);
   return `<article class="card fight" id="f${f.id}"><div class="fx">${side('a')}<span class="ring"><span>VS</span></span>${side('b')}</div>
   <div class="fi"><span>${out}</span>${f.round ? `<span>R${esc(f.round)} ${esc(f.time)}</span>` : ''}<span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${f.ref ? `<span>Ref: <a href="#/lab" data-ref="${esc(f.ref)}" onclick="refGo(this)" style="text-decoration:underline">${esc(f.ref)}</a></span>` : ''}${window.XB ? window.XB(f) : ''}<button data-f="${f.id}">${T('Stats', 'Estatísticas')}</button></div><div class="st"></div></article>`;
@@ -1109,9 +1179,10 @@ function vRank() {
     ['min', T('Minimum fights', 'Mínimo de lutas'), 1],
     ['act', T('Active in the last N years (Current view)', 'Ativo nos últimos anos (visão Atual)'), 1]
   ];
-  M(`<h1>${T('Rankings', 'Rankings')}</h1><div class="ctl"><label>${T('View', 'Visão')}<select id="md"><option value="cur">${T('Current (active fighters)', 'Atual (lutadores ativos)')}</option><option value="hist">${T('All-time (career résumé)', 'Histórico (campanha da carreira)')}</option></select></label>
+  M(`<h1>${T('Rankings', 'Rankings')}<span class="xbar" data-xk="rank"></span></h1><div class="ctl"><label>${T('View', 'Visão')}<select id="md"><option value="cur">${T('Current (active fighters)', 'Atual (lutadores ativos)')}</option><option value="hist">${T('All-time (career résumé)', 'Histórico (campanha da carreira)')}</option></select></label>
   <label>${T('Division', 'Divisão')}<select id="dv"><option value="ALL">${T('General (all fights)', 'Geral (todas as lutas)')}</option><option value="P4P">${T('Pound-for-pound (z-score by division)', 'Pound-for-pound (z-score por divisão)')}</option>${divs.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
-  ${C.map(([k, l, s]) => `<label>${l}<input data-p="${k}" type="number" step="${s}" min="0" value="${P[k]}"></label>`).join('')}</div>
+</div>
+  <details class="card" style="margin-bottom:1rem;padding:.2rem 1rem .9rem"><summary style="padding:.7rem 0">⚙️ ${T('Model parameters (volatility, weights, activity filter)', 'Parâmetros do Modelo (Volatilidade, Pesos, Filtro de Atividade)')}</summary><div class="ctl" style="margin-top:.4rem">${C.map(([k, l, s]) => `<label>${l}<input data-p="${k}" type="number" step="${s}" min="0" value="${P[k]}"></label>`).join('')}</div><button id="rstP" style="margin-top:.6rem">${T('Restore default', 'Restaurar padrão')}</button></details>
   <p class="mu sm" id="cal"></p><div id="rk"></div><div id="tn8"></div>
   <details class="card"><summary>${T('How the numbers are calculated', 'Como os números são calculados')}</summary>
   <p><b>${T('Strength', 'Força')}:</b> ${T('Whole-History Rating (Coulom, 2008) estimates each fighter’s rating at every fight using the entire history, before and after it, so a win over someone who later became elite is worth more. Win chance follows the Bradley–Terry/Elo logistic curve (1952, 1978); ratings drift slowly over time like a random walk (Glickman, 1999).', 'O Whole-History Rating (Coulom, 2008) estima a nota de cada lutador em cada luta usando todo o histórico, antes e depois dela, então uma vitória sobre quem depois virou elite vale mais. A chance de vitória segue a curva logística de Bradley–Terry/Elo (1952, 1978), e a nota varia devagar no tempo como um passeio aleatório (Glickman, 1999).')}</p>
@@ -1137,6 +1208,11 @@ function vRank() {
     };
     $('#cal').textContent = v && v.n ? T(`Blind test: with data up to ${fmt(v.cut)}, the favorite won ${(v.ok / v.n * 100).toFixed(1)}% of ${v.n.toLocaleString('en-US')} later fights, log-loss ${(v.ll / v.n).toFixed(3)}.`, `Teste cego: com dados até ${fmt(v.cut)}, o favorito venceu em ${(v.ok / v.n * 100).toFixed(1)}% de ${v.n.toLocaleString('pt-BR')} lutas seguintes, log-loss ${(v.ll / v.n).toFixed(3)}.`) : '';
     const hi = r[0]?.v, lo = r.at(-1)?.v;
+    XEXP.reg('rank', () => ({kind: 'rank', file: 'ranking-' + (p4 ? 'p4p' : dv.toLowerCase()) + '-' + (hist ? 'historico' : 'atual'),
+      title: `Rankings: ${hist ? T('All-time', 'Histórico') : T('Current', 'Atual')} · ${p4 ? 'Pound-for-pound' : dv === 'ALL' ? T('General', 'Geral') : dv}`, sub: hist ? T('Career résumé score', 'Pontuação da campanha') : T('Current rating (WHR)', 'Nota atual (WHR)') + ' · ' + T(`active in the last ${P.act} years`, `ativos nos últimos ${P.act} anos`),
+      rank: r.slice(0, 60).map((x, i) => ({pos: i + 1, name: S.F.get(x.id)?.name || x.id, sub: `${x.w}-${x.l}-${x.d} UFC · ${fmt(x.last)}`, val: String(Math.round(x.v)), pct: hi === lo ? 1 : (x.v - lo) / (hi - lo)})),
+      cols: [T('Pos', 'Pos'), T('Fighter', 'Lutador'), 'W', 'L', 'D', T('Last fight', 'Última luta'), hist ? T('All-time score', 'Pontuação histórica') : T('Rating', 'Nota')],
+      rows: r.map((x, i) => [i + 1, S.F.get(x.id)?.name || x.id, x.w, x.l, x.d, x.last, Math.round(x.v)])}));
     $('#rk').innerHTML = r.length ? r.map((x, i) => `<a class="card rk" href="#/fighter/${x.id}"><span class="ring"><span>${i + 1}</span></span><span class="nm">${S.me.fav[x.id] ? '★ ' : ''}${esc(S.F.get(x.id)?.name || x.id)}<small>${x.w}-${x.l}-${x.d} UFC, ${T('last fight', 'última luta')} ${fmt(x.last)}${dline(x)}</small><i class="mb"><b style="width:${hi === lo ? 100 : (x.v - lo) / (hi - lo) * 100}%"></b></i></span><span class="rt">${p4 ? x.v.toFixed(2) + 'σ' : Math.round(x.v)}<small>${p4 ? esc(x.div) : hist ? `${T('peak rating', 'nota máxima')} ${Math.round(x.pk)} ${T('in', 'em')} ${x.pkd.slice(0, 4)}${x.cq + x.df ? `<br>${T('belt', 'cinturão')}: ${x.cq} ${T('won', 'conq.')}, ${x.df} ${T('def.', 'def.')}` : ''}` : `${T('peak', 'pico')} ${Math.round(x.pk)}`}</small></span></a>`).join('') : empty();
     $('#tn8').innerHTML = r.length >= 8 ? `<button id="t8" style="margin-top:.4rem">${T('Simulate an 8-fighter tournament (top 8 of this list)', 'Simular um torneio de 8 (top 8 desta lista)')}</button><div id="t8o"></div>` : '';
     const bt = $('#t8'); if (bt) bt.onclick = () => runT(r.slice(0, 8).map(x => x.id), 'ALL', hist);
@@ -1149,6 +1225,12 @@ function vRank() {
     try { localStorage.sumulaP4 = JSON.stringify(P); } catch {}
     clearTimeout(tm); tm = setTimeout(draw, 400);
   });
+  $('#rstP').onclick = () => {
+    Object.assign(P, {vol: 80, fin: 1, title: .25, tw: 1, min: 1, act: 2});
+    try { localStorage.sumulaP4 = JSON.stringify(P); } catch {}
+    document.querySelectorAll('input[data-p]').forEach(i => { i.value = P[i.dataset.p]; });
+    draw();
+  };
   draw();
 }
 
@@ -1184,7 +1266,27 @@ function spark(h) {
   if (h.length < 2) return '';
   const W = 600, Hh = 130, v = h.map(x => x.a), lo = Math.min(...v), hi = Math.max(...v);
   const X = i => i / (h.length - 1) * W, Y = y => Hh - 5 - (y - lo) / (hi - lo || 1) * (Hh - 10);
-  return `<svg class="sp" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img"><polyline points="${h.map((x, i) => `${X(i)},${Y(x.a)}`).join(' ')}" fill="none" stroke="var(--gd)" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`;
+  const svg = `<svg class="sp" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img"><polyline points="${h.map((x, i) => `${X(i)},${Y(x.a)}`).join(' ')}" fill="none" stroke="var(--gd)" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`;
+  const dots = h.map((x, i) => x.t ? `<button type="button" class="spd" style="left:${(X(i) / W * 100).toFixed(2)}%;top:${(Y(x.a) / Hh * 100).toFixed(2)}%" data-t="${esc(x.t)}" aria-label="${esc(x.t)}" onclick="spI(this)" onmouseenter="spI(this)" onfocus="spI(this)"></button>` : '').join('');
+  return `<div class="spw"><div class="spi">${h.some(x => x.t) ? T('Tap or hover a point to see the fight', 'Toque ou passe o mouse num ponto para ver a luta') : ''}</div><div class="spc">${svg}${dots}</div></div>`;
+}
+function spI(b) {
+  const w = b.closest('.spw'); w.querySelector('.spi').textContent = b.dataset.t;
+  w.querySelectorAll('.spd.on').forEach(x => x.classList.remove('on')); b.classList.add('on');
+}
+function jmp(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+const jchip = (id, l) => `<button type="button" onclick="jmp('${id}')">${l}</button>`;
+function fighterPack(id) {
+  const rd = [0, 1, 2, 3, 4].map(() => ({l: 0, n: 0})), tg = {Head: 0, Body: 0, Leg: 0, Distance: 0, Clinch: 0, Ground: 0};
+  for (const f of S.fg) {
+    if (mid(f.a.id) !== id && mid(f.b.id) !== id) continue;
+    const me = mid(f.a.id) === id ? 'a' : 'b', full = /decision/i.test(f.method || ''), last = parseInt(f.round) || 0;
+    (f.rounds?.totals || []).forEach((r, i) => { if (i < 5 && r[me] && (full || i + 1 < last)) { rd[i].l += num(r[me]['Sig. str.']); rd[i].n++; } });
+    if (f.sig) for (const k in tg) tg[k] += num(f.sig[me]?.[k]);
+  }
+  const rv = rd.map(r => r.n >= 3 ? r.l / r.n : null), mx = Math.max(...rv.filter(v => v != null), 1), t1 = tg.Head + tg.Body + tg.Leg, t2 = tg.Distance + tg.Clinch + tg.Ground;
+  const L = {Head: T('Head', 'Cabeça'), Body: T('Body', 'Corpo'), Leg: T('Leg', 'Perna'), Distance: T('Distance', 'Distância'), Clinch: 'Clinch', Ground: T('Ground', 'Solo')};
+  return {cardio: rv.map((v, i) => v == null ? null : ['R' + (i + 1), v.toFixed(1), v / mx]).filter(Boolean), sig: t1 + t2 ? Object.keys(tg).map((k, i) => [L[k], tg[k] / ((i < 3 ? t1 : t2) || 1)]) : []};
 }
 
 function photo(id, file) {
@@ -1235,14 +1337,27 @@ function vFighter(id) {
   const resume = wl.length ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Résumé highlights', 'Destaques da campanha')}</b>${bw.length ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Best wins (opponent rating then)', 'Melhores vitórias (nota do rival na época)')}</p>${bw.map(x => li(x, 'var(--win)')).join('')}` : ''}${wr ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Worst loss', 'Pior derrota')}</p>${li(wr, 'var(--loss)')}` : ''}${sos != null ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Strength of schedule: average opponent rating', 'Força do calendário: nota média dos rivais')} <b style="color:var(--tx)">${el(sos)}</b></p>` : ''}</div>` : '';
   M(`<a class="mu" href="#/fighters">${T('Search fighters', 'Buscar lutadores')}</a>
   <div class="hero">${av(id, p.name, 'big')}<div><h1>${S.me.fav[id] ? '★ ' : ''}${esc(p.name)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}${p.country ? ` • ${esc(p.country)}` : ''}${p.team ? ` (${esc(p.team)})` : ''}</span></div></div>
-  <div class="acts"><button id="fv">${S.me.fav[id] ? T('★ Favorite', '★ Favorito') : T('☆ Add to favorites', '☆ Favoritar')}</button><label class="btn">${T('Photo', 'Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id] ? `<button id="rp">${T('Remove photo', 'Remover foto')}</button>` : ''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight', 'Simular luta')}</a><a class="btn" href="#/xray/${id}">${T('X-Ray', 'Raio-X')}</a></div>
+  <div class="acts"><button id="fv">${S.me.fav[id] ? T('★ Favorite', '★ Favorito') : T('☆ Add to favorites', '☆ Favoritar')}</button><label class="btn">${T('Photo', 'Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id] ? `<button id="rp">${T('Remove photo', 'Remover foto')}</button>` : ''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight', 'Simular luta')}</a><a class="btn" href="#/xray/${id}">${T('X-Ray', 'Raio-X')}</a><span class="xbar" data-xk="fighter"></span></div>
+  <div class="seg jmp" id="fj">${me ? jchip('sc-rate', '📊 ' + T('Rating & evolution', 'Nota & Evolução')) : ''}${resume ? jchip('sc-hi', '🏆 ' + T('Highlights', 'Destaques')) : ''}${jchip('sc-an', '🧬 ' + T('Tactical analysis', 'Análise Tática'))}${jchip('sc-notes', '📝 ' + T('Notes & profile', 'Notas & Ficha'))}${jchip('sc-hist', '🥊 ' + T('History', 'Histórico'))}</div>
   <label class="ctl" style="display:grid"><span class="mu sm">${T('Rating scope', 'Escopo da nota')}</span><select id="ps">${opts.map(o => `<option value="${esc(o)}"${o === d ? ' selected' : ''}>${o === 'ALL' ? T('General (all fights)', 'Geral (todas as lutas)') : esc(o)}</option>`).join('')}</select></label>
-  ${me ? `<div class="card" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">${T('Current rating', 'Nota atual')}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">${T('peak rating', 'nota máxima')} ${Math.round(me.pk)} ${T('in', 'em')} ${me.pkd.slice(0, 4)}<br>${T('all-time score', 'pontuação histórica')} ${Math.round(me.hs)}${me.cq + me.df + me.iv ? `<br>${T('belt', 'cinturão')}: ${me.cq} ${T('won', 'conq.')}, ${me.df} ${T('def.', 'def.')}${me.iv ? `, ${me.iv} ${T('interim', 'interino')}` : ''}` : ''}<br>${me.w}-${me.l}-${me.d}</span></div>${spark(N.map(n => ({a: el(n.r)})))}</div>` : ''}
-  ${resume}${window.XP ? window.XP(id) : ''}
-  <h2>${T('Analysis', 'Análise')}</h2>${analysis(id)}
-  <h2>${T('My notes', 'Minhas anotações')}</h2><textarea id="nt" placeholder="${T('Write anything about this fighter…', 'Escreva o que quiser sobre este lutador…')}">${esc(S.me.note[id] || '')}</textarea>
+  ${me ? `<div class="card" id="sc-rate" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">${T('Current rating', 'Nota atual')}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">${T('peak rating', 'nota máxima')} ${Math.round(me.pk)} ${T('in', 'em')} ${me.pkd.slice(0, 4)}<br>${T('all-time score', 'pontuação histórica')} ${Math.round(me.hs)}${me.cq + me.df + me.iv ? `<br>${T('belt', 'cinturão')}: ${me.cq} ${T('won', 'conq.')}, ${me.df} ${T('def.', 'def.')}${me.iv ? `, ${me.iv} ${T('interim', 'interino')}` : ''}` : ''}<br>${me.w}-${me.l}-${me.d}</span></div>${spark(N.map(n => { const f = fs.find(x => x.id === n.f), o = n.gs[0].o, s_ = n.gs[0].s, r_ = s_ === 1 ? (S.pt ? 'V' : 'W') : s_ === 0 ? (S.pt ? 'D' : 'L') : (S.pt ? 'E' : 'D'); return {a: el(n.r), t: f ? `${fmt(n.dt)} · vs ${S.F.get(o.id)?.name || o.id} · ${r_}${f.method ? ' (' + f.method + ')' : ''} · ${T('rating', 'nota')} ${el(n.r)}` : ''}; }))}</div>` : ''}
+  <div id="sc-hi">${resume}</div>${window.XP ? window.XP(id) : ''}
+  <h2 id="sc-an">${T('Analysis', 'Análise')}</h2>${analysis(id)}
+  <h2 id="sc-notes">${T('My notes', 'Minhas anotações')}</h2><textarea id="nt" placeholder="${T('Write anything about this fighter…', 'Escreva o que quiser sobre este lutador…')}">${esc(S.me.note[id] || '')}</textarea>
   <h2>${T('Profile', 'Ficha')}</h2><dl class="card bio">${Object.entries(p).filter(([k]) => !skip.includes(k)).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
-  <h2>${T('Fight history', 'Histórico')}</h2><p class="mu sm">${T('Per fight: points won or lost (right, with the rating after the fight), win chance, both ratings then, and the opponent’s peak. Tap the date or "View fight" to open the fight with full stats.', 'Em cada luta: pontos ganhos ou perdidos (à direita, com a nota depois da luta), chance de vitória, nota dos dois na época e pico do rival. Toque na data ou em "Ver luta" para abrir a luta com todas as estatísticas.')}</p>${hist || empty()}`);
+  <h2 id="sc-hist">${T('Fight history', 'Histórico')}</h2><p class="mu sm">${T('Per fight: points won or lost (right, with the rating after the fight), win chance, both ratings then, and the opponent’s peak. Tap the date or "View fight" to open the fight with full stats.', 'Em cada luta: pontos ganhos ou perdidos (à direita, com a nota depois da luta), chance de vitória, nota dos dois na época e pico do rival. Toque na data ou em "Ver luta" para abrir a luta com todas as estatísticas.')}</p>${hist || empty()}`);
+  XEXP.reg('fighter', () => {
+    const pk_ = fighterPack(id), res_ = f => { const a = mid(f.a.id) === id; const r = f.res === 'draw' ? 'D' : f.res === 'nc' ? 'NC' : (f.res === (a ? 'a' : 'b') ? 'W' : 'L'); return S.pt ? {W: 'V', L: 'D', D: 'E', NC: 'SR'}[r] : r; };
+    const hi = [];
+    if (bw.length) hi.push({k: T('Best wins', 'Melhores vitórias'), v: bw.map(x => `${name(x.o)} (${el(x.q)})`).join(', ')});
+    if (wr) hi.push({k: T('Worst loss', 'Pior derrota'), v: `${name(wr.o)} (${el(wr.q)})`});
+    if (sos != null) hi.push({k: T('Average rival rating', 'Nota média dos rivais'), v: String(el(sos))});
+    if (me) hi.push({k: T('UFC record', 'Cartel no UFC'), v: `${me.w}-${me.l}-${me.d}${me.cq + me.df ? ` · ${T('title wins', 'vitórias de cinturão')} ${me.cq + me.df}` : ''}`});
+    return {kind: 'fighter', title: p.name, file: 'atleta-' + XEXP.slug(p.name), share: false, sub: `${p.nick ? '“' + p.nick + '” · ' : ''}${p.record || ''}${p.country ? ' · ' + p.country : ''}${p.team ? ' · ' + p.team : ''}`,
+      fighter: {id, name: p.name, photo: photoOf(id), cur: me ? Math.round(me.cur) : null, pk: me ? Math.round(me.pk) : null, pkYear: me ? me.pkd.slice(0, 4) : '', hs: me ? Math.round(me.hs) : null, scope: d, series: N.map(n => el(n.r)), hi, sig: pk_.sig, cardio: pk_.cardio},
+      cols: [T('Date', 'Data'), T('Opponent', 'Adversário'), T('Result', 'Resultado'), T('Method', 'Método'), 'Round', T('Division', 'Divisão'), T('Title', 'Cinturão'), T('Rating after', 'Nota depois')],
+      rows: fs.map(f => { const a = mid(f.a.id) === id, o = a ? f.b : f.a, n = nm.get(f.id); return [f.date, name(o), res_(f), f.method || '', f.round ? 'R' + f.round : '', f.div, f.title ? T('Title', 'Cinturão') : '', n ? el(n.r) : '']; })};
+  });
   $('#fv').onclick = () => { S.me.fav[id] ? delete S.me.fav[id] : S.me.fav[id] = 1; saveMe(); vFighter(id); };
   $('#ph').onchange = e => e.target.files[0] && photo(id, e.target.files[0]);
   const rp = $('#rp'); if (rp) rp.onclick = () => { delete S.me.ph[id]; saveMe(); vFighter(id); };
@@ -1324,7 +1439,7 @@ function simOut(q) {
   const ma = meth(oa, ob, G), mb = meth(ob, oa, G), nm = {KO:'KO/TKO', SUB:T('Submission', 'Finalização'), DEC:T('Decision', 'Decisão'), OTH:T('Other', 'Outro')};
   h += `<h2>${T('How it ends', 'Como termina')}</h2><div class="card" style="padding:.8rem 1.1rem">${KS.filter(k => k !== 'OTH').map(k => sr(nm[k], pc(p * ma[k]), pc((1 - p) * mb[k]), p * ma[k], (1 - p) * mb[k])).join('')}
   <p class="mu sm">${T('Goes the distance', 'Vai para a decisão')}: ${pc(p * ma.DEC + (1 - p) * mb.DEC)}.</p></div>
-  <details class="card"><summary>${T('Method', 'Método')}</summary><p>${T('Win probability comes from the rating model (WHR) with uncertainty. Method odds combine how each fighter wins with how the opponent loses (naive Bayes, smoothed toward the UFC average).', 'A probabilidade vem do modelo de notas (WHR) com incerteza. As chances por método combinam como cada lutador vence com como o rival perde (Bayes ingênuo, suavizado para a média do UFC).')}</p></details>`;
+  <details class="card"><summary>${T('Method', 'Método')}</summary><p>${T('Win probability comes from the rating model (WHR) with uncertainty. Method probabilities combine how each fighter wins with how the opponent loses (naive Bayes, smoothed toward the UFC average).', 'A probabilidade vem do modelo de notas (WHR) com incerteza. As chances por método combinam como cada lutador vence com como o rival perde (Bayes ingênuo, suavizado para a média do UFC).')}</p></details>`;
   return h;
 }
 
@@ -1338,10 +1453,11 @@ function vSim(a, b) {
   const q = S.sim; if (a) q.a = mid(a); if (b) q.b = mid(b);
   const divs = [...new Set(S.fg.map(f => f.div))].sort();
   M(`<h1>${T('Simulator', 'Simulador')}</h1><div class="ctl"><label>${T('Mode', 'Modo')}<select id="sm"><option value="cur">${T('Current form (now)', 'Momento atual')}</option><option value="peak">${T('Career peak (all-time)', 'Pico da carreira (histórico)')}</option></select></label>
-  <label>${T('Rating scope', 'Escopo da nota')}<select id="sd"><option value="ALL">${T('General (all fights)', 'Geral (todas as lutas)')}</option>${divs.map(d => `<option>${esc(d)}</option>`).join('')}</select></label></div>${pick(q, 'a')}${pick(q, 'b')}<div id="out"></div>`);
+  <label>${T('Rating scope', 'Escopo da nota')}<select id="sd"><option value="ALL">${T('General (all fights)', 'Geral (todas as lutas)')}</option>${divs.map(d => `<option>${esc(d)}</option>`).join('')}</select></label></div>${pick(q, 'a')}<div class="acts" style="justify-content:center;margin:.2rem 0"><button id="swp" type="button">⇄ ${T('Swap A / B', 'Inverter A / B')}</button></div>${pick(q, 'b')}<div id="out"></div>`);
   $('#sm').value = q.m; $('#sd').value = q.d;
   $('#sm').onchange = e => { q.m = e.target.value; vSim(); };
   $('#sd').onchange = e => { q.d = e.target.value; vSim(); };
+  $('#swp').onclick = () => { const t = q.a; q.a = q.b; q.b = t; vSim(); };
   $('#out').innerHTML = simOut(q);
   const sb = $('#shr'); if (sb) sb.onclick = shareCard;
   $('#m').oninput = e => {
@@ -1430,6 +1546,25 @@ function tune() {
   step();
 }
 
+
+const LABSHORT = [[/validation|valida/i, () => T('Validation', 'Validação')], [/calibra/i, () => T('Calibration', 'Calibração')], [/really matters|importa/i, () => T('Variables', 'Variáveis')], [/auto-?tune|autoajuste/i, () => 'Auto-tune'],
+  [/reign|reinado/i, () => T('Reigns', 'Reinados')], [/upset|zebra/i, () => T('Upsets', 'Zebras')], [/prediction|palpite|placar|scoreboard/i, () => T('My picks', 'Meus palpites')], [/judge|juíz|juiz/i, () => T('Judges', 'Juízes')],
+  [/referee|árbitro|arbitro/i, () => T('Referees', 'Árbitros')], [/gym|academia|camp/i, () => T('Gyms', 'Academias')], [/age curve|curva de idade/i, () => T('Age curve', 'Curva de idade')], [/robber|roubo|decision check|decisões/i, () => T('Possible robberies', 'Possíveis roubos')]];
+function labChips() {
+  const root = $('#lb'); if (!root) return;
+  let obs = null;
+  const build = () => {
+    if (!root.isConnected) { if (obs) obs.disconnect(); return; }
+    const hs = [...root.querySelectorAll('h2')]; if (hs.length < 2) return;
+    hs.forEach((h, i) => { h.id = h.id || 'lb-' + i; });
+    let bar = document.getElementById('lbj'); if (!bar) { bar = document.createElement('div'); bar.id = 'lbj'; bar.className = 'seg jmp'; root.parentNode.insertBefore(bar, root); }
+    const txt = h => { const c = h.cloneNode(true); c.querySelectorAll('.xbar').forEach(x => x.remove()); return c.textContent.replace(/\s+/g, ' ').trim(); };
+    bar.innerHTML = hs.map(h => { const t = txt(h), m = LABSHORT.find(([re]) => re.test(t)); return jchip(h.id, esc(m ? m[1]() : (t.length > 24 ? t.slice(0, 22) + '…' : t))); }).join('');
+  };
+  build();
+  if (typeof MutationObserver !== 'undefined') { let tm; obs = new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(build, 120); }); obs.observe(root, {childList: true, subtree: true}); }
+}
+
 function vLab() {
   M(`<h1>Lab</h1><div id="lb"><p class="mu">${T('Computing…', 'Calculando…')}</p></div>`);
   setTimeout(() => {
@@ -1437,22 +1572,236 @@ function vLab() {
     const R = lab();
     el.innerHTML = R && !R.none ? labHtml(R) : `<p class="empty">${T('Not enough fights with stats yet.', 'Ainda não há lutas suficientes com estatísticas.')}</p>`;
     const b = $('#tb'); if (b) b.onclick = tune;
+    labChips();
   }, 30);
+}
+
+/* ======== EXPORTAÇÃO UNIVERSAL (window.XEXP): PNG, CSV e Copiar para qualquer seção ========
+   Três caminhos para uma seção virar exportável:
+   1) XEXP.reg(chave, () => spec) + <span class="xbar" data-xk="chave"></span>   (dados completos do módulo)
+   2) qualquer <h2> ganha a barra sozinha e o conteúdo vem do DOM (tabelas .tb, linhas .sr/.h, cards .rk, texto)
+   3) qualquer lista com 3+ cards .rk ganha a barra sozinha
+   spec = {kind: 'rank'|'table'|'text'|'fighter', title, sub, file, cols, rows, rank, lines, fighter}                  */
+window.XEXP = (function () {
+  const REG = {}, GD = '#f5c518', BGC = '#090a0d', TX = '#eef1f6', MU = '#8b94a5', S1 = '#12151c', S2 = '#1a1d25', CB = '#4aa3ff', WIN = '#3ddc84', LOSS = '#ff5d5d';
+  const FD = '"Big Shoulders Display", Impact, "Arial Narrow", sans-serif', FB = 'Archivo, Arial, sans-serif', W = 1080, PAD = 56;
+  const clean = t => String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
+  const slug = t => clean(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44) || 'sumula';
+  const num = t => /^[+\-−]?[\d.,]+\s*(%|pp|pts?)?$/.test(clean(t).replace(/\s/g, ''));
+  const pctv = t => { const m = /(-?[\d.]+)/.exec(String(t)); return m ? parseFloat(m[1]) : NaN; };
+
+  /* ---------- extração do DOM ---------- */
+  const txtNoBar = el => { const c = el.cloneNode(true); c.querySelectorAll('.xbar').forEach(x => x.remove()); return clean(c.textContent); };
+  const cells = r => [...r.children].map(c => txtNoBar(c)).filter((c, i, a) => !(c === '' && a.length > 6));
+  function fromNodes(nodes, title) {
+    const all = sel => nodes.flatMap(n => [...(n.matches && n.matches(sel) ? [n] : []), ...n.querySelectorAll(sel)]);
+    const tb = all('.tb'), hd = tb.find(r => r.classList.contains('hd')), body = tb.filter(r => !r.classList.contains('hd'));
+    const rk = all('.rk'), sr = all('.sr'), hh = all('.h');
+    const base = {title: clean(title), file: slug(title)};
+    if (body.length) { const cols = hd ? cells(hd) : null, rows = body.map(cells), k = rows[0].length; return {...base, kind: 'table', cols: cols && cols.length === k ? cols : rows[0].map((_, i) => 'Col ' + (i + 1)), rows}; }
+    if (rk.length >= 3) {
+      const rank = rk.map((c, i) => { const nm = c.querySelector('.nm'), sm = nm && nm.querySelector('small'), sub = sm ? txtNoBar(sm) : '', head = nm ? clean([...nm.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(' ')) || txtNoBar(nm).replace(sub, '').trim() : txtNoBar(c), b = c.querySelector('.mb b'), v = [...c.children].filter(x => !x.classList.contains('ring') && !x.classList.contains('nm')).map(x => txtNoBar(x)).filter(Boolean).pop() || '';
+        return {pos: (c.querySelector('.ring') ? txtNoBar(c.querySelector('.ring')) : String(i + 1)), name: head, sub: sub.slice(0, 120), val: v, pct: b && b.style.width ? parseFloat(b.style.width) / 100 : null}; });
+      return {...base, kind: 'rank', rank, cols: [T('Pos', 'Pos'), T('Fighter', 'Lutador'), T('Details', 'Detalhes'), T('Value', 'Valor')], rows: rank.map(r => [r.pos, r.name, r.sub, r.val])};
+    }
+    if (sr.length >= 2) return {...base, kind: 'table', cols: [T('Item', 'Item'), 'A', 'B'], rows: sr.map(r => { const c = cells(r).filter(Boolean); return c.length >= 3 ? [c[1], c[0], c[2]] : c; })};
+    if (hh.length >= 2) { const rows = hh.map(cells); return {...base, kind: 'table', cols: rows[0].map((_, i) => 'Col ' + (i + 1)), rows}; }
+    const lines = []; const seen = new Set();
+    nodes.forEach(n => { const q = n.matches && n.matches('p,.card,li') ? [n] : n.querySelectorAll('p,li,.card'); [...q].forEach(e => { if (e.querySelector && e.querySelector('.card') && e !== n) return; const t = txtNoBar(e); if (t && t.length > 2 && !seen.has(t)) { seen.add(t); lines.push(t); } }); });
+    return {...base, kind: 'text', lines: lines.slice(0, 40)};
+  }
+  function secNodes(h) { const o = []; let n = h.nextElementSibling; while (n && !/^H[12]$/.test(n.tagName)) { o.push(n); n = n.nextElementSibling; } return o; }
+  const fromDom = h => fromNodes(secNodes(h), txtNoBar(h));
+  const fromEl = (el, title) => fromNodes([el], title || (el.id || 'Súmula'));
+
+  /* ---------- formatos de saída ---------- */
+  const sepc = () => (typeof S !== 'undefined' && S.pt) ? ';' : ',';
+  function csvOf(spec) {
+    const q = v => { v = clean(v); return /[";,\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    let cols = spec.cols, rows = spec.rows;
+    if (!rows) { cols = [T('Field', 'Campo'), T('Value', 'Valor')]; rows = (spec.lines || []).map(l => typeof l === 'string' ? ['', l] : [l.k || '', l.v]); }
+    return '\uFEFF' + [cols, ...rows].filter(Boolean).map(r => r.map(q).join(sepc())).join('\r\n');
+  }
+  function textOf(spec) {
+    const out = ['*' + clean(spec.title) + '*']; if (spec.sub) out.push(clean(spec.sub));
+    const rows = spec.rows || [];
+    if (spec.kind === 'rank' && spec.rank) spec.rank.slice(0, 30).forEach(r => out.push(`${r.pos}. ${r.name}${r.val ? ' — ' + r.val : ''}${r.sub ? ' (' + r.sub + ')' : ''}`));
+    else if (spec.kind === 'fighter') { const f = spec.fighter; out.push(`${T('Rating', 'Nota')}: ${f.cur != null ? f.cur : '—'} (${T('peak', 'máx.')} ${f.pk != null ? f.pk : '—'})`); (f.hi || []).forEach(h => out.push(`• ${h.k}: ${h.v}`)); (f.sig || []).forEach(s => out.push(`• ${s[0]}: ${Math.round(s[1] * 100)}%`)); (f.cardio || []).forEach(s => out.push(`• ${s[0]}: ${s[1]}`)); }
+    else if (spec.cols && rows.length) { out.push(spec.cols.join(' | ')); rows.slice(0, 60).forEach(r => out.push('• ' + r.map(clean).join(' | '))); if (rows.length > 60) out.push('… +' + (rows.length - 60)); }
+    else (spec.lines || []).forEach(l => out.push('• ' + (typeof l === 'string' ? l : (l.k ? l.k + ': ' : '') + l.v)));
+    out.push('', 'Súmula UFC · ' + (typeof location !== 'undefined' ? location.host + location.pathname : ''));
+    return out.join('\n');
+  }
+
+  /* ---------- PNG 1080px ---------- */
+  const scratch = () => { const c = document.createElement('canvas'); c.width = W; c.height = 10; return c.getContext('2d'); };
+  const poly = (x, p) => { x.beginPath(); p.forEach(([a, b], i) => i ? x.lineTo(a, b) : x.moveTo(a, b)); x.closePath(); };
+  const oct = (x, X, Y, w, h, c) => poly(x, [[X + c, Y], [X + w - c, Y], [X + w, Y + c], [X + w, Y + h - c], [X + w - c, Y + h], [X + c, Y + h], [X, Y + h - c], [X, Y + c]]);
+  function wrapT(x, t, mw) { const w = clean(t).split(' '), o = []; let c = ''; for (const s of w) { const n = c ? c + ' ' + s : s; if (x.measureText(n).width > mw && c) { o.push(c); c = s; } else c = n; } if (c) o.push(c); return o; }
+  function trunc(x, t, mw) { t = clean(t); if (x.measureText(t).width <= mw) return t; while (t.length > 1 && x.measureText(t + '…').width > mw) t = t.slice(0, -1); return t + '…'; }
+  const loadImg = src => new Promise(res => { if (!src) return res(null); const i = new Image(); i.crossOrigin = 'anonymous'; i.referrerPolicy = 'no-referrer'; const t = setTimeout(() => res(null), 3500); i.onload = () => { clearTimeout(t); res(i); }; i.onerror = () => { clearTimeout(t); res(null); }; i.src = src; });
+
+  async function plan(spec) {
+    const m = scratch(), ops = []; let y = 0; const IW = W - 2 * PAD;
+    const add = f => ops.push(f);
+    // cabeçalho
+    y = 96; add((x, Y) => { x.fillStyle = GD; x.font = `900 34px ${FD}`; x.textAlign = 'left'; x.fillText('SÚMULA UFC', PAD, Y + 20); x.fillStyle = MU; x.font = `600 22px ${FB}`; x.textAlign = 'right'; x.fillText(new Date().toLocaleDateString(S.pt ? 'pt-BR' : 'en-US'), W - PAD, Y + 20); });
+    m.font = `900 66px ${FD}`; const tl = wrapT(m, String(spec.title || '').toUpperCase(), IW).slice(0, 3), ty = y;
+    add((x, Y) => { x.fillStyle = TX; x.font = `900 66px ${FD}`; x.textAlign = 'left'; tl.forEach((l, i) => x.fillText(l, PAD, Y + ty - 20 + 68 + i * 68)); });
+    y += 40 + tl.length * 68;
+    if (spec.sub) { m.font = `500 25px ${FB}`; const sl = wrapT(m, spec.sub, IW).slice(0, 3), sy = y; add((x, Y) => { x.fillStyle = MU; x.font = `500 25px ${FB}`; x.textAlign = 'left'; sl.forEach((l, i) => x.fillText(l, PAD, Y + sy + i * 32)); }); y += sl.length * 32 + 8; }
+    y += 18; add((x, Y) => { x.fillStyle = GD; x.fillRect(PAD, Y + y - 10, 140, 6); });
+    y += 24;
+    const body = spec.kind || 'table';
+    if (body === 'rank') { const R = (spec.rank || []).slice(0, 15), top = y; R.forEach((r, i) => { const Y0 = top + i * 84; add((x, Y) => {
+        const yy = Y + Y0; x.fillStyle = i % 2 ? 'rgba(255,255,255,.025)' : 'rgba(255,255,255,.055)'; x.fillRect(PAD - 10, yy, IW + 20, 78);
+        oct(x, PAD, yy + 12, 56, 56, 12); x.fillStyle = i < 3 ? GD : S2; x.fill(); x.fillStyle = i < 3 ? '#000' : TX; x.font = `900 28px ${FD}`; x.textAlign = 'center'; x.fillText(String(r.pos), PAD + 28, yy + 50);
+        x.textAlign = 'left'; x.fillStyle = TX; x.font = `800 34px ${FD}`; x.fillText(trunc(x, String(r.name).toUpperCase(), 470), PAD + 76, yy + 38);
+        x.fillStyle = MU; x.font = `500 19px ${FB}`; x.fillText(trunc(x, r.sub || '', 470), PAD + 76, yy + 64);
+        if (r.pct != null && !isNaN(r.pct)) { x.fillStyle = S2; x.fillRect(PAD + 570, yy + 30, 300, 14); x.fillStyle = GD; x.fillRect(PAD + 570, yy + 30, Math.max(4, 300 * Math.min(1, r.pct)), 14); }
+        x.fillStyle = GD; x.font = `900 40px ${FD}`; x.textAlign = 'right'; x.fillText(trunc(x, String(r.val || ''), 140), W - PAD, yy + 50); }); });
+      y = top + R.length * 84 + 6; if ((spec.rank || []).length > 15) { const n = spec.rank.length, yy = y; add((x, Y) => { x.fillStyle = MU; x.font = `500 20px ${FB}`; x.textAlign = 'left'; x.fillText(T(`Top 15 of ${n}. The CSV has the full list.`, `Top 15 de ${n}. O CSV traz a lista completa.`), PAD, Y + yy + 14); }); y += 34; } }
+    else if (body === 'text') { const L = (spec.lines || []).slice(0, 18); L.forEach(l => { const k = typeof l === 'string' ? '' : l.k, v = typeof l === 'string' ? l : l.v; m.font = `500 29px ${FB}`; const ls = wrapT(m, v, IW - 24).slice(0, 7), yy = y; add((x, Y) => { x.fillStyle = GD; x.fillRect(PAD, Y + yy, 5, ls.length * 38 + (k ? 28 : 0) - 6); x.textAlign = 'left'; let c = 0; if (k) { x.fillStyle = GD; x.font = `800 22px ${FD}`; x.fillText(String(k).toUpperCase(), PAD + 20, Y + yy + 20); c = 28; } x.fillStyle = TX; x.font = `500 29px ${FB}`; ls.forEach((s, i) => x.fillText(s, PAD + 20, Y + yy + 26 + c + i * 38)); }); y += ls.length * 38 + (k ? 28 : 0) + 26; }); }
+    else if (body === 'fighter') { const f = spec.fighter, img = await loadImg(f.photo), yy = y;
+      add((x, Y) => { const Y0 = Y + yy; oct(x, PAD, Y0, 230, 230, 40); x.fillStyle = GD; x.fill(); x.save(); oct(x, PAD + 5, Y0 + 5, 220, 220, 36); x.clip(); x.fillStyle = S1; x.fillRect(PAD, Y0, 230, 230);
+        if (img) { try { x.drawImage(img, PAD + 5, Y0 + 5, 220, 220); } catch (e) {} } else { x.fillStyle = TX; x.font = `900 90px ${FD}`; x.textAlign = 'center'; x.fillText(String(f.name || '?').split(' ').map(w => w[0]).slice(0, 2).join(''), PAD + 115, Y0 + 140); } x.restore();
+        x.textAlign = 'left'; x.fillStyle = MU; x.font = `600 24px ${FB}`; x.fillText(T('CURRENT RATING', 'NOTA ATUAL') + (f.scope && f.scope !== 'ALL' ? ' · ' + f.scope : ''), PAD + 270, Y0 + 40); x.fillStyle = GD; x.font = `900 150px ${FD}`; x.fillText(f.cur != null ? String(f.cur) : '—', PAD + 266, Y0 + 168);
+        x.fillStyle = MU; x.font = `500 24px ${FB}`; x.fillText(f.pk != null ? `${T('peak', 'máxima')} ${f.pk} · ${f.pkYear}` + (f.hs != null ? ` · ${T('all-time', 'histórica')} ${f.hs}` : '') : '', PAD + 270, Y0 + 208); });
+      y += 262;
+      if (f.series && f.series.length > 1) { const s = f.series, lo = Math.min(...s), hi = Math.max(...s), yy2 = y; add((x, Y) => { const Y0 = Y + yy2; x.fillStyle = MU; x.font = `700 22px ${FD}`; x.textAlign = 'left'; x.fillText(T('RATING EVOLUTION', 'EVOLUÇÃO DA NOTA'), PAD, Y0 + 18); x.fillStyle = 'rgba(255,255,255,.04)'; x.fillRect(PAD, Y0 + 30, IW, 170); x.strokeStyle = GD; x.lineWidth = 4; x.beginPath(); s.forEach((v, i) => { const X = PAD + 12 + i / (s.length - 1) * (IW - 24), Yv = Y0 + 190 - (v - lo) / (hi - lo || 1) * 140; i ? x.lineTo(X, Yv) : x.moveTo(X, Yv); }); x.stroke(); x.fillStyle = GD; s.forEach((v, i) => { const X = PAD + 12 + i / (s.length - 1) * (IW - 24), Yv = Y0 + 190 - (v - lo) / (hi - lo || 1) * 140; x.beginPath(); x.arc(X, Yv, 5, 0, 6.3); x.fill(); }); }); y += 224; }
+      const sect = (title, items, fmtv) => { if (!items || !items.length) return; const y1 = y; add((x, Y) => { x.fillStyle = GD; x.font = `800 26px ${FD}`; x.textAlign = 'left'; x.fillText(title.toUpperCase(), PAD, Y + y1 + 20); }); y += 36; items.forEach(it => { const y2 = y; add((x, Y) => { x.textAlign = 'left'; x.fillStyle = TX; x.font = `600 24px ${FB}`; x.fillText(trunc(x, it[0], 330), PAD, Y + y2 + 22); x.fillStyle = S2; x.fillRect(PAD + 350, Y + y2 + 8, 520, 14); x.fillStyle = it[3] || GD; x.fillRect(PAD + 350, Y + y2 + 8, Math.max(4, 520 * Math.min(1, it[2])), 14); x.fillStyle = TX; x.textAlign = 'right'; x.fillText(fmtv(it), W - PAD, Y + y2 + 24); }); y += 38; }); y += 14; };
+      if (f.hi && f.hi.length) { const y3 = y; add((x, Y) => { x.fillStyle = GD; x.font = `800 26px ${FD}`; x.textAlign = 'left'; x.fillText(T('CAREER HIGHLIGHTS', 'DESTAQUES DA CAMPANHA'), PAD, Y + y3 + 20); }); y += 38; f.hi.slice(0, 5).forEach(h => { const y4 = y; add((x, Y) => { x.textAlign = 'left'; x.fillStyle = MU; x.font = `600 22px ${FB}`; x.fillText(h.k, PAD, Y + y4 + 22); x.fillStyle = TX; x.font = `600 24px ${FB}`; x.fillText(trunc(x, h.v, IW - 300), PAD + 280, Y + y4 + 22); }); y += 36; }); y += 14; }
+      sect(T('Striking signature', 'Assinatura de golpes'), (f.sig || []).map(s => [s[0], 0, s[1]]), it => Math.round(it[2] * 100) + '%');
+      sect(T('Cardio: strikes per round', 'Cardio: golpes por round'), (f.cardio || []).map(s => [s[0], 0, s[2], CB]), it => String((f.cardio.find(c => c[0] === it[0]) || [])[1]));
+    }
+    else { // tabela
+      const cols = spec.cols || [], rows = (spec.rows || []).slice(0, 22), n = cols.length || (rows[0] || []).length, tw = []; m.font = `600 22px ${FB}`;
+      for (let c = 0; c < n; c++) tw[c] = Math.min(330, Math.max(64, ...[cols[c], ...rows.map(r => r[c])].map(t => m.measureText(clean(t)).width + 22)));
+      const tot = tw.reduce((a, b) => a + b, 0), k = tot > IW ? IW / tot : 1, cw = tw.map(w => w * k), top = y;
+      add((x, Y) => { const yy = Y + top; x.fillStyle = S2; x.fillRect(PAD - 10, yy, IW + 20, 50); let cx = PAD; x.font = `800 21px ${FD}`; cols.forEach((c, i) => { x.fillStyle = GD; x.textAlign = num(rows[0] && rows[0][i]) ? 'right' : 'left'; x.fillText(trunc(x, String(c).toUpperCase(), cw[i] - 12), num(rows[0] && rows[0][i]) ? cx + cw[i] - 8 : cx, yy + 33); cx += cw[i]; }); });
+      rows.forEach((r, ri) => { add((x, Y) => { const yy = Y + top + 50 + ri * 52; x.fillStyle = ri % 2 ? 'rgba(255,255,255,.02)' : 'rgba(255,255,255,.055)'; x.fillRect(PAD - 10, yy, IW + 20, 52); let cx = PAD; x.font = `600 22px ${FB}`; r.forEach((c, i) => { const rt = num(c); x.fillStyle = i === 0 ? TX : (rt ? TX : '#cfd5e0'); x.textAlign = rt ? 'right' : 'left'; x.fillText(trunc(x, c, cw[i] - 12), rt ? cx + cw[i] - 8 : cx, yy + 34); cx += cw[i]; }); }); });
+      y = top + 50 + rows.length * 52 + 12; const tot2 = (spec.rows || []).length;
+      if (tot2 > rows.length) { const yy = y; add((x, Y) => { x.fillStyle = MU; x.font = `500 20px ${FB}`; x.textAlign = 'left'; x.fillText(T(`Showing ${rows.length} of ${tot2} rows. The CSV has them all.`, `Mostrando ${rows.length} de ${tot2} linhas. O CSV traz todas.`), PAD, Y + yy + 14); }); y += 34; } }
+    y += 24; const fy = y; add((x, Y) => { x.fillStyle = MU; x.font = `600 20px ${FB}`; x.textAlign = 'left'; x.fillText('SÚMULA UFC · ' + (typeof location !== 'undefined' ? location.host : '') , PAD, Y + fy + 10); x.textAlign = 'right'; x.fillText(S.meta && S.meta.updated ? T('data ', 'dados ') + new Date(S.meta.updated).toLocaleDateString(S.pt ? 'pt-BR' : 'en-US') : '', W - PAD, Y + fy + 10); });
+    return {h: Math.max(420, y + 56), ops};
+  }
+  async function makePng(spec) {
+    const p = await plan(spec), cv = document.createElement('canvas'); cv.width = W; cv.height = p.h; const x = cv.getContext('2d');
+    x.fillStyle = BGC; x.fillRect(0, 0, W, p.h); x.save(); x.strokeStyle = 'rgba(255,255,255,.035)'; x.lineWidth = 2; for (let i = -p.h; i < W; i += 22) { x.beginPath(); x.moveTo(i, p.h); x.lineTo(i + p.h, 0); x.stroke(); } x.restore();
+    x.strokeStyle = GD; x.lineWidth = 6; oct(x, 16, 16, W - 32, p.h - 32, 36); x.stroke();
+    p.ops.forEach(f => f(x, 0)); return cv;
+  }
+  function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+  async function png(spec) {
+    const cv = await makePng(spec), name = (spec.file || slug(spec.title)) + '.png';
+    cv.toBlob(b => { const f = new File([b], name, {type: 'image/png'}), data = {files: [f], title: spec.title}; if (spec.share) data.text = textOf(spec);
+      if (navigator.canShare && navigator.canShare(data)) navigator.share(data).catch(() => {}); else download(b, name); }, 'image/png');
+  }
+  async function copy(t) { try { await navigator.clipboard.writeText(t); return true; } catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (_) {} a.remove(); return ok; } }
+
+  /* ---------- barra de botões ---------- */
+  const btns = () => `<button type="button" data-xe="png" title="PNG">📸 PNG</button><button type="button" data-xe="csv" title="CSV (Excel)">📊 CSV</button><button type="button" data-xe="copy" title="${T('Copy as text', 'Copiar como texto')}">📋 ${T('Copy', 'Copiar')}</button>`;
+  async function build(holder) {
+    const k = holder.dataset.xk;
+    if (k && k.startsWith('el:')) { const el = document.querySelector(k.slice(3)); return el ? fromEl(el, holder.dataset.xt) : null; }
+    if (k) return REG[k] ? await REG[k]() : null;
+    if (holder._src) return fromEl(holder._src, holder.dataset.xt);
+    const h = holder.parentElement; return h && /^H[12]$/.test(h.tagName) ? fromDom(h) : null;
+  }
+  async function run(b) {
+    const holder = b.closest('.xbar'), act = b.dataset.xe; let spec; try { spec = await build(holder); } catch (e) { spec = null; }
+    if (!spec) return;
+    spec.sub = spec.sub || ''; if (!spec.file) spec.file = slug(spec.title);
+    if (act === 'png') await png(spec);
+    else if (act === 'csv') download(new Blob([csvOf(spec)], {type: 'text/csv;charset=utf-8'}), spec.file + '.csv');
+    else if (act === 'copy') { const ok = await copy(textOf(spec)), old = b.innerHTML; b.innerHTML = ok ? '✓ ' + T('Copied!', 'Copiado!') : '✗'; setTimeout(() => { b.innerHTML = old; }, 1600); }
+  }
+  function attach() {
+    const m = document.getElementById('m'); if (!m) return;
+    m.querySelectorAll('.xbar[data-xk]').forEach(h => { if (!h.dataset.done) { h.innerHTML = btns(); h.dataset.done = '1'; } });
+    m.querySelectorAll('h2').forEach(h => { if (h.querySelector('.xbar') || h.closest('summary')) return; const b = document.createElement('span'); b.className = 'xbar'; b.innerHTML = btns(); h.classList.add('xh'); h.appendChild(b); });
+    m.querySelectorAll('div,section').forEach(c => {   // listas de ranking: 3+ cards .rk como filhos diretos
+      if (c.dataset.xl || c.closest('details') || m.querySelector('h1 .xbar[data-xk]')) return; const rk = [...c.children].filter(x => x.classList && x.classList.contains('rk'));
+      if (rk.length < 3) return; c.dataset.xl = '1'; const prev = c.previousElementSibling; if (prev && prev.querySelector && prev.querySelector('.xbar')) return;
+      const b = document.createElement('div'); b.className = 'xrow'; const s = document.createElement('span'); s.className = 'xbar'; s.dataset.done = '1'; s.dataset.xt = (m.querySelector('h1') ? clean(m.querySelector('h1').textContent) : 'Ranking'); s.innerHTML = btns(); s._src = c; b.appendChild(s); c.parentNode.insertBefore(b, c);
+    });
+  }
+  let started = false;
+  function start() {
+    if (started) return; started = true;
+    document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-xe]'); if (!b) return; e.preventDefault(); e.stopPropagation(); run(b); }, true);
+    const m = document.getElementById('m'); let tm; if (typeof MutationObserver !== 'undefined' && m) new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(attach, 40); }).observe(m, {childList: true, subtree: true});
+    attach();
+  }
+  return {reg: (k, f) => { REG[k] = f; }, start, attach, csvOf, textOf, makePng, png, fromEl, fromNodes, fromDom, btns, slug, REG};
+})();
+
+
+/* ---------- gaveta "Mais", busca global (/ ou Ctrl+K), voltar ao topo ---------- */
+const NRM = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const ICONS = {xray: '🔬', studio: '🎛️', lab: '🧪', sherdog: '📤', extras: '✨'};
+function closeAll() { ['sh', 'gsm'].forEach(i => { const e = document.getElementById(i); if (e) e.classList.remove('open'); }); }
+function openSheet() {
+  const g = document.getElementById('shg'), k = (location.hash.split('/')[1] || 'events');
+  g.innerHTML = (S.nav ? S.nav.more : []).map(([x, l]) => `<a class="shc${x === k ? ' on' : ''}" href="#/${x}"><span>${ICONS[x] || '•'}</span>${l}</a>`).join('');
+  document.getElementById('sh').classList.add('open');
+}
+function gsFind(q) {
+  const n = NRM(q).trim(); if (!n) return {f: [], e: []};
+  const f = [...S.F.values()].filter(x => NRM(x.name + ' ' + (x.nick || '') + ' ' + (x.team || '')).includes(n)).sort((a, b) => (NRM(a.name).startsWith(n) ? 0 : 1) - (NRM(b.name).startsWith(n) ? 0 : 1) || a.name.localeCompare(b.name)).slice(0, 8);
+  const ev = [...S.up.map(e => ({...e, fut: true})), ...S.ev].filter(e => NRM(e.name + ' ' + (e.location || '') + ' ' + (e.date || '')).includes(n)).sort((a, b) => b.date < a.date ? -1 : 1).slice(0, 6);
+  return {f, e: ev};
+}
+function gsRender(q) {
+  const r = gsFind(q), el = document.getElementById('gsr');
+  if (!NRM(q).trim()) { el.innerHTML = `<p class="mu sm">${T('Type a fighter or event name. Shortcut: / or Ctrl+K.', 'Digite o nome de um lutador ou evento. Atalho: / ou Ctrl+K.')}</p>`; return; }
+  el.innerHTML = (r.f.length ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Fighters', 'Lutadores')}</p>` + r.f.map(f => `<div class="card gsr">${av(f.id, f.name, 'sm')}<span class="nm">${esc(f.name)}<small>${esc(f.nick || '')} ${esc(f.record || '')}</small></span><span class="gsb"><a href="#/fighter/${f.id}">${T('Profile', 'Ficha')}</a><a href="#/sim/${f.id}">${T('Simulate', 'Simular')}</a><a href="#/studio" data-gcard="${f.id}">Card</a></span></div>`).join('') : '')
+    + (r.e.length ? `<p class="mu sm" style="margin:.8rem 0 0">${T('Events', 'Eventos')}</p>` + r.e.map(e => `<a class="card gsr" href="${e.fut ? '#/events' : '#/event/' + e.id}"${e.fut ? ` data-gup="${esc(e.id)}"` : ''}><span>${e.fut ? '🗓️' : '📅'}</span><span class="nm">${esc(e.name)}<small>${fmt(e.date)}${e.location ? ', ' + esc(e.location) : ''} · ${e.fut ? T('upcoming', 'próximo') : T('past', 'passado')}</small></span></a>`).join('') : '')
+    || `<p class="empty">${T('Nothing found.', 'Nada encontrado.')}</p>`;
+}
+function gsOpen() { closeAll(); const m = document.getElementById('gsm'); m.classList.add('open'); const i = document.getElementById('gsi'); i.placeholder = T('Search fighters and events…', 'Buscar lutadores e eventos…'); i.focus(); i.select(); gsRender(i.value); }
+function uiInit() {
+  document.body.insertAdjacentHTML('beforeend', `<div id="sh" class="sheet" role="dialog" aria-modal="true"><div class="bd" data-close="1"></div><div class="pn"><div class="grab"></div><div class="gr" id="shg"></div></div></div>
+   <div id="gsm" class="sheet gs" role="dialog" aria-modal="true"><div class="bd" data-close="1"></div><div class="pn"><input id="gsi" type="search" autocomplete="off" aria-label="search"><div id="gsr"></div></div></div>
+   <button id="top2" class="totop" aria-label="Top" type="button">↑</button>`);
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-close]')) return closeAll();
+    if (e.target.closest('#mo')) return openSheet();
+    if (e.target.closest('#gs')) return gsOpen();
+    if (e.target.closest('#shg a')) return closeAll();
+    const gc = e.target.closest('[data-gcard]'); if (gc) { if (window.XCARD) window.XCARD(gc.dataset.gcard); closeAll(); if (location.hash === '#/studio') route(); return; }
+    const gu = e.target.closest('[data-gup]'); if (gu) { S.upOpen = S.upOpen || {}; S.upOpen[gu.dataset.gup] = true; closeAll(); const d0 = document.querySelector(`details[data-ev="${gu.dataset.gup}"]`); if (d0) { d0.open = true; if (d0.scrollIntoView) d0.scrollIntoView({behavior: 'smooth', block: 'start'}); e.preventDefault(); } else setTimeout(() => { const d = document.querySelector(`details[data-ev="${gu.dataset.gup}"]`); if (d && d.scrollIntoView) d.scrollIntoView({block: 'start'}); }, 400); return; }
+    if (e.target.closest('#gsr a')) closeAll();
+  });
+  document.addEventListener('keydown', e => {
+    const t = e.target, typing = t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (t && t.isContentEditable);
+    if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return gsOpen(); }
+    if (e.key === '/' && !typing) { e.preventDefault(); return gsOpen(); }
+    if (e.key === 'Escape') closeAll();
+    if (e.key === 'Enter' && t && t.id === 'gsi') { const a = document.querySelector('#gsr a'); if (a) { a.click(); location.hash = a.getAttribute('href'); } }
+  });
+  document.getElementById('gsi').addEventListener('input', e => gsRender(e.target.value));
+  addEventListener('scroll', () => document.getElementById('top2').classList.toggle('show', (window.scrollY || 0) > 500), {passive: true});
+  document.getElementById('top2').onclick = () => scrollTo({top: 0, behavior: 'smooth'});
+  XEXP.start();
 }
 
 function route() {
   const [, p, id, fid] = location.hash.split('/'), k = p || 'events';
   document.documentElement.lang = S.pt ? 'pt-BR' : 'en';
   $('#lg').textContent = S.pt ? 'EN' : 'PT';
-  $('#nv').innerHTML = [
+  const NAVS = [
     ['events', T('Events', 'Eventos')],
     ['ranking', 'Rankings'],
     ['fighters', T('Fighters', 'Lutadores')],
     ['sim', T('Simulator', 'Simulador')],
     ['lab', 'Lab'],
     ...(window.XT ? window.XT() : [])
-  ].map(([x, l]) => `<a href="#/${x}" data-p="${x}">${l}</a>`).join('');
-  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.p === (k === 'event' ? 'events' : k === 'fighter' ? 'fighters' : k)));
+  ], cur = k === 'event' ? 'events' : k === 'fighter' ? 'fighters' : k;
+  S.nav = {more: NAVS.slice(4)};
+  $('#nv').innerHTML = NAVS.map(([x, l], i) => `<a href="#/${x}" data-p="${x}"${i >= 4 ? ' class="mo"' : ''}>${l}</a>`).join('') + `<button type="button" class="more${S.nav.more.some(([x]) => x === cur) ? ' on' : ''}" id="mo" aria-haspopup="dialog">${T('More', 'Mais')} ☰</button>`;
+  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.p === cur));
+  closeAll();
   $('#ft').textContent = (S.meta.updated ? T('Data updated ', 'Base atualizada em ') + new Date(S.meta.updated).toLocaleString(S.pt ? 'pt-BR' : 'en-US') + '. ' : '') + T('Source: ufcstats.com', 'Fonte: ufcstats.com');
   const run = () => {
     $('#m').onclick = null; $('#m').oninput = null; scrollTo(0, 0);
@@ -1683,7 +2032,7 @@ function route() {
     ${V.bin ? '' : `<label>${T('Gap of at least', 'Diferença mínima')} (${V.u})<input data-zf="T" type="number" step="${V.s || 1}" min="0" value="${Z.T}"></label><label>${T('Side analysed', 'Lado analisado')}<select data-zf="side">${op([['more', T('The higher value', 'O maior valor')], ['less', T('The lower value', 'O menor valor')]], Z.side)}</select></label>`}
     <label>${T('Outcome', 'Desfecho')}<select data-zf="met">${op([['win', T('That side wins', 'Esse lado vence')], ['fin', T('Fight ends by finish', 'Luta termina em finalização')]], Z.met)}</select></label>
     <label>${T('Division', 'Divisão')}<select data-zf="div">${op([['ALL', T('All', 'Todas')], ...dv.map(d => [d, d])], Z.div)}</select></label>
-    <label>${T('From year', 'A partir do ano')}<input data-zf="from" type="number" min="1993" value="${Z.from}"></label></div><div id="zr"></div>`;
+    <label>${T('From year', 'A partir do ano')}<input data-zf="from" type="number" min="1993" value="${Z.from}"></label></div><div class="xrow"><span class="xbar" data-xk="el:#zr" data-xt="${T('Cross-tab: tested hypothesis', 'Cruzador: hipótese testada')}"></span></div><div id="zr"></div>`;
   }
 
   /* ================= 2) CARDS CIENTÍFICOS ================= */
@@ -1784,17 +2133,21 @@ function route() {
       const fs = S.fg.filter(f => (f.res === 'a' || f.res === 'b') && (mid(f.a.id) === id || mid(f.b.id) === id)).sort((a, b) => b.date < a.date ? -1 : 1);
       h += fs.map(f => { const on = Z.fl.has(f.id), ow = f.res === 'a' ? f.a : f.b, ol = f.res === 'a' ? f.b : f.a, w = on ? ol : ow, l = on ? ow : ol; return `<div class="h" style="grid-template-columns:5.5rem 1fr auto"><span class="mu">${fmt(f.date)}</span><span><b>${esc(name(w))}</b> ${T('beat', 'venceu')} ${esc(name(l))}<br><span class="mu sm">${esc(f.method)}, ${esc(f.div)}</span></span><button data-ztf="${f.id}" class="pk${on ? ' on' : ''}">${on ? T('Flipped', 'Invertida') : T('Flip', 'Inverter')}</button></div>`; }).join('');
     }
-    h += `<div class="acts" style="margin-top:.8rem"><button id="ztr" ${Z.fl.size ? '' : 'disabled'}>${T('Recalculate history', 'Recalcular a história')} (${Z.fl.size})</button>${Z.fl.size ? `<button data-ztc="1">${T('Clear flips', 'Limpar inversões')}</button>` : ''}</div><div class="acts" style="margin-top:.4rem"><span class="mu sm">${T('One-click scenarios', 'Cenários de 1 clique')}:</span><button data-ztrob="1">${T('Fix all possible robberies', 'Corrigir todos os Possíveis Roubos')}${Z.dj && Z.dj.fights ? ' (' + Object.values(Z.dj.fights).filter(v => v[1] === 3).length + ')' : ''}</button><button data-ztsp="1">${T('Flip all split decisions', 'Inverter todas as Decisões Divididas')} (${S.fg.filter(f => (f.res === 'a' || f.res === 'b') && /split/i.test(f.method || '')).length})</button></div><div id="zt"></div>`;
+    h += `<div class="acts" style="margin-top:.8rem"><button id="ztr" ${Z.fl.size ? '' : 'disabled'}>${T('Recalculate history', 'Recalcular a história')} (${Z.fl.size})</button>${Z.fl.size ? `<button data-ztc="1">${T('Clear flips', 'Limpar inversões')}</button>` : ''}</div><div class="acts" style="margin-top:.4rem"><span class="xbar" data-xk="tm"></span><span class="mu sm">${T('One-click scenarios', 'Cenários de 1 clique')}:</span><button data-ztrob="1">${T('Fix all possible robberies', 'Corrigir todos os Possíveis Roubos')}${Z.dj && Z.dj.fights ? ' (' + Object.values(Z.dj.fights).filter(v => v[1] === 3).length + ')' : ''}</button><button data-ztsp="1">${T('Flip all split decisions', 'Inverter todas as Decisões Divididas')} (${S.fg.filter(f => (f.res === 'a' || f.res === 'b') && /split/i.test(f.method || '')).length})</button></div><div id="zt"></div>`;
     return h;
   }
   /* inverte de uma vez todas as lutas que o decisions.json classifica como "possível roubo" (classe 3) e recalcula o WHR inteiro */
   function zSplit() { for (const f of S.fg) if ((f.res === 'a' || f.res === 'b') && /split/i.test(f.method || '')) Z.fl.add(f.id); draw(); tmRun(); }
   /* quais reinados e campeões mudariam: compara os reinados da história real (E0) com os da história com as inversões (E1) */
-  function reignDiff(E0, E1) {
+  function reignData(E0, E1) {
     const key = r => r.id + '|' + r.div + '|' + r.start, m0 = new Map(E0.rg.map(r => [key(r), r])), m1 = new Map(E1.rg.map(r => [key(r), r]));
     const lost = E0.rg.filter(r => !m1.has(key(r))), gain = E1.rg.filter(r => !m0.has(key(r))), dd = E0.rg.filter(r => m1.has(key(r)) && m1.get(key(r)).def !== r.def);
     const recent = r => !r.end && Date.now() - Date.parse(r.last) < 3 * YR, cur = rg => { const o = new Map(); for (const r of rg) if (recent(r)) o.set(r.div, r); return o; }, c0 = cur(E0.rg), c1 = cur(E1.rg);
     const chg = [...new Set([...c0.keys(), ...c1.keys()])].filter(d => (c0.get(d) || {}).id !== (c1.get(d) || {}).id).sort();
+    return {lost, gain, dd, c0, c1, chg};
+  }
+  function reignDiff(E0, E1) {
+    const {lost, gain, dd, c0, c1, chg} = reignData(E0, E1);
     const per = r => `${r.start.slice(0, 4)}–${r.end ? r.end.slice(0, 4) : T('now', 'hoje')}`, line = (sg_, r, cl) => `<div class="h" style="grid-template-columns:auto 1fr"><b class="${cl}">${sg_}</b><span><a href="#/fighter/${r.id}"><b>${esc(nm(r.id))}</b></a> <span class="mu sm">${esc(r.div)}, ${per(r)}, ${r.def} ${T('def.', 'def.')}</span></span></div>`;
     const none = !lost.length && !gain.length && !dd.length && !chg.length;
     return `<h2>${T('Which champions and reigns would change', 'Quais campeões e reinados mudariam')}</h2><div class="card" style="padding:.8rem 1.1rem">${none ? `<p class="mu">${T('No title reign would change.', 'Nenhum reinado mudaria.')}</p>` : `
@@ -1816,9 +2169,18 @@ function route() {
     setTimeout(() => {
       const L1 = scope('ALL').map(f => Z.fl.has(f.id) ? {...f, res: f.res === 'a' ? 'b' : f.res === 'b' ? 'a' : f.res} : f), E0 = getE('ALL'), E1 = whr(L1, S.P);
       const rows = [...E1.RM.values()].filter(x => E0.RM.has(x.id)).map(x => ({id:x.id, d:x.cur - E0.RM.get(x.id).cur, c0:E0.RM.get(x.id).cur, c1:x.cur, n:x.n}));
-      const big = rows.filter(r => r.n >= 3).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 10);
+      const big = rows.filter(r => r.n >= 3).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 10), rows_ = b => b.map(r => [T('Rating', 'Nota'), nm(r.id), '', Math.round(r.c0), Math.round(r.c1), (r.d >= 0 ? '+' : '') + r.d.toFixed(0)]);
       el.innerHTML = `<h2>${T('Biggest changes in current rating', 'Maiores mudanças na nota atual')}</h2><div class="card" style="padding:.8rem 1.1rem">${big.map(r => `<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/fighter/${r.id}"><b>${esc(nm(r.id))}</b></a><span class="mu">${Math.round(r.c0)} →${Math.round(r.c1)}</span><b class="${r.d >= 0 ? 'up' : 'dn'}">${r.d >= 0 ? '+' : ''}${r.d.toFixed(0)}</b></div>`).join('')}</div>`;
       el.innerHTML += reignDiff(E0, E1);
+      XEXP.reg('tm', () => {
+        const R = reignData(E0, E1), per = r => `${r.start.slice(0, 4)}–${r.end ? r.end.slice(0, 4) : T('now', 'hoje')}`, rows = [];
+        rows.push(...rows_(big));
+        R.chg.forEach(d => rows.push([T('Champion today', 'Campeão hoje'), `${R.c0.get(d) ? nm(R.c0.get(d).id) : T('vacant', 'vago')} → ${R.c1.get(d) ? nm(R.c1.get(d).id) : T('vacant', 'vago')}`, d, '', '', '']));
+        R.lost.forEach(r => rows.push([T('Reign disappears', 'Reinado desaparece'), nm(r.id), r.div, per(r), '', `${r.def} ${T('def.', 'def.')}`]));
+        R.gain.forEach(r => rows.push([T('New reign', 'Reinado novo'), nm(r.id), r.div, '', per(r), `${r.def} ${T('def.', 'def.')}`]));
+        return {kind: 'table', title: T('Time machine: what would change', 'Máquina do Tempo: o que mudaria'), file: 'maquina-do-tempo', sub: `${Z.fl.size} ${T('fights reversed', 'lutas invertidas')} · ${R.chg.length} ${T('champions today change', 'campeões de hoje mudam')} · ${R.lost.length} ${T('reigns disappear', 'reinados desaparecem')} · ${R.gain.length} ${T('new reigns', 'reinados novos')}`,
+          cols: [T('Type', 'Tipo'), T('Fighter / change', 'Lutador / mudança'), T('Division', 'Divisão'), T('Before', 'Antes'), T('After', 'Depois'), T('Change', 'Variação')], rows};
+      });
     }, 30);
   }
 
@@ -1878,6 +2240,7 @@ function route() {
     draw();
   }
   const pxt = window.XT; window.XT = () => [...(pxt ? pxt() : []), ['studio', T('Studio', 'Estúdio')]];
+  window.XCARD = id => { Z.tab = 'cards'; Z.a = id; if (location.hash === '#/studio') vStudio(); };
   window.XV = {...(window.XV || {}), studio: vStudio};
   const pxp = window.XP; window.XP = id => (pxp ? pxp(id) : '') + (Z.cards && Z.cards[id] ? `<div class="acts"><a class="btn" href="#/studio/${id}">${T('See the card', 'Ver o card')}</a></div>` : '');
 })();

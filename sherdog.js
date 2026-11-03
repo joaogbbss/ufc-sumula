@@ -62,9 +62,7 @@
 
   /* ---------- probabilidade do confronto ----------
      Mesma base do Raio-X: ELO encolhido para 1500 em cartel curto.
-     Quando o scraper trouxe odds de mercado (mkt_pa/mkt_pb), elas são
-     combinadas com o ELO — mercado pesa mais porque já embute lesão,
-     corte de peso e notícia de bastidor, que não estão nos dados. */
+     Só entra o que o app sabe (ELO e a estimativa pré-UFC dos estreantes). */
   function prob(f) {
     // nota efetiva: ELO encolhido para 1500 em cartel curto; estreante usa a nota-base
     // estimada pelo cartel profissional (±40 em torno de 1500); sem nenhum dado, 1500
@@ -75,12 +73,7 @@
     const ea = eff(f.a.id), eb = eff(f.b.id);
     const pElo = ea != null && eb != null && (an(f.a.id) || an(f.b.id) || est(f.a.id) || est(f.b.id))
       ? 1 / (1 + Math.pow(10, (eb - ea) / 400)) : null;
-    const pMkt = (typeof f.mkt_pa === 'number' && typeof f.mkt_pb === 'number' && (f.mkt_pa + f.mkt_pb) > 0)
-      ? f.mkt_pa / (f.mkt_pa + f.mkt_pb) : null;
-    if (pElo == null && pMkt == null) return { p: null, src: 'none' };
-    if (pElo == null) return { p: pMkt, src: 'mkt' };
-    if (pMkt == null) return { p: pElo, src: 'elo' };
-    return { p: 0.35 * pElo + 0.65 * pMkt, src: 'both' };
+    return pElo == null ? { p: null, src: 'none' } : { p: pElo, src: 'elo' };
   }
 
   const sum = x => x.reduce((m, n) => m + n, 0);
@@ -228,7 +221,7 @@
       x.textAlign = 'right'; x.fillStyle = BLUE;
       x.fillText(pct(1 - p), bx + bw, by - 8);
       const debut = !an(f.a.id) || !an(f.b.id);
-      const lbl = [src === 'mkt' ? 'market odds' : src === 'both' ? 'ELO + market' : '', debut ? T('debut: pre-UFC estimate', 'estreante: estimativa pré-UFC') : ''].filter(Boolean).join(' · ');
+      const lbl = [debut ? T('debut: pre-UFC estimate', 'estreante: estimativa pré-UFC') : ''].filter(Boolean).join(' · ');
       if (lbl) {
         x.textAlign = 'center'; x.fillStyle = MUT; x.font = `600 14px ${FB}`;
         x.fillText(lbl, CX, by - 10);
