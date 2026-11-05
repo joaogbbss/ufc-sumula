@@ -33,7 +33,9 @@
     const c = cd(id); if (c) return { v: c[0], tag: c[8] != null && c[8] < 4 ? '*' : '', c };
     const e = est(id); return e ? { v: e[0], tag: 'EST', c: null } : null;
   };
-  const nm = x => (F(x.id) || {}).name || x.name || x.id;
+  /* ranking oficial do UFC (data/ufc_rankings.json): texto simples, para caber no canvas e no BBCode */
+  const urk = id => { const r = S.urk && S.urk.fighter_rank && S.urk.fighter_rank[mid(id)]; return r ? (r.rank === 0 ? 'C' : r.rank ? '#' + r.rank : '') : ''; };
+  const nm = x => ((F(x.id) || {}).name || x.name || x.id) + (urk(x.id) ? ' (' + urk(x.id) + ')' : '');
   const pct = v => Math.round(v * 100) + '%';
   const last = n => String(n || '').trim().split(/\s+/).pop();
 
@@ -452,7 +454,7 @@
     x.fillStyle = TXT; fitText(x, p.name.toUpperCase(), W - 112, 96); x.fillText(p.name.toUpperCase(), 56, 530);
     x.fillStyle = MUT; x.font = `500 26px ${FB}`;
     const dv = a && a.divs ? a.divs.filter(d => !['Catch Weight', 'Open Weight', 'Outros'].includes(d[0])).map(d => d[0] + (d[6] ? ' 🏆' + (d[6] > 1 ? d[6] : '') : '')) : [];
-    x.fillText([p.nick ? `"${p.nick}"` : '', dv.join(' · '), p.country || ''].filter(Boolean).join('   ·   '), 58, 574);
+    x.fillText([p.nick ? `"${p.nick}"` : '', dv.join(' · '), p.country || '', urk(p.id) ? (urk(p.id) === 'C' ? 'UFC Champion' : 'UFC ' + urk(p.id)) : ''].filter(Boolean).join('   ·   '), 58, 574);
     x.fillStyle = TXT; x.font = `700 30px ${FB}`; x.fillText(recLine(id), 58, 630);
 
     let y = 690;

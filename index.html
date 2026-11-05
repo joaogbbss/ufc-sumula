@@ -146,6 +146,9 @@ nav .more.on{color:var(--gd);box-shadow:inset 0 3px var(--gd)}
 .tb.hd{color:var(--tx);background:var(--s2);font-weight:700;padding-left:.4rem;padding-right:.4rem}.tb:not(.hd){padding-left:.4rem;padding-right:.4rem}.tb:not(.hd):nth-child(even){background:color-mix(in srgb,var(--s2) 38%,transparent)}
 .spw{margin-top:.6rem}.spi{font-size:.85rem;color:var(--mu);min-height:1.4rem}.spc{position:relative}
 .spd{position:absolute;width:24px;height:24px;transform:translate(-50%,-50%);padding:0;background:transparent;clip-path:none;border-radius:50%}.spd::after{content:'';position:absolute;inset:8px;border-radius:50%;background:var(--gd)}.spd.on::after{inset:5px;background:#fff}
+
+.ub{display:inline-block;margin-left:.4rem;padding:.04rem .4rem;font:800 .68rem Archivo,sans-serif;letter-spacing:.02em;background:var(--s2);color:var(--gd);border:1px solid var(--gd);vertical-align:middle;white-space:nowrap;text-transform:none}.ub.c{background:var(--gd);color:#000}.ub.p{color:var(--cb);border-color:var(--cb)}
+.bn{font:700 .7rem Archivo,sans-serif;color:var(--gd);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -242,8 +245,9 @@ async function fetchJson(n) {
 }
 
 async function init() {
-  const [ev, fg, fi, ov, meta, up, ph] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos'].map(fetchJson));
+  const [ev, fg, fi, ov, meta, up, ph, urk] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos', 'ufc_rankings'].map(fetchJson));
     S.pu = (ph && ph.photos) || null; S.rej = ph && ph.rej ? new Set(ph.rej) : null;   // fotos verificadas pelo photos.py
+    S.urk = urk && urk.divisions ? urk : null;   // ranking oficial do UFC (opcional)
     fetchJson('decisions').then(j => { S.dd = j; }).catch(() => { S.dd = null; });
   if (ov) S.ov = {merges:{}, div:{}, exclude:[], ...ov};
   S.ev = ev || [];
@@ -682,7 +686,7 @@ function scoreCtl(e, f, i, ia, ib, k) {
 }
 function upxHtml(e, f, i, ia, ib, k, pr, pb) {
   const A = S.F.get(ia) || {}, B = S.F.get(ib) || {}, cd = S.cdj && S.cdj.cards, es = S.cdj && S.cdj.est, age = p => { const t = Date.parse(p.DOB); return t ? ((Date.now() - t) / YR).toFixed(1) : '-'; };
-  let h = sr(T('Reach', 'Envergadura'), esc(A.Reach || '-'), esc(B.Reach || '-')) + sr(T('Height', 'Altura'), esc(A.Height || '-'), esc(B.Height || '-')) + sr(T('Age', 'Idade'), age(A), age(B)) + sr(T('Stance', 'Base'), esc(A.STANCE || '-'), esc(B.STANCE || '-'));
+  let h = sr(T('Reach', 'Envergadura'), esc(A.Reach || '-'), esc(B.Reach || '-')) + sr(T('Height', 'Altura'), esc(A.Height || '-'), esc(B.Height || '-')) + sr(T('Age', 'Idade'), age(A), age(B)) + sr(T('Stance', 'Base'), esc(A.STANCE || '-'), esc(B.STANCE || '-')) + tapeExtra(A, B);
   const ca = cd && cd[ia], cb = cd && cd[ib], ea = es && es[ia], eb = es && es[ib], ov = (c, x) => c ? c[0] : x ? x[0] : null, oa0 = ov(ca, ea), ob0 = ov(cb, eb);
   if (oa0 != null || ob0 != null) h += sr('OVR', oa0 == null ? '-' : oa0 + (ca ? '' : '*'), ob0 == null ? '-' : ob0 + (cb ? '' : '*'), oa0 || 0, ob0 || 0);
   if (ca || cb) ATL().forEach((l, j) => { h += sr(l, ca ? ca[j + 1] : '-', cb ? cb[j + 1] : '-', ca ? ca[j + 1] : 0, cb ? cb[j + 1] : 0); });
@@ -691,7 +695,7 @@ function upxHtml(e, f, i, ia, ib, k, pr, pb) {
   h += `<p class="mu sm" style="margin:.7rem 0 .1rem">${T('How it could end', 'Como pode terminar')}${pr ? '' : ' (' + T('no rating yet: 50/50', 'sem nota ainda: 50/50') + ')'}</p>` + ['KO', 'SUB', 'DEC'].map(x => sr(nmk[x], pc(p * ma[x]), pc((1 - p) * mb[x]), p * ma[x], (1 - p) * mb[x])).join('');
   const sa = sigShares(ga), sb = sigShares(gb);
   if (sa.t1 >= 60 || sb.t1 >= 60) h += `<p class="mu sm" style="margin:.7rem 0 .1rem">${T('Target & position signature', 'Assinatura de alvo e posição')}</p>` + sigRows(ga, gb);
-  return `<div style="padding-top:.6rem"><div class="sr"><b style="color:var(--gd)">${esc(lastName(f.a.name))}</b><span></span><b style="color:var(--cb)">${esc(lastName(f.b.name))}</b></div>${h}${scoreCtl(e, f, i, ia, ib, k)}</div>`;
+  return `<div style="padding-top:.6rem"><div class="sr"><b style="color:var(--gd)">${esc(lastName(f.a.name))}${ubadge(ia)}</b><span></span><b style="color:var(--cb)">${esc(lastName(f.b.name))}${ubadge(ib)}</b></div>${h}${scoreCtl(e, f, i, ia, ib, k)}</div>`;
 }
 function upEvent(e, idx, body, tm) {
   const open = S.upOpen[e.id] ?? idx === 0, n = e.fights.length;
@@ -734,7 +738,7 @@ function drawUp() {
       const ca = E.RM.get(ia)?.cur, cb = E.RM.get(ib)?.cur, sc = (1 - Math.abs(2 * pb - 1)) + ((ca != null ? pct(ca) : .4) + (cb != null ? pct(cb) : .4)) / 2;
       if (sc > tm.bs) { tm.bs = sc; tm.best = `${lastName(f.a.name)} x ${lastName(f.b.name)}`; }
     }
-    return `<div class="card fight${S.upX.has(k) ? ' open' : ''}"><div class="fx up-fx"><a class="fa" href="#/fighter/${ia}">${av(ia, f.a.name, 'sm')}<span>${esc(f.a.name)}</span></a><span class="ring"><span>VS</span></span><a class="fa" href="#/fighter/${ib}"><span>${esc(f.b.name)}</span>${av(ib, f.b.name, 'sm')}</a></div>
+    return `<div class="card fight${S.upX.has(k) ? ' open' : ''}"><div class="fx up-fx"><a class="fa" href="#/fighter/${ia}">${av(ia, f.a.name, 'sm')}<span>${esc(f.a.name)}${ubadge(ia)}</span></a><span class="ring"><span>VS</span></span><a class="fa" href="#/fighter/${ib}"><span>${esc(f.b.name)}${ubadge(ib)}</span>${av(ib, f.b.name, 'sm')}</a></div>
     ${pr ? `<div class="fav" role="img" aria-label="${pc(pb)} / ${pc(1 - pb)}"><i style="width:${(pb * 100).toFixed(1)}%"></i></div><div class="fvl"><b style="color:var(--gd)">${pc(pb)}</b><span class="mu">★ ${pr.best}</span><b style="color:var(--cb)">${pc(1 - pb)}</b></div>` : ''}
     <div class="fi"><span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${pr ? `<span>Elo ${pc(pr.pE)} · WHR ${pc(pr.pW)} · ${T('Stats', 'Estat.')} ${pc(pr.pS)}</span>` : `<span>${T('no rating yet', 'sem nota ainda')}</span>`}</div>
     <div class="fa2"><button class="pk${S.upX.has(k) ? ' on' : ''}" data-upx="${k}">🔍 ${T('X-Ray', 'Raio-X')}</button><span class="pickbox"><span class="mu sm">${T('Pick', 'Palpite')}:</span><button class="pk${pk === 'a' ? ' on' : ''}" data-pick="${k}:a">${esc(lastName(f.a.name))}</button><button class="pk${pk === 'b' ? ' on' : ''}" data-pick="${k}:b">${esc(lastName(f.b.name))}</button></span></div><div class="st" id="upx-${e.id}-${ia}-${ib}">${S.upX.has(k) ? upxHtml(e, f, i, ia, ib, k, pr, pb) : ''}</div></div>`;
@@ -1017,6 +1021,181 @@ function agePanel() {
   return `<h2>${T('Age curve: the 35-year-old curse', 'Curva de idade: a maldição dos 35')}<span class="xbar" data-xk="lab:age"></span></h2><div class="card" style="padding:.8rem 1.1rem"><div class="ctl"><label>${T('Division', 'Divisão')}<select onchange="ageSel(this.value)"><option value="ALL"${sel === 'ALL' ? ' selected' : ''}>${T('All divisions', 'Todas as divisões')}</option><option value="LT"${sel === 'LT' ? ' selected' : ''}>${T('Lightweight and below', 'Peso Leve e abaixo')}</option><option value="WW"${sel === 'WW' ? ' selected' : ''}>${T('Welterweight', 'Peso Meio-Médio')}</option><option value="HV"${sel === 'HV' ? ' selected' : ''}>${T('Middleweight and above', 'Peso Médio e acima')}</option>${divs.map(d => `<option${sel === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select></label></div>
   <div id="agep">${ageInner()}</div><p class="mu sm">${T('Win rate minus what the pre-fight Elo expected, by age on fight night (fighters with a known birth date). Older fighters who stay in the UFC are a selected group, so a mild curve can hide a steeper decline among those who left.', 'Taxa de vitória menos o que o Elo pré-luta esperava, pela idade no dia da luta (lutadores com data de nascimento conhecida). Lutadores mais velhos que continuam no UFC são um grupo selecionado, então uma curva suave pode esconder um declínio maior entre os que saíram.')}</p></div>`;
 }
+
+/* ---------- Ranking oficial do UFC, Bônus da Noite, fator casa e altitude ---------- */
+const divKey = t => NRM(t).replace(/['’]/g, '').replace(/\bwomens\b/g, 'women').replace(/\b(ufc|interim|title|bout|championship|mens)\b/g, '').replace(/\s+/g, ' ').trim();
+function ubadge(id) {
+  const r = S.urk && S.urk.fighter_rank && S.urk.fighter_rank[mid(id)]; if (!r) return '';
+  let h = '';
+  if (r.rank === 0) h += `<span class="ub c" title="${T('Official UFC champion', 'Campeão oficial do UFC')}${r.div ? ' · ' + esc(r.div) : ''}">👑 C</span>`;
+  else if (r.rank) h += `<span class="ub" title="${T('Official UFC ranking', 'Ranking oficial do UFC')}${r.div ? ' · ' + esc(r.div) : ''}">#${r.rank} UFC</span>`;
+  if (r.p4p) h += `<span class="ub p" title="Pound-for-pound">P4P #${r.p4p}</span>`;
+  return h;
+}
+const ORIG = {TUF: 'The Ultimate Fighter', DWCS: "Dana White's Contender Series"};
+function originLabel(p) {
+  if (!p || !p.origin) return '-';
+  if (p.origin === 'direct') return p.origin_src === 'default' ? T('Direct signing (presumed)', 'Contratação direta (presumida)') : T('Direct signing', 'Contratação direta');
+  return ORIG[p.origin] || p.origin;
+}
+function tapeExtra(A, B) {
+  const r = [];
+  if (A.leg_reach || B.leg_reach) r.push(sr(T('Leg reach', 'Alcance de perna'), esc(A.leg_reach || '-'), esc(B.leg_reach || '-')));
+  if (A.style || B.style) r.push(sr(T('Style', 'Estilo'), esc(A.style || '-'), esc(B.style || '-')));
+  if (A.origin || B.origin) r.push(sr(T('UFC origin', 'Origem no UFC'), esc(originLabel(A)), esc(originLabel(B))));
+  if (A.hometown || B.hometown) r.push(sr(T('Hometown', 'Cidade natal'), esc(A.hometown || '-'), esc(B.hometown || '-')));
+  return r.join('');
+}
+function bioExtra(p) {
+  return [[T('Leg reach', 'Alcance de perna'), p.leg_reach], [T('Style', 'Estilo'), p.style], [T('Hometown', 'Cidade natal'), p.hometown], [T('UFC origin', 'Origem no UFC'), p.origin ? originLabel(p) : '']].filter(r => r[1]).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+}
+const fmapAll = () => (S._fm && S._fm.n === S.fg.length) ? S._fm.m : (S._fm = {n: S.fg.length, m: new Map(S.fg.map(f => [f.id, f]))}).m;
+
+/* Bônus da Noite: "fight" vale para os dois; "perf"/"ko"/"sub" para o vencedor (com 2 ícones do mesmo tipo, os dois lutadores) */
+const BONUS_USD = 50;   // mil dólares por bônus (estimativa)
+function bonusMap() {
+  if (S._bm && S._bm.n === S.fg.length) return S._bm.m;
+  const m = new Map(), give = (id, t, fid) => { let x = m.get(id); if (!x) m.set(id, x = {fotn: 0, perf: 0, ko: 0, sub: 0, fights: new Map()}); if (t === 'fight') x.fotn++; else x[t]++; const a = x.fights.get(fid) || []; a.push(t); x.fights.set(fid, a); };
+  for (const f of S.fg) {
+    const b = f.bonus; if (!b || !b.length) continue;
+    const cnt = {}; for (const t of b) cnt[t] = (cnt[t] || 0) + 1;
+    const ia = mid(f.a.id), ib = mid(f.b.id), win = f.res === 'a' ? ia : f.res === 'b' ? ib : null, lose = f.res === 'a' ? ib : f.res === 'b' ? ia : null;
+    if (cnt.fight) { give(ia, 'fight', f.id); give(ib, 'fight', f.id); }
+    for (const t of ['perf', 'ko', 'sub']) { const n = cnt[t] || 0; if (!n || !win) continue; give(win, t, f.id); if (n >= 2) give(lose, t, f.id); }
+  }
+  S._bm = {n: S.fg.length, m}; return m;
+}
+const bonusTot = x => x.fotn + x.perf + x.ko + x.sub;
+function bonusLine(id) {
+  const x = bonusMap().get(id); if (!x) return '';
+  const t = bonusTot(x), pot = x.perf + x.ko + x.sub;
+  return `<div class="card" style="padding:.8rem 1.1rem;margin-top:.6rem">💰 <b>${t} ${T('Night bonuses', 'Bônus da Noite')}</b> (${x.fotn} FOTN, ${pot} Performance/KO/Sub) · <span class="mu">~$${t * BONUS_USD}k ${T('estimated', 'estimados')}</span></div>`;
+}
+function bonusIcon(id, fid) {
+  const a = bonusMap().get(id); const g = a && a.fights.get(fid); if (!g) return '';
+  return ' ' + [...new Set(g.map(t => t === 'fight' ? 'FOTN' : 'POTN'))].map(t => `<span class="bn">💰 ${t}</span>`).join(' ');
+}
+function bonusRows() {
+  const nf = new Map(); for (const f of S.fg) for (const q of 'ab') { const id = mid(f[q].id); nf.set(id, (nf.get(id) || 0) + 1); }
+  const rows = [];
+  for (const [id, x] of bonusMap()) { const n = nf.get(id) || 0; if (n < 5) continue; rows.push({id, n, t: bonusTot(x), fotn: x.fotn, potn: x.perf + x.ko + x.sub, ko: x.ko, sub: x.sub, perf: x.perf, nb: x.fights.size, rate: x.fights.size / n}); }
+  return rows.sort((a, b) => b.t - a.t || b.rate - a.rate);
+}
+function bonusPanel() {
+  const all = bonusRows(), rows = all.slice(0, 25), nm_ = id => (S.F.get(id) || {}).name || id;
+  XEXP.reg('lab:bonus', () => ({kind: 'table', title: T('Bonus hunters (Mr. 50G)', 'Caçadores de Bônus (Mr. 50G)'), file: 'cacadores-de-bonus', sub: T(`Fight of the Night counts for both fighters; Performance/KO/Sub for the winner · ~$${BONUS_USD}k each · min. 5 UFC fights`, `Fight of the Night vale para os dois lutadores; Performance/KO/Sub para o vencedor · ~$${BONUS_USD}k cada · mín. 5 lutas no UFC`),
+    cols: [T('Fighter', 'Lutador'), T('UFC fights', 'Lutas no UFC'), T('Total bonuses', 'Total de bônus'), 'FOTN', 'POTN/KO/SUB', T('Fights with a bonus', 'Lutas com bônus'), T('% fights with a bonus', '% de lutas com bônus'), T('Estimated prize ($k)', 'Prêmio estimado ($k)')],
+    rows: all.map(r => [nm_(r.id), r.n, r.t, r.fotn, r.potn, r.nb, pc(r.rate), r.t * BONUS_USD])}));
+  return `<h2>${T('Bonus hunters (Mr. 50G)', 'Caçadores de Bônus (Mr. 50G)')}<span class="xbar" data-xk="lab:bonus"></span></h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
+  ${rows.length ? `<div class="tb hd" style="min-width:36rem;grid-template-columns:1.7fr .6fr .7fr .6fr .9fr .9fr .9fr"><span>${T('Fighter', 'Lutador')}</span><span>${T('Fights', 'Lutas')}</span><span>${T('Bonuses', 'Bônus')}</span><span>FOTN</span><span>POTN/KO/SUB</span><span>${T('% with bonus', '% com bônus')}</span><span>${T('Prize', 'Prêmio')}</span></div>
+  ${rows.map(r => `<div class="tb" style="min-width:36rem;grid-template-columns:1.7fr .6fr .7fr .6fr .9fr .9fr .9fr"><span><a href="#/fighter/${r.id}">${esc(nm_(r.id))}</a></span><span>${r.n}</span><b>${r.t}</b><span>${r.fotn}</span><span>${r.potn}</span><span>${pc(r.rate)}</span><span>~$${r.t * BONUS_USD}k</span></div>`).join('')}` : `<p class="mu">${T('No fight with bonus data yet.', 'Ainda não há lutas com dados de bônus.')}</p>`}
+  <p class="mu sm">${T(`Fight of the Night counts for both fighters; Performance, KO and Submission of the Night for the winner (two icons of the same type: both fighters). Prize estimated at $${BONUS_USD}k per bonus: real amounts varied over the years. Minimum 5 UFC fights.`, `Fight of the Night vale para os dois lutadores; Performance, KO e Submission of the Night para o vencedor (dois ícones do mesmo tipo: os dois lutadores). Prêmio estimado em $${BONUS_USD}k por bônus: os valores reais variaram ao longo dos anos. Mínimo de 5 lutas no UFC.`)}</p></div>`;
+}
+
+/* País do evento x país do lutador e altitude */
+const CTRY = {'united states': 'usa', 'usa': 'usa', 'us': 'usa', 'united kingdom': 'uk', 'uk': 'uk', 'england': 'uk', 'scotland': 'uk', 'wales': 'uk', 'northern ireland': 'uk', 'great britain': 'uk', 'united arab emirates': 'uae', 'uae': 'uae', 'russian federation': 'russia', 'republic of korea': 'south korea', 'korea republic of': 'south korea', 'czech republic': 'czechia', 'brasil': 'brazil', 'peoples republic of china': 'china'};
+const ctryKey = t => { const k = NRM(t).replace(/['’.]/g, '').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim(); return CTRY[k] || k; };
+const ctryName = k => ({usa: 'USA', uk: 'United Kingdom', uae: 'UAE'}[k] || k.replace(/\b\w/g, c => c.toUpperCase()));
+const evCountry = loc => { const p = String(loc || '').split(',').map(x => x.trim()).filter(Boolean); return p.length ? ctryKey(p[p.length - 1]) : ''; };
+const ALT_RE = /mexico city|ciudad de mexico|salt lake city|denver|albuquerque/i;
+const evLocs = () => (S._el && S._el.n === S.ev.length) ? S._el.m : (S._el = {n: S.ev.length, m: new Map(S.ev.map(e => [e.id, e.location || '']))}).m;
+function fightHome(f) {
+  const c = evCountry(evLocs().get(f.ev)); if (!c) return null;
+  const A = S.F.get(mid(f.a.id)) || {}, B = S.F.get(mid(f.b.id)) || {};
+  const ha = A.country && ctryKey(A.country) === c, hb = B.country && ctryKey(B.country) === c;
+  return ha && !hb && B.country ? 'a' : hb && !ha && A.country ? 'b' : null;
+}
+function homeD(r) { const f = fmapAll().get(r.fid); if (!f) return 0; const h = fightHome(f); return !h ? 0 : (mid((h === 'a' ? f.a : f.b).id) === r.ix ? 1 : -1); }
+function legD(r) { const a = parseFloat((S.F.get(r.ix) || {}).leg_reach), b = parseFloat((S.F.get(r.iy) || {}).leg_reach); return isNaN(a) || isNaN(b) ? NaN : a - b; }
+function homePanel() {
+  const c = slopeCal(), by = fmapAll(), loc = evLocs(), acc = () => ({n: 0, y: 0, e: 0, v: 0}), add = (a, y, p) => { a.n++; a.y += y; a.e += p; a.v += p * (1 - p); };
+  const G = {all: acc(), dec: acc(), spl: acc(), fin: acc()}, byC = new Map();
+  for (const r of pre().rows) {
+    if (r.nx < 3 || r.ny < 3) continue;
+    const f = by.get(r.fid); if (!f || (f.res !== 'a' && f.res !== 'b')) continue;
+    const hs = fightHome(f); if (!hs) continue;
+    const pX = sg(c * r.x[0]), hX = mid((hs === 'a' ? f.a : f.b).id) === r.ix, y = hX ? r.y : 1 - r.y, p = hX ? pX : 1 - pX, dec = /decision/i.test(f.method || ''), spl = /split|majority/i.test(f.method || '');
+    add(G.all, y, p); if (dec) add(G.dec, y, p); else add(G.fin, y, p); if (spl) add(G.spl, y, p);
+    const k = evCountry(loc.get(f.ev)); let q = byC.get(k); if (!q) byC.set(k, q = {all: acc(), dec: acc()}); add(q.all, y, p); if (dec) add(q.dec, y, p);
+  }
+  const st = a => ({n: a.n, w: a.n ? a.y / a.n : 0, e: a.n ? a.e / a.n : 0, d: a.n ? 100 * (a.y - a.e) / a.n : 0, ci: a.n ? 196 * Math.sqrt(a.v) / a.n : 0, z: a.v ? (a.y - a.e) / Math.sqrt(a.v) : 0});
+  const zc = z => `<span class="${Math.abs(z) > 1.96 ? (z > 0 ? 'up' : 'dn') : 'mu'}">${z >= 0 ? '+' : ''}${z.toFixed(1)}</span>`, ex = o => `${o.d >= 0 ? '+' : ''}${o.d.toFixed(1)} pp <span class="mu sm">±${o.ci.toFixed(1)}</span>`;
+  const grp = [[T('All fights', 'Todas as lutas'), G.all], [T('Judges’ decisions', 'Decisões dos juízes'), G.dec], [T('Split decisions', 'Decisões divididas'), G.spl], [T('Finishes', 'Finalizações'), G.fin]].map(([l, a]) => [l, st(a)]);
+  const cty = [...byC].map(([k, q]) => ({k, a: st(q.all), d: st(q.dec)})).filter(x => x.a.n >= 25).sort((a, b) => (b.d.n >= 15 ? b.d.d : -99) - (a.d.n >= 15 ? a.d.d : -99));
+  const hi = {n: 0, late: 0, pr: []}, lo = {n: 0, late: 0, pr: []};
+  for (const f of S.fg) {
+    if (f.res === 'nc') continue;
+    const g = ALT_RE.test(loc.get(f.ev) || '') ? hi : lo; g.n++;
+    const k = cls(f.method), r = parseInt(f.round) || 0; if ((k === 'KO' || k === 'SUB') && r >= 3) g.late++;
+    const t = f.rounds && f.rounds.totals; if (t && t.length >= 3) { const L = i => num((t[i].a || {})['Sig. str.']) + num((t[i].b || {})['Sig. str.']); if (L(0) > 0) g.pr.push(L(2) / L(0)); }
+  }
+  const mean = a => a.reduce((x, y) => x + y, 0) / (a.length || 1), vr = a => { const m = mean(a); return a.reduce((x, y) => x + (y - m) ** 2, 0) / Math.max(a.length - 1, 1); };
+  const pl = (hi.late / (hi.n || 1)), pb = (lo.late / (lo.n || 1)), pp = (hi.late + lo.late) / ((hi.n + lo.n) || 1), zl = hi.n && lo.n ? (pl - pb) / Math.sqrt(pp * (1 - pp) * (1 / hi.n + 1 / lo.n) || 1) : 0;
+  const mh = mean(hi.pr), ml = mean(lo.pr), zp = hi.pr.length > 2 && lo.pr.length > 2 ? (mh - ml) / Math.sqrt(vr(hi.pr) / hi.pr.length + vr(lo.pr) / lo.pr.length || 1) : 0;
+  XEXP.reg('lab:home', () => ({kind: 'table', title: T('Home advantage and altitude in the UFC', 'Fator casa e altitude no UFC'), file: 'fator-casa-e-altitude', sub: T('Home fighter results vs pre-fight Elo expectation (past only)', 'Resultado do lutador da casa vs expectativa do Elo pré-luta (só o passado)'),
+    cols: [T('Section', 'Seção'), T('Item', 'Item'), 'n', T('Observed', 'Observado'), T('Expected', 'Esperado'), T('Difference (pp)', 'Diferença (pp)'), '±', 'z'],
+    rows: [...grp.map(([l, o]) => [T('Home advantage', 'Vantagem de casa'), l, o.n, pc(o.w), pc(o.e), o.d.toFixed(1), o.ci.toFixed(1), o.z.toFixed(1)]),
+      ...cty.map(x => [T('By country', 'Por país'), ctryName(x.k), x.a.n, pc(x.a.w), pc(x.a.e), x.a.d.toFixed(1), x.a.ci.toFixed(1), x.a.z.toFixed(1)]),
+      ...cty.filter(x => x.d.n >= 15).map(x => [T('Judges’ decisions by country', 'Decisões dos juízes por país'), ctryName(x.k), x.d.n, pc(x.d.w), pc(x.d.e), x.d.d.toFixed(1), x.d.ci.toFixed(1), x.d.z.toFixed(1)]),
+      [T('Altitude', 'Altitude'), T('KO/SUB in round 3+ (% of fights): high altitude', 'KO/SUB no 3º round+ (% das lutas): alta altitude'), hi.n, pc(pl), pc(pb), (100 * (pl - pb)).toFixed(1), '', zl.toFixed(1)],
+      [T('Altitude', 'Altitude'), T('Pace R3/R1: high altitude', 'Ritmo R3/R1: alta altitude'), hi.pr.length, mh.toFixed(2), ml.toFixed(2), (100 * (mh - ml)).toFixed(1), '', zp.toFixed(1)]]}));
+  return `<h2>${T('Home advantage and altitude in the UFC', 'Fator casa e altitude no UFC')}<span class="xbar" data-xk="lab:home"></span></h2><div class="card" style="padding:.8rem 1.1rem">
+  <p class="mu sm" style="margin-top:0">${T('A fighter is “at home” when the event country is his own and the opponent is foreign. Difference = home fighter’s win rate minus what the pre-fight Elo expected, with 95% interval; z beyond ±1.96 is colored.', 'O lutador está “em casa” quando o país do evento é o dele e o rival é estrangeiro. Diferença = taxa de vitória do lutador da casa menos o que o Elo pré-luta esperava, com intervalo de 95%; z além de ±1,96 fica colorido.')}</p>
+  <div class="tb hd" style="grid-template-columns:1.6fr .6fr .8fr .8fr 1.3fr .6fr"><span></span><span>n</span><span>${T('Observed', 'Observado')}</span><span>${T('Expected', 'Esperado')}</span><span>${T('Difference', 'Diferença')}</span><span>z</span></div>
+  ${grp.map(([l, o]) => `<div class="tb" style="grid-template-columns:1.6fr .6fr .8fr .8fr 1.3fr .6fr"><span>${l}</span><span>${o.n}</span><span>${o.n ? pc(o.w) : '—'}</span><span>${o.n ? pc(o.e) : '—'}</span><span>${o.n ? ex(o) : '—'}</span><span>${o.n ? zc(o.z) : '—'}</span></div>`).join('')}
+  ${cty.length ? `<p class="mu sm" style="margin:.8rem 0 .2rem"><b>${T('By country (25+ home fights), sorted by the judges’ home bias in decisions', 'Por país (25+ lutas em casa), ordenado pelo viés a favor da casa nas decisões dos juízes')}</b></p><div style="overflow-x:auto"><div class="tb hd" style="min-width:32rem;grid-template-columns:1.2fr .5fr 1.3fr .5fr 1.3fr"><span>${T('Country', 'País')}</span><span>n</span><span>${T('All fights', 'Todas')}</span><span>${T('Dec.', 'Dec.')}</span><span>${T('Decisions: difference', 'Decisões: diferença')}</span></div>
+  ${cty.slice(0, 14).map(x => `<div class="tb" style="min-width:32rem;grid-template-columns:1.2fr .5fr 1.3fr .5fr 1.3fr"><span>${esc(ctryName(x.k))}</span><span>${x.a.n}</span><span>${ex(x.a)}</span><span>${x.d.n}</span><span>${x.d.n >= 15 ? ex(x.d) + ' ' + zc(x.d.z) : '—'}</span></div>`).join('')}</div>` : `<p class="mu sm">${T('Not enough fights with known countries yet (the fighter country comes from ESPN).', 'Ainda não há lutas suficientes com países conhecidos (o país do lutador vem da ESPN).')}</p>`}
+  <p class="mu sm" style="margin:.8rem 0 .2rem"><b>${T('High altitude (Mexico City, Salt Lake City, Denver, Albuquerque)', 'Alta altitude (Cidade do México, Salt Lake City, Denver, Albuquerque)')}</b></p>
+  ${hi.n >= 10 ? `<div class="sr" style="grid-template-columns:2fr 1fr 1fr"><span>${T('KO/SUB in round 3+, % of fights', 'KO/SUB no 3º round+, % das lutas')}</span><b>${pc(pl)} <span class="mu sm">(n=${hi.n})</span></b><span>${pc(pb)} <span class="mu sm">(${T('sea level', 'nível baixo')}, n=${lo.n})</span> ${zc(zl)}</span></div>
+  <div class="sr" style="grid-template-columns:2fr 1fr 1fr"><span>${T('Pace drop: strikes in R3 ÷ R1', 'Queda de ritmo: golpes no R3 ÷ R1')}</span><b>${hi.pr.length > 2 ? mh.toFixed(2) : '—'} <span class="mu sm">(n=${hi.pr.length})</span></b><span>${ml.toFixed(2)} <span class="mu sm">(${T('sea level', 'nível baixo')}, n=${lo.pr.length})</span> ${hi.pr.length > 2 ? zc(zp) : ''}</span></div>` : `<p class="mu sm">${T('Fewer than 10 fights at altitude on record.', 'Menos de 10 lutas em altitude registradas.')}</p>`}
+  <p class="mu sm">${T('The decisions column mixes what judges do with how fights end; treat it as a clue. Small countries have wide intervals: read the ± and the n.', 'A coluna de decisões mistura o que os juízes fazem com como as lutas terminam; trate como uma pista. Países pequenos têm intervalos largos: leia o ± e o n.')}</p></div>`;
+}
+
+/* Ranking oficial do UFC x nota WHR */
+function urkRows() {
+  const U = S.urk; if (!U || !U.divisions) return null;
+  const E = getE('ALL'), cut = new Date(Date.now() - 2.5 * YR).toISOString().slice(0, 10), last = new Map();
+  for (const f of S.fg) for (const q of 'ab') { const id = mid(f[q].id), d = last.get(id); if (!d || f.date >= d.date) last.set(id, {date: f.date, div: divKey(f.div)}); }
+  const pools = new Map();
+  for (const x of E.rows) { const l = last.get(x.id); if (!l || l.date < cut) continue; let a = pools.get(l.div); if (!a) pools.set(l.div, a = []); a.push(x); }
+  pools.forEach(a => a.sort((p, q) => q.cur - p.cur));
+  const rows = [];
+  for (const [dn, d] of Object.entries(U.divisions)) {
+    if (/pound/i.test(dn)) continue;
+    const pool = pools.get(divKey(dn)) || [], pos = new Map(pool.map((x, i) => [x.id, i + 1])), off = new Map();
+    if (d.champ) off.set(d.champ, 0); for (const [id, r] of Object.entries(d.ranks || {})) off.set(id, r);
+    for (const [id, r] of off) {
+      const x = E.RM.get(id), wp = pos.get(id) ?? null, o = r === 0 ? 1 : r;
+      let status = '';
+      if (wp != null && r >= 1 && r <= 10 && wp >= Math.max(15, r + 10)) status = 'over';
+      else if (wp != null && r >= 11 && wp <= 10) status = 'under';
+      else if (wp != null && r >= 1 && wp <= 5 && r - wp >= 5) status = 'under';
+      rows.push({id, div: dn, off: r, wp, gap: wp == null ? null : wp - o, cur: x ? Math.round(x.cur) : null, last: x ? x.last : '', status, pool: pool.length});
+    }
+    pool.slice(0, 10).forEach((x, i) => { if (!off.has(x.id)) rows.push({id: x.id, div: dn, off: null, wp: i + 1, gap: null, cur: Math.round(x.cur), last: x.last, status: 'under', pool: pool.length}); });
+  }
+  return rows;
+}
+function urkPanel() {
+  const rows = urkRows(), nm_ = id => (S.F.get(id) || {}).name || id, lbl = r => r.off === 0 ? '👑 C' : r.off == null ? 'NR' : '#' + r.off;
+  if (!rows) return `<h2>${T('Official UFC ranking vs the math', 'Ranking oficial UFC vs. Matemática')}</h2><div class="card" style="padding:.8rem 1.1rem"><p class="mu">${T('data/ufc_rankings.json not found (the scraper generates it from the ESPN rankings).', 'data/ufc_rankings.json não encontrado (o scraper gera a partir do ranking da ESPN).')}</p></div>`;
+  const both = rows.filter(r => r.off != null && r.wp != null), n = both.length;
+  const mx = both.reduce((a, r) => a + (r.off === 0 ? 1 : r.off), 0) / (n || 1), my = both.reduce((a, r) => a + r.wp, 0) / (n || 1);
+  let sxy = 0, sxx = 0, syy = 0; both.forEach(r => { const x = (r.off === 0 ? 1 : r.off) - mx, y = r.wp - my; sxy += x * y; sxx += x * x; syy += y * y; });
+  const rho = sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0;
+  const under = rows.filter(r => r.status === 'under').sort((a, b) => (a.wp - (a.off ?? 16)) - (b.wp - (b.off ?? 16))), over = rows.filter(r => r.status === 'over').sort((a, b) => b.gap - a.gap);
+  XEXP.reg('lab:ufc-vs-whr', () => ({kind: 'table', title: T('Official UFC ranking vs WHR', 'Ranking oficial UFC vs. WHR'), file: 'ranking-ufc-vs-whr', sub: `${T('Position inside the division among fighters active in the last 2.5 years', 'Posição dentro da divisão entre os ativos nos últimos 2,5 anos')} · ${T('correlation', 'correlação')} ${rho.toFixed(2)} (n=${n})`,
+    cols: [T('Fighter', 'Lutador'), T('Division', 'Divisão'), T('Official', 'Oficial'), T('WHR position', 'Posição WHR'), T('Gap (WHR − official)', 'Diferença (WHR − oficial)'), T('WHR rating', 'Nota WHR'), T('Last fight', 'Última luta'), T('Verdict', 'Veredito')],
+    rows: rows.map(r => [nm_(r.id), r.div, lbl(r), r.wp ?? '—', r.gap ?? '—', r.cur ?? '—', r.last || '—', r.status === 'under' ? T('Underrated', 'Subestimado') : r.status === 'over' ? T('Overrated', 'Superestimado') : ''])}));
+  const tab = (list, k) => list.length ? `<div style="overflow-x:auto"><div class="tb hd" style="min-width:30rem;grid-template-columns:1.6fr 1.2fr .6fr .6fr .6fr .7fr"><span>${T('Fighter', 'Lutador')}</span><span>${T('Division', 'Divisão')}</span><span>${T('Official', 'Oficial')}</span><span>WHR</span><span>${T('Gap', 'Dif.')}</span><span>${T('Rating', 'Nota')}</span></div>
+    ${list.slice(0, 12).map(r => `<div class="tb" style="min-width:30rem;grid-template-columns:1.6fr 1.2fr .6fr .6fr .6fr .7fr"><span><a href="#/fighter/${r.id}">${esc(nm_(r.id))}</a></span><span>${esc(r.div)}</span><b>${lbl(r)}</b><span>#${r.wp}</span><span class="${k === 'over' ? 'dn' : 'up'}">${r.gap == null ? '—' : (r.gap > 0 ? '+' : '') + r.gap}</span><span>${r.cur ?? '—'}</span></div>`).join('')}</div>` : `<p class="mu sm">${T('None found.', 'Nenhum encontrado.')}</p>`;
+  return `<h2>${T('Official UFC ranking vs the math', 'Ranking oficial UFC vs. Matemática')}<span class="xbar" data-xk="lab:ufc-vs-whr"></span></h2><div class="card" style="padding:.8rem 1.1rem">
+  <p class="mu sm" style="margin-top:0">${T(`${n} ranked fighters compared; agreement between the official order and the WHR order: r = ${rho.toFixed(2)}.`, `${n} lutadores ranqueados comparados; concordância entre a ordem oficial e a ordem do WHR: r = ${rho.toFixed(2)}.`)}</p>
+  <p style="margin:.4rem 0 .2rem"><b>${T('Underrated (dark horses)', 'Subestimados (dark horses)')}</b> <span class="mu sm">${T('unranked or ranked 11–15 but already top 10 by WHR, or top 5 by WHR at least 5 places above their official rank', 'sem ranking ou no 11–15, mas já Top 10 pelo WHR, ou Top 5 pelo WHR com 5+ posições acima do ranking oficial')}</span></p>${tab(under, 'under')}
+  <p style="margin:.8rem 0 .2rem"><b>${T('Overrated', 'Superestimados')}</b> <span class="mu sm">${T('official top 10 but at least 10 places lower by WHR (and below 15th)', 'Top 10 oficial, mas 10+ posições abaixo pelo WHR (e além da 15ª)')}</span></p>${tab(over, 'over')}
+  <p class="mu sm">${T('The WHR position counts only fighters whose latest fight was in this division in the last 2.5 years. A large gap is a question, not a verdict: rankings also weigh style, activity and the voters’ opinion.', 'A posição no WHR conta só lutadores cuja última luta foi nesta divisão nos últimos 2,5 anos. Uma diferença grande é uma pergunta, não um veredito: o ranking também pesa estilo, atividade e a opinião dos votantes.')}</p></div>`;
+}
+
 function logSpec() {
   const rows = [];
   for (const [k, L] of Object.entries(S.me.log)) {
@@ -1036,7 +1215,7 @@ function ageSpec() {
     cols: [T('Age', 'Idade'), T('Fights', 'Lutas'), T('Win rate', 'Vitórias'), T('Expected', 'Esperado'), T('Difference (pp)', 'Diferença (pp)'), '±', T('KO/TKO losses', 'Derrotas por KO/TKO')],
     rows: B.map((b, i) => [AGE_BINS[i].replace('&lt;', '<'), b.n, b.n ? pc(b.w / b.n) : '—', b.n ? pc(b.e / b.n) : '—', b.n ? (100 * (b.w - b.e) / b.n).toFixed(1) : '—', b.n ? (196 * Math.sqrt(b.v) / b.n).toFixed(1) : '—', b.n ? pc(b.ko / b.n) : '—'])};
 }
-function labPanels() { XEXP.reg('lab:log', logSpec); XEXP.reg('lab:age', ageSpec); try { return judgesPanel() + refsPanel() + campsPanel() + agePanel(); } catch (e) { return ''; } }
+function labPanels() { XEXP.reg('lab:log', logSpec); XEXP.reg('lab:age', ageSpec); try { return judgesPanel() + refsPanel() + campsPanel() + urkPanel() + bonusPanel() + homePanel() + agePanel(); } catch (e) { return ''; } }
 
 function extraLab() {
   const E = getE('ALL'), now = Date.now(), byId = new Map(S.fg.map(f => [f.id, f]));
@@ -1311,7 +1490,7 @@ function vFighter(id) {
   const own = [...new Set(fs.map(f => f.div))], opts = ['ALL', ...own];
   const d = S.ps.id === id && opts.includes(S.ps.d) ? S.ps.d : (S.div !== 'ALL' && own.includes(S.div) ? S.div : 'ALL');
   const E = getE(d), me = E.RM.get(id), N = E.N.get(id) || [], nm = new Map(N.map(n => [n.f, n])), el = r => Math.round(1500 + U * r);
-  const skip = ['id', 'name', 'nick', 'record', 'img', 'flag', 'espn_id', 'espn_checked'];
+  const skip = ['id', 'name', 'nick', 'record', 'img', 'flag', 'espn_id', 'espn_checked', 'leg_reach', 'style', 'hometown', 'origin', 'origin_src', 'ufc_checked', 'ufc_found', 'ufc_slug'];
   const hist = [...fs].reverse().map(f => {
     const a = mid(f.a.id) === id, o = a ? f.b : f.a, r = f.res === 'draw' ? 'D' : f.res === 'nc' ? 'NC' : (f.res === (a ? 'a' : 'b') ? 'W' : 'L');
     const n = nm.get(f.id), lk = `#/event/${f.ev}/${f.id}`;
@@ -1322,7 +1501,7 @@ function vFighter(id) {
       ex = `<span style="text-align:right"><b class="${dl >= 0 ? 'up' : 'dn'}">${dl >= 0 ? '+' : ''}${dl.toFixed(1)}</b><br><span class="mu sm">${T('rating', 'nota')} ${el(n.r)}</span></span>`;
       sub = `, ${T('win chance', 'chance')} ${Math.round(pc * 100)}%, ${T('opponent then', 'rival na época')} ${el(q.r)}, ${T('opponent peak', 'pico do rival')} ${Math.round(E.RM.get(q.id).pk)}`;
     }
-    return `<div class="h"><a class="mu" href="${lk}" style="text-decoration:underline">${fmt(f.date)}</a><span><b class="${r === 'W' ? 'up' : r === 'L' ? 'dn' : ''}">${S.pt ? {W:'V', L:'D', D:'E', NC:'SR'}[r] : r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a><br><span class="mu sm">${esc(f.method)} ${f.round ? 'R' + esc(f.round) : ''}, ${esc(f.div)}${f.title ? ', ' + (TG(E.tag.get(f.id), r === 'W') || T('title fight', 'cinturão')) : ''}${sub}</span><br><a class="sm" style="color:var(--gd)" href="${lk}">${T('View fight and stats', 'Ver luta e estatísticas')}</a></span>${ex}</div>`;
+    return `<div class="h"><a class="mu" href="${lk}" style="text-decoration:underline">${fmt(f.date)}</a><span><b class="${r === 'W' ? 'up' : r === 'L' ? 'dn' : ''}">${S.pt ? {W:'V', L:'D', D:'E', NC:'SR'}[r] : r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a>${bonusIcon(id, f.id)}<br><span class="mu sm">${esc(f.method)} ${f.round ? 'R' + esc(f.round) : ''}, ${esc(f.div)}${f.title ? ', ' + (TG(E.tag.get(f.id), r === 'W') || T('title fight', 'cinturão')) : ''}${sub}</span><br><a class="sm" style="color:var(--gd)" href="${lk}">${T('View fight and stats', 'Ver luta e estatísticas')}</a></span>${ex}</div>`;
   }).join('');
   const wl = [];
   for (const f of fs) {
@@ -1335,16 +1514,17 @@ function vFighter(id) {
   const sos = wl.length ? wl.reduce((a, x) => a + x.q, 0) / wl.length : null;
   const li = (x, c) => `<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/event/${x.f.ev}/${x.f.id}" style="color:${c}"><b>${esc(name(x.o))}</b></a><span class="mu">${fmt(x.f.date)}</span><span>${el(x.q)}</span></div>`;
   const resume = wl.length ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Résumé highlights', 'Destaques da campanha')}</b>${bw.length ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Best wins (opponent rating then)', 'Melhores vitórias (nota do rival na época)')}</p>${bw.map(x => li(x, 'var(--win)')).join('')}` : ''}${wr ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Worst loss', 'Pior derrota')}</p>${li(wr, 'var(--loss)')}` : ''}${sos != null ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Strength of schedule: average opponent rating', 'Força do calendário: nota média dos rivais')} <b style="color:var(--tx)">${el(sos)}</b></p>` : ''}</div>` : '';
+  const bonusCard = bonusLine(id);
   M(`<a class="mu" href="#/fighters">${T('Search fighters', 'Buscar lutadores')}</a>
-  <div class="hero">${av(id, p.name, 'big')}<div><h1>${S.me.fav[id] ? '★ ' : ''}${esc(p.name)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}${p.country ? ` • ${esc(p.country)}` : ''}${p.team ? ` (${esc(p.team)})` : ''}</span></div></div>
+  <div class="hero">${av(id, p.name, 'big')}<div><h1>${S.me.fav[id] ? '★ ' : ''}${esc(p.name)}${ubadge(id)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}${p.country ? ` • ${esc(p.country)}` : ''}${p.team ? ` (${esc(p.team)})` : ''}</span></div></div>
   <div class="acts"><button id="fv">${S.me.fav[id] ? T('★ Favorite', '★ Favorito') : T('☆ Add to favorites', '☆ Favoritar')}</button><label class="btn">${T('Photo', 'Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id] ? `<button id="rp">${T('Remove photo', 'Remover foto')}</button>` : ''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight', 'Simular luta')}</a><a class="btn" href="#/xray/${id}">${T('X-Ray', 'Raio-X')}</a><span class="xbar" data-xk="fighter"></span></div>
-  <div class="seg jmp" id="fj">${me ? jchip('sc-rate', '📊 ' + T('Rating & evolution', 'Nota & Evolução')) : ''}${resume ? jchip('sc-hi', '🏆 ' + T('Highlights', 'Destaques')) : ''}${jchip('sc-an', '🧬 ' + T('Tactical analysis', 'Análise Tática'))}${jchip('sc-notes', '📝 ' + T('Notes & profile', 'Notas & Ficha'))}${jchip('sc-hist', '🥊 ' + T('History', 'Histórico'))}</div>
+  <div class="seg jmp" id="fj">${me ? jchip('sc-rate', '📊 ' + T('Rating & evolution', 'Nota & Evolução')) : ''}${resume || bonusCard ? jchip('sc-hi', '🏆 ' + T('Highlights', 'Destaques')) : ''}${jchip('sc-an', '🧬 ' + T('Tactical analysis', 'Análise Tática'))}${jchip('sc-notes', '📝 ' + T('Notes & profile', 'Notas & Ficha'))}${jchip('sc-hist', '🥊 ' + T('History', 'Histórico'))}</div>
   <label class="ctl" style="display:grid"><span class="mu sm">${T('Rating scope', 'Escopo da nota')}</span><select id="ps">${opts.map(o => `<option value="${esc(o)}"${o === d ? ' selected' : ''}>${o === 'ALL' ? T('General (all fights)', 'Geral (todas as lutas)') : esc(o)}</option>`).join('')}</select></label>
   ${me ? `<div class="card" id="sc-rate" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">${T('Current rating', 'Nota atual')}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">${T('peak rating', 'nota máxima')} ${Math.round(me.pk)} ${T('in', 'em')} ${me.pkd.slice(0, 4)}<br>${T('all-time score', 'pontuação histórica')} ${Math.round(me.hs)}${me.cq + me.df + me.iv ? `<br>${T('belt', 'cinturão')}: ${me.cq} ${T('won', 'conq.')}, ${me.df} ${T('def.', 'def.')}${me.iv ? `, ${me.iv} ${T('interim', 'interino')}` : ''}` : ''}<br>${me.w}-${me.l}-${me.d}</span></div>${spark(N.map(n => { const f = fs.find(x => x.id === n.f), o = n.gs[0].o, s_ = n.gs[0].s, r_ = s_ === 1 ? (S.pt ? 'V' : 'W') : s_ === 0 ? (S.pt ? 'D' : 'L') : (S.pt ? 'E' : 'D'); return {a: el(n.r), t: f ? `${fmt(n.dt)} · vs ${S.F.get(o.id)?.name || o.id} · ${r_}${f.method ? ' (' + f.method + ')' : ''} · ${T('rating', 'nota')} ${el(n.r)}` : ''}; }))}</div>` : ''}
-  <div id="sc-hi">${resume}</div>${window.XP ? window.XP(id) : ''}
+  <div id="sc-hi">${resume}${bonusCard}</div>${window.XP ? window.XP(id) : ''}
   <h2 id="sc-an">${T('Analysis', 'Análise')}</h2>${analysis(id)}
   <h2 id="sc-notes">${T('My notes', 'Minhas anotações')}</h2><textarea id="nt" placeholder="${T('Write anything about this fighter…', 'Escreva o que quiser sobre este lutador…')}">${esc(S.me.note[id] || '')}</textarea>
-  <h2>${T('Profile', 'Ficha')}</h2><dl class="card bio">${Object.entries(p).filter(([k]) => !skip.includes(k)).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+  <h2>${T('Profile', 'Ficha')}</h2><dl class="card bio">${Object.entries(p).filter(([k]) => !skip.includes(k)).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}${bioExtra(p)}</dl>
   <h2 id="sc-hist">${T('Fight history', 'Histórico')}</h2><p class="mu sm">${T('Per fight: points won or lost (right, with the rating after the fight), win chance, both ratings then, and the opponent’s peak. Tap the date or "View fight" to open the fight with full stats.', 'Em cada luta: pontos ganhos ou perdidos (à direita, com a nota depois da luta), chance de vitória, nota dos dois na época e pico do rival. Toque na data ou em "Ver luta" para abrir a luta com todas as estatísticas.')}</p>${hist || empty()}`);
   XEXP.reg('fighter', () => {
     const pk_ = fighterPack(id), res_ = f => { const a = mid(f.a.id) === id; const r = f.res === 'draw' ? 'D' : f.res === 'nc' ? 'NC' : (f.res === (a ? 'a' : 'b') ? 'W' : 'L'); return S.pt ? {W: 'V', L: 'D', D: 'E', NC: 'SR'}[r] : r; };
@@ -1352,6 +1532,8 @@ function vFighter(id) {
     if (bw.length) hi.push({k: T('Best wins', 'Melhores vitórias'), v: bw.map(x => `${name(x.o)} (${el(x.q)})`).join(', ')});
     if (wr) hi.push({k: T('Worst loss', 'Pior derrota'), v: `${name(wr.o)} (${el(wr.q)})`});
     if (sos != null) hi.push({k: T('Average rival rating', 'Nota média dos rivais'), v: String(el(sos))});
+    const ur = S.urk && S.urk.fighter_rank && S.urk.fighter_rank[id]; if (ur) hi.push({k: T('Official UFC ranking', 'Ranking oficial do UFC'), v: `${ur.rank === 0 ? T('Champion', 'Campeão') : ur.rank ? '#' + ur.rank : ''}${ur.div ? ' · ' + ur.div : ''}${ur.p4p ? ' · P4P #' + ur.p4p : ''}`});
+    const bx = bonusMap().get(id); if (bx) hi.push({k: T('Night bonuses', 'Bônus da Noite'), v: `${bonusTot(bx)} (${bx.fotn} FOTN, ${bx.perf + bx.ko + bx.sub} Performance/KO/Sub) · ~$${bonusTot(bx) * BONUS_USD}k`});
     if (me) hi.push({k: T('UFC record', 'Cartel no UFC'), v: `${me.w}-${me.l}-${me.d}${me.cq + me.df ? ` · ${T('title wins', 'vitórias de cinturão')} ${me.cq + me.df}` : ''}`});
     return {kind: 'fighter', title: p.name, file: 'atleta-' + XEXP.slug(p.name), share: false, sub: `${p.nick ? '“' + p.nick + '” · ' : ''}${p.record || ''}${p.country ? ' · ' + p.country : ''}${p.team ? ' · ' + p.team : ''}`,
       fighter: {id, name: p.name, photo: photoOf(id), cur: me ? Math.round(me.cur) : null, pk: me ? Math.round(me.pk) : null, pkYear: me ? me.pkd.slice(0, 4) : '', hs: me ? Math.round(me.hs) : null, scope: d, series: N.map(n => el(n.r)), hi, sig: pk_.sig, cardio: pk_.cardio},
@@ -1376,7 +1558,7 @@ const sr = (l, a, b, x, y) => `<div class="sr"><span style="color:var(--gd)">${a
 
 function pick(q, s) {
   const id = q[s], p = S.F.get(id);
-  return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${s === 'a' ? T('Fighter A', 'Lutador A') : T('Fighter B', 'Lutador B')}</div>${p ? `<div class="sel">${av(id, p.name, 'sm')}<b>${esc(p.name)}</b><span class="mu sm">${esc(p.record)}</span><button data-clr="${s}">×</button></div>` : `<input data-q="${s}" type="search" placeholder="${T('Search a fighter…', 'Buscar lutador…')}"><div class="res" id="r${s}"></div>`}</div>`;
+  return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${s === 'a' ? T('Fighter A', 'Lutador A') : T('Fighter B', 'Lutador B')}</div>${p ? `<div class="sel">${av(id, p.name, 'sm')}<b>${esc(p.name)}</b>${ubadge(id)}<span class="mu sm">${esc(p.record)}</span><button data-clr="${s}">×</button></div>` : `<input data-q="${s}" type="search" placeholder="${T('Search a fighter…', 'Buscar lutador…')}"><div class="res" id="r${s}"></div>`}</div>`;
 }
 
 
@@ -1417,9 +1599,9 @@ function simOut(q) {
   const G = league(), oa = agg(q.a, q.m), ob = agg(q.b, q.m), xa = rates(oa, G), xb = rates(ob, G), el = r => Math.round(1500 + U * r.mu), sd = r => Math.round(U * Math.sqrt(r.v));
   const da = mainDiv(q.a), db = mainDiv(q.b), age = d => { const t = Date.parse(d); return t ? ((Date.now() - t) / YR).toFixed(1) : '-'; };
   let h = `<h2>${T('Win probability', 'Probabilidade de vitória')}</h2><div class="card" style="padding:1rem 1.1rem"><div class="pb"><i style="flex:${p};background:var(--gd)">${pc(p)}</i><i style="flex:${1 - p};background:var(--cb)">${pc(1 - p)}</i></div>
-  <div class="sr"><span style="color:var(--gd)">${esc(A.name)}</span><span></span><span style="color:var(--cb)">${esc(B.name)}</span></div>
+  <div class="sr"><span style="color:var(--gd)">${esc(A.name)}${ubadge(q.a)}</span><span></span><span style="color:var(--cb)">${esc(B.name)}${ubadge(q.b)}</span></div>
   <p class="mu sm">${T('90% interval for A', 'Intervalo de 90% para A')}: ${pc(lo)} – ${pc(hi)}. ${T('Ratings', 'Notas')}: ${el(ra)} ± ${sd(ra)} ${T('vs', 'vs')} ${el(rb)} ± ${sd(rb)} (${q.m === 'peak' ? T('career peak', 'pico da carreira') : T('current form, with uncertainty growing while inactive', 'momento atual, com incerteza crescendo na inatividade')}).${da !== db ? ` ${T('Different main divisions: the rating comparison is indirect.', 'Divisões principais diferentes: a comparação de notas é indireta.')}` : ''}</p></div>
-  <h2>${T('Tale of the tape', 'Comparativo')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Record', 'Cartel'), esc(A.record), esc(B.record))}${sr(T('Height', 'Altura'), esc(A.Height || '-'), esc(B.Height || '-'))}${sr(T('Reach', 'Envergadura'), esc(A.Reach || '-'), esc(B.Reach || '-'))}${sr(T('Stance', 'Base'), esc(A.STANCE || '-'), esc(B.STANCE || '-'))}${sr(T('Age', 'Idade'), age(A.DOB), age(B.DOB))}${sr(T('Main division', 'Divisão principal'), esc(da), esc(db))}${sr(T('Fights used', 'Lutas usadas'), oa.n, ob.n)}</div>`;
+  <h2>${T('Tale of the tape', 'Comparativo')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Record', 'Cartel'), esc(A.record), esc(B.record))}${sr(T('Height', 'Altura'), esc(A.Height || '-'), esc(B.Height || '-'))}${sr(T('Reach', 'Envergadura'), esc(A.Reach || '-'), esc(B.Reach || '-'))}${sr(T('Stance', 'Base'), esc(A.STANCE || '-'), esc(B.STANCE || '-'))}${sr(T('Age', 'Idade'), age(A.DOB), age(B.DOB))}${tapeExtra(A, B)}${sr(T('Main division', 'Divisão principal'), esc(da), esc(db))}${sr(T('Fights used', 'Lutas usadas'), oa.n, ob.n)}</div>`;
   S.simLast = {A, B, p, lo, hi, m: q.m};
   h += `<div class="acts" style="margin-top:.6rem"><button id="shr">${T('Share card', 'Cartão para compartilhar')}</button><a class="btn" href="#/xray/${q.a}/${q.b}">${T('Open in X-Ray', 'Abrir no Raio-X')}</a></div>`;
   h += models(q, p); h += h2hHtml(q);
@@ -1549,7 +1731,8 @@ function tune() {
 
 const LABSHORT = [[/validation|valida/i, () => T('Validation', 'Validação')], [/calibra/i, () => T('Calibration', 'Calibração')], [/really matters|importa/i, () => T('Variables', 'Variáveis')], [/auto-?tune|autoajuste/i, () => 'Auto-tune'],
   [/reign|reinado/i, () => T('Reigns', 'Reinados')], [/upset|zebra/i, () => T('Upsets', 'Zebras')], [/prediction|palpite|placar|scoreboard/i, () => T('My picks', 'Meus palpites')], [/judge|juíz|juiz/i, () => T('Judges', 'Juízes')],
-  [/referee|árbitro|arbitro/i, () => T('Referees', 'Árbitros')], [/gym|academia|camp/i, () => T('Gyms', 'Academias')], [/age curve|curva de idade/i, () => T('Age curve', 'Curva de idade')], [/robber|roubo|decision check|decisões/i, () => T('Possible robberies', 'Possíveis roubos')]];
+  [/referee|árbitro|arbitro/i, () => T('Referees', 'Árbitros')], [/gym|academia|camp/i, () => T('Gyms', 'Academias')], [/age curve|curva de idade/i, () => T('Age curve', 'Curva de idade')], [/robber|roubo|decision check|decisões/i, () => T('Possible robberies', 'Possíveis roubos')],
+  [/official ufc|ranking oficial/i, () => T('UFC vs WHR', 'UFC vs. WHR')], [/bonus hunters|caçadores/i, () => T('Bonus hunters', 'Caçadores de bônus')], [/home advantage|fator casa/i, () => T('Home & altitude', 'Casa e altitude')]];
 function labChips() {
   const root = $('#lb'); if (!root) return;
   let obs = null;
@@ -1979,7 +2162,9 @@ function route() {
     {k:'exp', l:T('Experience (ratio of fights)', 'Experiência (razão de lutas)'), u:'×', f:r => r.x[1], tf:Math.log, T:2, s:.5},
     {k:'lay', l:T('Time off', 'Tempo parado'), u:T('years', 'anos'), f:r => r.x[6], T:1, s:.5},
     {k:'form', l:T('Recent form (last 3 fights)', 'Fase recente (últimas 3 lutas)'), u:T('wins/3', 'vitórias/3'), f:r => r.x[7], T:.34, s:.01},
-    {k:'elo', l:T('Elo gap (control check)', 'Diferença de Elo (teste de controle)'), u:T('points', 'pontos'), f:r => r.x[0] * 400, T:100, s:10}
+    {k:'elo', l:T('Elo gap (control check)', 'Diferença de Elo (teste de controle)'), u:T('points', 'pontos'), f:r => r.x[0] * 400, T:100, s:10},
+    {k:'home', l:T('Fighting at home vs away', 'Lutando em casa vs. visitante'), u:'', f:r => homeD(r), T:1, bin:true},
+    {k:'leg_reach', l:T('Leg reach', 'Alcance de pernas'), u:T('inches', 'polegadas'), f:r => legD(r), T:2, s:.5}
   ];
   const slope = pop => {
     let c = Math.LN10; if (pop.length < 50) return c;
@@ -1996,7 +2181,7 @@ function route() {
       if (Z.e3 && (r.nx < 3 || r.ny < 3)) continue;
       const f = fm.get(r.fid); if (!f || +f.date.slice(0, 4) < Z.from || (Z.div !== 'ALL' && f.div !== Z.div)) continue;
       const m = cls(f.method), fin = m === 'KO' || m === 'SUB';
-      if (Z.met === 'win' && !(Z.sub === 'all' || (Z.sub === 'fin' && fin) || (Z.sub === 'ko' && m === 'KO') || (Z.sub === 'sub' && m === 'SUB') || (Z.sub === 'dec' && m === 'DEC'))) continue;
+      if (Z.met === 'win' && !(Z.sub === 'all' || (Z.sub === 'fin' && fin) || (Z.sub === 'ko' && m === 'KO') || (Z.sub === 'sub' && m === 'SUB') || (Z.sub === 'dec' && m === 'DEC') || (Z.sub === 'spl' && /split|majority/i.test(f.method || '')))) continue;
       base.push(fin ? 1 : 0); pop.push([r.x[0], r.y]);
       let d = V.f(r); if (Z.side === 'less' && !V.bin) d = -d;
       if (d >= thr) q.push({y:r.y, e0:r.x[0] * 400, fin:fin ? 1 : 0, date:r.date});
@@ -2031,6 +2216,7 @@ function route() {
     return `<div class="ctl"><label>${T('Trait', 'Característica')}<select data-zf="v">${op(Vs.map(v => [v.k, v.l]), Z.v)}</select></label>
     ${V.bin ? '' : `<label>${T('Gap of at least', 'Diferença mínima')} (${V.u})<input data-zf="T" type="number" step="${V.s || 1}" min="0" value="${Z.T}"></label><label>${T('Side analysed', 'Lado analisado')}<select data-zf="side">${op([['more', T('The higher value', 'O maior valor')], ['less', T('The lower value', 'O menor valor')]], Z.side)}</select></label>`}
     <label>${T('Outcome', 'Desfecho')}<select data-zf="met">${op([['win', T('That side wins', 'Esse lado vence')], ['fin', T('Fight ends by finish', 'Luta termina em finalização')]], Z.met)}</select></label>
+    ${Z.met === 'win' ? `<label>${T('Method', 'Método')}<select data-zf="sub">${op([['all', T('Any', 'Qualquer')], ['fin', T('Finish', 'Finalização')], ['ko', 'KO/TKO'], ['sub', T('Submission', 'Finalização por chave')], ['dec', T('Decision', 'Decisão')], ['spl', T('Split decision', 'Decisão dividida')]], Z.sub)}</select></label>` : ''}
     <label>${T('Division', 'Divisão')}<select data-zf="div">${op([['ALL', T('All', 'Todas')], ...dv.map(d => [d, d])], Z.div)}</select></label>
     <label>${T('From year', 'A partir do ano')}<input data-zf="from" type="number" min="1993" value="${Z.from}"></label></div><div class="xrow"><span class="xbar" data-xk="el:#zr" data-xt="${T('Cross-tab: tested hypothesis', 'Cruzador: hipótese testada')}"></span></div><div id="zr"></div>`;
   }

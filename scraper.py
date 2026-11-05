@@ -14,6 +14,7 @@ import json
 import re
 import time
 import unicodedata
+from collections import defaultdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -24,6 +25,8 @@ from playwright.sync_api import sync_playwright
 
 BASE = "http://ufcstats.com"
 ESPN_SEARCH_API = "https://site.web.api.espn.com/apis/common/v3/search"
+ESPN_RANKINGS_API = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/rankings"
+UFC_ATHLETE_URL = "https://www.ufc.com/athlete/"
 OUT = Path("data")
 DELAY = 0.7
 
@@ -324,10 +327,261 @@ def enrich_fighter_espn(fighter_dict):
                     fighter_dict["flag"] = ath["flag"]["href"]
                 if ath.get("association", {}).get("name"):
                     fighter_dict["team"] = ath["association"]["name"]
+                bp = ath.get("birthPlace") or {}
+                home = ", ".join(str(x) for x in (bp.get("city"), bp.get("state"), bp.get("country")) if x)
+                if home and not fighter_dict.get("hometown"):
+                    fighter_dict["hometown"] = home
         fighter_dict["espn_checked"] = True
     except Exception:
         pass
     return fighter_dict
+
+
+# ---------- ranking oficial do UFC (ESPN) ----------
+
+def _pos(e):
+    """Posição de um item do ranking: 0 = campeão, 1..15 = top 15, None = desconhecida."""
+    for k in ("current", "rank", "position", "rankDisplay", "value"):
+        v = e.get(k)
+        if v is None:
+            continue
+        if str(v).strip().upper() in ("C", "CHAMP", "CHAMPION"):
+            return 0
+        try:
+            return int(float(str(v).strip().lstrip("#")))
+        except ValueError:
+            continue
+    return None
+
+
+def _is_champ(e):
+    if _pos(e) == 0:
+        return True
+    if any(e.get(k) is True for k in ("champion", "isChampion", "isChamp")):
+        return True
+    ath = e.get("athlete") or {}
+    blob = " ".join(str(x) for x in (e.get("rankDisplay"), e.get("note"), e.get("headline"), ath.get("displayName")) if x)
+    return bool(re.search(r"\(C\)|\bchampion\b", blob, re.I))
+
+
+def parse_espn_rankings(data):
+    """Aceita as variações conhecidas do JSON da ESPN e devolve uma lista de rankings já normalizada."""
+    out = []
+    lists = (data or {}).get("rankings") if isinstance(data, dict) else None
+    if lists is None and isinstance(data, dict):
+        lists = data.get("divisions")
+    for l in lists or []:
+        title = str(l.get("name") or l.get("shortName") or l.get("displayName") or l.get("headline") or "").strip()
+        if not title:
+            continue
+        rows = []
+        for e in l.get("ranks") or l.get("athletes") or l.get("entries") or []:
+            ath = e.get("athlete") or e.get("team") or e
+            name = re.sub(r"\s*\(C\)\s*$", "", str(ath.get("displayName") or ath.get("fullName") or ath.get("name") or "")).strip()
+            if name:
+                rows.append({"pos": _pos(e), "champ": _is_champ(e), "name": name, "id": str(ath.get("id") or "")})
+        p4p = bool(re.search(r"pound", title, re.I))
+        rows.sort(key=lambda r: (0 if (r["champ"] and not p4p) else 1, r["pos"] if r["pos"] is not None else 99))
+        champ = rows[0] if (rows and rows[0]["champ"] and not p4p) else None
+        rest = [r for r in rows if r is not champ][:15]
+        title = re.sub(r"^men'?s\s+", "", title, flags=re.I)
+        out.append({"title": title, "p4p": p4p, "champ": champ, "ranks": rest})
+    return out
+
+
+def _fighter_index(fighters):
+    by_name, by_eid, toks = defaultdict(list), {}, {}
+    for i, f in fighters.items():
+        n = norm_name(f.get("name", ""))
+        by_name[n].append(i)
+        toks[i] = frozenset(n.split())
+        if f.get("espn_id"):
+            by_eid[str(f["espn_id"])] = i
+    return by_name, by_eid, toks
+
+
+def match_fighter(idx, name, eid):
+    """Casa um atleta do ranking com o id do fighters.json sem chutar: nome exato, ou espn_id com nome parecido."""
+    by_name, by_eid, toks = idx
+    n = norm_name(name)
+    c = by_name.get(n, [])
+    if len(c) == 1:
+        return c[0]
+    if len(c) > 1:
+        return next((i for i in c if eid and by_eid.get(eid) == i), None)
+    a = frozenset(n.split())
+    if eid and eid in by_eid:
+        b = toks[by_eid[eid]]
+        if a and b and len(a & b) / len(a | b) >= 0.5:
+            return by_eid[eid]
+    hit = [i for i, t in toks.items() if t == a]
+    return hit[0] if len(hit) == 1 else None
+
+
+def build_rankings(data, fighters):
+    lists = parse_espn_rankings(data)
+    if not lists:
+        return None
+    idx = _fighter_index(fighters)
+    divisions, fr, unmatched, total, ok = {}, {}, [], 0, 0
+    for L in lists:
+        d = {"champ": None, "ranks": {}}
+        if L["champ"]:
+            total += 1
+            i = match_fighter(idx, L["champ"]["name"], L["champ"]["id"])
+            if i:
+                ok += 1; d["champ"] = i
+                if not L["p4p"]:
+                    fr.setdefault(i, {"div": L["title"], "rank": 0})
+            else:
+                unmatched.append(L["champ"]["name"])
+        for n, r in enumerate(L["ranks"], 1):
+            total += 1
+            i = match_fighter(idx, r["name"], r["id"])
+            if not i:
+                unmatched.append(r["name"]); continue
+            ok += 1; d["ranks"][i] = n
+            if L["p4p"]:
+                fr.setdefault(i, {"div": "", "rank": None})["p4p"] = n
+            else:
+                fr.setdefault(i, {"div": L["title"], "rank": n})
+        divisions[L["title"]] = d
+    return {"updated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "divisions": divisions, "fighter_rank": fr,
+            "matched": ok, "total": total, "unmatched": unmatched[:40]}
+
+
+def refresh_ufc_rankings(fighters):
+    """Baixa o ranking oficial. Se algo falhar, o arquivo anterior fica intacto e a execução segue."""
+    try:
+        r = S.get(ESPN_RANKINGS_API, timeout=15)
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        rk = build_rankings(r.json(), fighters)
+        if not rk or not rk["divisions"] or rk["matched"] < 10:
+            raise RuntimeError("resposta sem divisões reconhecíveis ou com poucos atletas casados")
+        save("ufc_rankings.json", rk)
+        print(f"Ranking oficial: {len(rk['divisions'])} listas, {rk['matched']}/{rk['total']} atletas casados")
+        return True
+    except Exception as ex:
+        print(f"aviso: ranking oficial não atualizado ({ex}); mantendo o arquivo anterior")
+        return False
+
+
+# ---------- biometria e origem (ufc.com) ----------
+UFC_HEADERS = {"User-Agent": UA, "Accept": "text/html,application/xhtml+xml", "Accept-Language": "en-US,en;q=0.9"}
+
+
+def slugify(name):
+    s_ = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode("ascii").lower()
+    return re.sub(r"[^a-z0-9]+", "-", s_).strip("-")
+
+
+def parse_ufc_bio(html):
+    """Lê a biografia da página do atleta no ufc.com. Só devolve o que está de fato na página."""
+    s_ = BeautifulSoup(html, "lxml")
+    fld = {}
+    for f in s_.select(".c-bio__field"):
+        lab, val = txt(f.select_one(".c-bio__label")).strip().lower(), txt(f.select_one(".c-bio__text"))
+        if lab and val:
+            fld[lab] = val
+    out = {"_name": txt(s_.select_one(".hero-profile__name")) or txt(s_.select_one("h1"))}
+    m = re.search(r"(\d+(?:\.\d+)?)", fld.get("leg reach", ""))
+    if m and 20 <= float(m.group(1)) <= 60:
+        out["leg_reach"] = f'{float(m.group(1)):.1f}"'
+    style = fld.get("fighting style") or fld.get("style")
+    if style:
+        out["style"] = style
+    home = fld.get("hometown") or fld.get("place of birth")
+    if home:
+        out["hometown"] = home
+    scope = " ".join(txt(x) for x in s_.select(".c-bio, .hero-profile"))     # só a biografia e o topo do perfil, não o menu do site
+    if re.search(r"Contender Series|\bDWCS\b", scope):
+        out["_dwcs"] = True
+    if re.search(r"The Ultimate Fighter|\bTUF\b", scope):
+        out["_tuf"] = True
+    return out
+
+
+def _same_name(a, b):
+    ta, tb = set(norm_name(a).split()), set(norm_name(b).split())
+    return bool(ta and tb) and (ta == tb or len(ta & tb) / len(ta | tb) >= 0.6)
+
+
+def enrich_fighter_ufc(d, st):
+    """st = {'blocked': n seguidos, 'off': bool}. Bloqueio (403/429/5xx) não marca o lutador: ele será tentado de novo."""
+    if d.get("ufc_checked") or st.get("off") or not d.get("name"):
+        return d
+    base = d.get("ufc_slug") or slugify(d["name"])
+    for slug in dict.fromkeys([base, base + "-1"]):
+        try:
+            r = S.get(UFC_ATHLETE_URL + slug, headers=UFC_HEADERS, timeout=15)
+        except Exception:
+            st["blocked"] = st.get("blocked", 0) + 1
+            if st["blocked"] >= 6:
+                st["off"] = True
+            return d
+        if r.status_code in (403, 429) or r.status_code >= 500:
+            st["blocked"] = st.get("blocked", 0) + 1
+            if st["blocked"] >= 6:
+                st["off"] = True
+            return d
+        st["blocked"] = 0
+        if r.status_code != 200:
+            continue
+        info = parse_ufc_bio(r.text)
+        if not _same_name(info.get("_name", ""), d["name"]):
+            continue
+        for k in ("leg_reach", "style", "hometown"):
+            if info.get(k):
+                d[k] = info[k]
+        if info.get("_dwcs"):
+            d["origin"], d["origin_src"] = "DWCS", "ufc.com"
+        elif info.get("_tuf"):
+            d["origin"], d["origin_src"] = "TUF", "ufc.com"
+        elif not d.get("origin"):
+            d["origin"], d["origin_src"] = "direct", "default"      # página lida e sem menção: contratação direta PRESUMIDA
+        d["ufc_checked"], d["ufc_slug"] = True, slug
+        return d
+    d["ufc_checked"], d["ufc_found"] = True, False
+    return d
+
+
+def debut_origin(fighters, fights, events):
+    """TUF / DWCS pelo evento da estreia (dado do próprio ufcstats). Vale mais que a presunção 'direct'."""
+    first = {}
+    for f in sorted(fights.values(), key=lambda f: (f["date"], -f["ord"])):
+        for s_ in "ab":
+            first.setdefault(f[s_]["id"], f["ev"])
+    n = 0
+    for i, ev in first.items():
+        d, name = fighters.get(i), (events.get(ev) or {}).get("name", "")
+        if not d or d.get("origin_src") == "ufc.com":
+            continue
+        tag = "TUF" if re.search(r"ultimate fighter|\bTUF\b", name, re.I) else "DWCS" if re.search(r"contender series|DWCS", name, re.I) else None
+        if tag:
+            d["origin"], d["origin_src"] = tag, "ufcstats"; n += 1
+    return n
+
+
+def enrich_ufc_batch(fighters, fights, upids, limit, has_time, delay=0.6):
+    """Lê no ufc.com até `limit` atletas: primeiro os dos próximos eventos, depois os que lutaram mais recentemente."""
+    last = {}
+    for f in fights.values():
+        for s_ in "ab":
+            last[f[s_]["id"]] = max(last.get(f[s_]["id"], ""), f["date"])
+    cand = [x for x in list(upids) + sorted(fighters, key=lambda x: last.get(x, ""), reverse=True) if x in fighters and not fighters[x].get("ufc_checked")]
+    cand = list(dict.fromkeys(cand))[:limit]
+    st = {"blocked": 0, "off": False}
+    if cand:
+        print(f"Lendo {len(cand)} atletas no ufc.com (alcance de perna, estilo, cidade natal, origem)...")
+    for fid in cand:
+        if not has_time() or st["off"]:
+            break
+        fighters[fid] = enrich_fighter_ufc(fighters[fid], st)
+        time.sleep(delay)
+    if st["off"]:
+        print("aviso: ufc.com bloqueou várias requisições seguidas; parei por aqui e tento de novo na próxima execução")
+    return st
 
 
 def upcoming(limit=3):
@@ -405,6 +659,7 @@ def main():
     ap.add_argument("--max-minutes", type=float, default=300)
     ap.add_argument("--refresh", type=int, default=3, help="reprocessa os N eventos mais recentes")
     ap.add_argument("--enrich-limit", type=int, default=150, help="máximo de lutadores enriquecidos via ESPN por execução")
+    ap.add_argument("--ufc-limit", type=int, default=120, help="máximo de lutadores lidos no ufc.com por execução (0 desliga)")
     args = ap.parse_args()
     t0 = time.time()
 
@@ -496,7 +751,7 @@ def main():
         try:
             prev = fighters.get(fid, {})
             d = parse_fighter(fid)
-            for key in ("espn_id", "img", "country", "flag", "team", "espn_checked"):
+            for key in ("espn_id", "img", "country", "flag", "team", "espn_checked", "hometown", "leg_reach", "style", "origin", "origin_src", "ufc_checked", "ufc_found", "ufc_slug"):
                 if key in prev:
                     d[key] = prev[key]
             fighters[fid] = enrich_fighter_espn(d)
@@ -518,6 +773,12 @@ def main():
                     break
                 fighters[fid] = enrich_fighter_espn(fighters[fid])
                 time.sleep(0.15)
+
+    if has_time() and args.ufc_limit > 0:
+        enrich_ufc_batch(fighters, fights, upids, args.ufc_limit, has_time)
+    debut_origin(fighters, fights, events)
+    if has_time():
+        refresh_ufc_rankings(fighters)
 
     persist()
     if up_ok:
