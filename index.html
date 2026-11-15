@@ -147,7 +147,6 @@ nav .more.on{color:var(--gd);box-shadow:inset 0 3px var(--gd)}
 .spw{margin-top:.6rem}.spi{font-size:.85rem;color:var(--mu);min-height:1.4rem}.spc{position:relative}
 .spd{position:absolute;width:24px;height:24px;transform:translate(-50%,-50%);padding:0;background:transparent;clip-path:none;border-radius:50%}.spd::after{content:'';position:absolute;inset:8px;border-radius:50%;background:var(--gd)}.spd.on::after{inset:5px;background:#fff}
 
-.ub{display:inline-block;margin-left:.4rem;padding:.04rem .4rem;font:800 .68rem Archivo,sans-serif;letter-spacing:.02em;background:var(--s2);color:var(--gd);border:1px solid var(--gd);vertical-align:middle;white-space:nowrap;text-transform:none}.ub.c{background:var(--gd);color:#000}.ub.p{color:var(--cb);border-color:var(--cb)}
 .bn{font:700 .7rem Archivo,sans-serif;color:var(--gd);white-space:nowrap}
 </style>
 </head>
@@ -245,9 +244,8 @@ async function fetchJson(n) {
 }
 
 async function init() {
-  const [ev, fg, fi, ov, meta, up, ph, urk] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos', 'ufc_rankings'].map(fetchJson));
+  const [ev, fg, fi, ov, meta, up, ph] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos'].map(fetchJson));
     S.pu = (ph && ph.photos) || null; S.rej = ph && ph.rej ? new Set(ph.rej) : null;   // fotos verificadas pelo photos.py
-    S.urk = urk && urk.divisions ? urk : null;   // ranking oficial do UFC (opcional)
     fetchJson('decisions').then(j => { S.dd = j; }).catch(() => { S.dd = null; });
   if (ov) S.ov = {merges:{}, div:{}, exclude:[], ...ov};
   S.ev = ev || [];
@@ -428,7 +426,7 @@ const mins = f => { const r = parseInt(f.round) || 0, m = String(f.time || '').m
 const cls = m => /^(ko|tko)/i.test(m) ? 'KO' : /^sub/i.test(m) ? 'SUB' : /decision/i.test(m) ? 'DEC' : 'OTH';
 const KS = ['KO', 'SUB', 'DEC', 'OTH'];
 const SIGK = ['Head', 'Body', 'Leg', 'Distance', 'Clinch', 'Ground'];
-const blank = () => ({sg:{Head:0,Body:0,Leg:0,Distance:0,Clinch:0,Ground:0}, sgo:{Head:0,Body:0,Leg:0,Distance:0,Clinch:0,Ground:0}, n:0, min:0, sl:0, sa:0, al:0, aa:0, tdl:0, tda:0, tdo:0, tdoa:0, sub:0, kd:0, kdo:0, ct:0, cto:0, w:0, l:0, W:{KO:0,SUB:0,DEC:0,OTH:0}, Ls:{KO:0,SUB:0,DEC:0,OTH:0}});
+const blank = () => ({sg:{Head:0,Body:0,Leg:0,Distance:0,Clinch:0,Ground:0}, sgo:{Head:0,Body:0,Leg:0,Distance:0,Clinch:0,Ground:0}, sga:{Head:0,Body:0,Leg:0,Distance:0,Clinch:0,Ground:0}, sgoa:{Head:0,Body:0,Leg:0,Distance:0,Clinch:0,Ground:0}, n:0, min:0, sl:0, sa:0, al:0, aa:0, tdl:0, tda:0, tdo:0, tdoa:0, sub:0, kd:0, kdo:0, ct:0, cto:0, w:0, l:0, W:{KO:0,SUB:0,DEC:0,OTH:0}, Ls:{KO:0,SUB:0,DEC:0,OTH:0}});
 
 function agg(id, mode) {
   let fs = S.fg.filter(f => f.res !== 'nc' && (mid(f.a.id) === id || mid(f.b.id) === id)).sort((x, y) => x.date < y.date ? -1 : 1);
@@ -447,7 +445,7 @@ function agg(id, mode) {
       o.kd += num(A.KD); o.kdo += num(B.KD);
       o.ct += secs(A.Ctrl); o.cto += secs(B.Ctrl);
     }
-    if (f.sig && f.sig[me] && f.sig[op]) for (const k of SIGK) { o.sg[k] += num(f.sig[me][k]); o.sgo[k] += num(f.sig[op][k]); }
+    if (f.sig && f.sig[me] && f.sig[op]) for (const k of SIGK) { o.sg[k] += num(f.sig[me][k]); o.sgo[k] += num(f.sig[op][k]); o.sga[k] += attm(f.sig[me][k]); o.sgoa[k] += attm(f.sig[op][k]); }
     if (f.res !== 'draw') {
       const won = f.res === me;
       (won ? o.W : o.Ls)[cls(f.method)]++;
@@ -695,7 +693,7 @@ function upxHtml(e, f, i, ia, ib, k, pr, pb) {
   h += `<p class="mu sm" style="margin:.7rem 0 .1rem">${T('How it could end', 'Como pode terminar')}${pr ? '' : ' (' + T('no rating yet: 50/50', 'sem nota ainda: 50/50') + ')'}</p>` + ['KO', 'SUB', 'DEC'].map(x => sr(nmk[x], pc(p * ma[x]), pc((1 - p) * mb[x]), p * ma[x], (1 - p) * mb[x])).join('');
   const sa = sigShares(ga), sb = sigShares(gb);
   if (sa.t1 >= 60 || sb.t1 >= 60) h += `<p class="mu sm" style="margin:.7rem 0 .1rem">${T('Target & position signature', 'Assinatura de alvo e posição')}</p>` + sigRows(ga, gb);
-  return `<div style="padding-top:.6rem"><div class="sr"><b style="color:var(--gd)">${esc(lastName(f.a.name))}${ubadge(ia)}</b><span></span><b style="color:var(--cb)">${esc(lastName(f.b.name))}${ubadge(ib)}</b></div>${h}${scoreCtl(e, f, i, ia, ib, k)}</div>`;
+  return `<div style="padding-top:.6rem"><div class="sr"><b style="color:var(--gd)">${esc(lastName(f.a.name))}</b><span></span><b style="color:var(--cb)">${esc(lastName(f.b.name))}</b></div>${h}${scoreCtl(e, f, i, ia, ib, k)}</div>`;
 }
 function upEvent(e, idx, body, tm) {
   const open = S.upOpen[e.id] ?? idx === 0, n = e.fights.length;
@@ -738,7 +736,7 @@ function drawUp() {
       const ca = E.RM.get(ia)?.cur, cb = E.RM.get(ib)?.cur, sc = (1 - Math.abs(2 * pb - 1)) + ((ca != null ? pct(ca) : .4) + (cb != null ? pct(cb) : .4)) / 2;
       if (sc > tm.bs) { tm.bs = sc; tm.best = `${lastName(f.a.name)} x ${lastName(f.b.name)}`; }
     }
-    return `<div class="card fight${S.upX.has(k) ? ' open' : ''}"><div class="fx up-fx"><a class="fa" href="#/fighter/${ia}">${av(ia, f.a.name, 'sm')}<span>${esc(f.a.name)}${ubadge(ia)}</span></a><span class="ring"><span>VS</span></span><a class="fa" href="#/fighter/${ib}"><span>${esc(f.b.name)}${ubadge(ib)}</span>${av(ib, f.b.name, 'sm')}</a></div>
+    return `<div class="card fight${S.upX.has(k) ? ' open' : ''}"><div class="fx up-fx"><a class="fa" href="#/fighter/${ia}">${av(ia, f.a.name, 'sm')}<span>${esc(f.a.name)}</span></a><span class="ring"><span>VS</span></span><a class="fa" href="#/fighter/${ib}"><span>${esc(f.b.name)}</span>${av(ib, f.b.name, 'sm')}</a></div>
     ${pr ? `<div class="fav" role="img" aria-label="${pc(pb)} / ${pc(1 - pb)}"><i style="width:${(pb * 100).toFixed(1)}%"></i></div><div class="fvl"><b style="color:var(--gd)">${pc(pb)}</b><span class="mu">★ ${pr.best}</span><b style="color:var(--cb)">${pc(1 - pb)}</b></div>` : ''}
     <div class="fi"><span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${pr ? `<span>Elo ${pc(pr.pE)} · WHR ${pc(pr.pW)} · ${T('Stats', 'Estat.')} ${pc(pr.pS)}</span>` : `<span>${T('no rating yet', 'sem nota ainda')}</span>`}</div>
     <div class="fa2"><button class="pk${S.upX.has(k) ? ' on' : ''}" data-upx="${k}">🔍 ${T('X-Ray', 'Raio-X')}</button><span class="pickbox"><span class="mu sm">${T('Pick', 'Palpite')}:</span><button class="pk${pk === 'a' ? ' on' : ''}" data-pick="${k}:a">${esc(lastName(f.a.name))}</button><button class="pk${pk === 'b' ? ' on' : ''}" data-pick="${k}:b">${esc(lastName(f.b.name))}</button></span></div><div class="st" id="upx-${e.id}-${ia}-${ib}">${S.upX.has(k) ? upxHtml(e, f, i, ia, ib, k, pr, pb) : ''}</div></div>`;
@@ -1024,30 +1022,21 @@ function agePanel() {
 
 /* ---------- Ranking oficial do UFC, Bônus da Noite, fator casa e altitude ---------- */
 const divKey = t => NRM(t).replace(/['’]/g, '').replace(/\bwomens\b/g, 'women').replace(/\b(ufc|interim|title|bout|championship|mens)\b/g, '').replace(/\s+/g, ' ').trim();
-function ubadge(id) {
-  const r = S.urk && S.urk.fighter_rank && S.urk.fighter_rank[mid(id)]; if (!r) return '';
-  let h = '';
-  if (r.rank === 0) h += `<span class="ub c" title="${T('Official UFC champion', 'Campeão oficial do UFC')}${r.div ? ' · ' + esc(r.div) : ''}">👑 C</span>`;
-  else if (r.rank) h += `<span class="ub" title="${T('Official UFC ranking', 'Ranking oficial do UFC')}${r.div ? ' · ' + esc(r.div) : ''}">#${r.rank} UFC</span>`;
-  if (r.p4p) h += `<span class="ub p" title="Pound-for-pound">P4P #${r.p4p}</span>`;
-  return h;
-}
-const ORIG = {TUF: 'The Ultimate Fighter', DWCS: "Dana White's Contender Series"};
-function originLabel(p) {
-  if (!p || !p.origin) return '-';
-  if (p.origin === 'direct') return p.origin_src === 'default' ? T('Direct signing (presumed)', 'Contratação direta (presumida)') : T('Direct signing', 'Contratação direta');
-  return ORIG[p.origin] || p.origin;
-}
+const ORIG = {TUF: 'The Ultimate Fighter', DWCS: "Dana White's Contender Series", WEC: 'WEC', PRIDE: 'PRIDE', Strikeforce: 'Strikeforce'};
+const originLabel = p => p && p.origin ? (ORIG[p.origin] || p.origin) : '-';   // só existe quando o evento de estreia prova
+const artsOf = p => (p && Array.isArray(p.base_arts) ? p.base_arts : []).join(', ');
 function tapeExtra(A, B) {
   const r = [];
-  if (A.leg_reach || B.leg_reach) r.push(sr(T('Leg reach', 'Alcance de perna'), esc(A.leg_reach || '-'), esc(B.leg_reach || '-')));
-  if (A.style || B.style) r.push(sr(T('Style', 'Estilo'), esc(A.style || '-'), esc(B.style || '-')));
-  if (A.origin || B.origin) r.push(sr(T('UFC origin', 'Origem no UFC'), esc(originLabel(A)), esc(originLabel(B))));
   if (A.hometown || B.hometown) r.push(sr(T('Hometown', 'Cidade natal'), esc(A.hometown || '-'), esc(B.hometown || '-')));
+  if (artsOf(A) || artsOf(B)) r.push(sr(T('Base arts', 'Artes de base'), esc(artsOf(A) || '-'), esc(artsOf(B) || '-')));
+  if (A.origin || B.origin) r.push(sr(T('UFC origin', 'Origem no UFC'), esc(originLabel(A)), esc(originLabel(B))));
   return r.join('');
 }
 function bioExtra(p) {
-  return [[T('Leg reach', 'Alcance de perna'), p.leg_reach], [T('Style', 'Estilo'), p.style], [T('Hometown', 'Cidade natal'), p.hometown], [T('UFC origin', 'Origem no UFC'), p.origin ? originLabel(p) : '']].filter(r => r[1]).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+  return [[T('Hometown', 'Cidade natal'), p.hometown], [T('Base arts', 'Artes de base'), artsOf(p)], [T('UFC origin', 'Origem no UFC'), p.origin ? originLabel(p) : '']].filter(r => r[1]).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+}
+function extLinks(p) {
+  return [['sherdog_url', 'Sherdog'], ['tapology_url', 'Tapology']].filter(([k]) => typeof p[k] === 'string' && /^https:\/\//.test(p[k])).map(([k, n]) => `<a class="btn" href="${esc(p[k])}" target="_blank" rel="noopener noreferrer">${n} ↗</a>`).join('');
 }
 const fmapAll = () => (S._fm && S._fm.n === S.fg.length) ? S._fm.m : (S._fm = {n: S.fg.length, m: new Map(S.fg.map(f => [f.id, f]))}).m;
 
@@ -1097,7 +1086,7 @@ const CTRY = {'united states': 'usa', 'usa': 'usa', 'us': 'usa', 'united kingdom
 const ctryKey = t => { const k = NRM(t).replace(/['’.]/g, '').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim(); return CTRY[k] || k; };
 const ctryName = k => ({usa: 'USA', uk: 'United Kingdom', uae: 'UAE'}[k] || k.replace(/\b\w/g, c => c.toUpperCase()));
 const evCountry = loc => { const p = String(loc || '').split(',').map(x => x.trim()).filter(Boolean); return p.length ? ctryKey(p[p.length - 1]) : ''; };
-const ALT_RE = /mexico city|ciudad de mexico|salt lake city|denver|albuquerque/i;
+const ALT_RE = /mexico city|ciudad de mexico|salt lake city|denver|albuquerque|bogot[aá]/i;
 const evLocs = () => (S._el && S._el.n === S.ev.length) ? S._el.m : (S._el = {n: S.ev.length, m: new Map(S.ev.map(e => [e.id, e.location || '']))}).m;
 function fightHome(f) {
   const c = evCountry(evLocs().get(f.ev)); if (!c) return null;
@@ -1106,7 +1095,31 @@ function fightHome(f) {
   return ha && !hb && B.country ? 'a' : hb && !ha && A.country ? 'b' : null;
 }
 function homeD(r) { const f = fmapAll().get(r.fid); if (!f) return 0; const h = fightHome(f); return !h ? 0 : (mid((h === 'a' ? f.a : f.b).id) === r.ix ? 1 : -1); }
-function legD(r) { const a = parseFloat((S.F.get(r.ix) || {}).leg_reach), b = parseFloat((S.F.get(r.iy) || {}).leg_reach); return isNaN(a) || isNaN(b) ? NaN : a - b; }
+
+/* UFC Apex (Fight Night / ESPN / ABC / Vegas em Las Vegas desde mai/2020, sem os PPVs numerados) x arenas com público */
+function apexStats() {
+  const evs = new Map(S.ev.map(e => [e.id, e])), isApex = e => !!e && /las vegas/i.test(e.location || '') && (e.date || '') >= '2020-05-01' && /fight night|on espn|on abc|ufc vegas/i.test(e.name || '') && !/^ufc\s*\d+/i.test(e.name || '');
+  const isCrowd = e => !!e && !isApex(e) && (e.date || '') >= '2018-01-01' && !((e.date || '') >= '2020-03-01' && (e.date || '') <= '2021-06-30');
+  const mk = () => ({n: 0, ko: 0, dec: 0, spl: 0, pace: []}), G = {ap: mk(), cr: mk()};
+  for (const f of S.fg) {
+    if (f.res === 'nc') continue; const e = evs.get(f.ev), g = isApex(e) ? G.ap : isCrowd(e) ? G.cr : null; if (!g) continue;
+    g.n++; if (cls(f.method) === 'KO') g.ko++; if (/decision/i.test(f.method || '')) { g.dec++; if (/split|majority/i.test(f.method || '')) g.spl++; }
+    const m = mins(f); if (f.totals && f.totals.a && f.totals.b && m > 0) g.pace.push((num(f.totals.a['Sig. str.']) + num(f.totals.b['Sig. str.'])) / m);
+  }
+  const a = G.ap, c = G.cr, tp = (x1, n1, x2, n2) => { const p1 = x1 / (n1 || 1), p2 = x2 / (n2 || 1), pp = (x1 + x2) / ((n1 + n2) || 1), se = Math.sqrt(pp * (1 - pp) * (1 / (n1 || 1) + 1 / (n2 || 1))); return se ? (p1 - p2) / se : 0; };
+  const mean = v => v.reduce((x, y) => x + y, 0) / (v.length || 1), vr = v => { const m = mean(v); return v.reduce((x, y) => x + (y - m) ** 2, 0) / Math.max(v.length - 1, 1); };
+  const zK = tp(a.ko, a.n, c.ko, c.n), zS = tp(a.spl, a.dec, c.spl, c.dec), pa = mean(a.pace), pc_ = mean(c.pace), zP = a.pace.length > 2 && c.pace.length > 2 ? (pa - pc_) / Math.sqrt(vr(a.pace) / a.pace.length + vr(c.pace) / c.pace.length || 1) : 0;
+  const zc = z => `<span class="${Math.abs(z) > 1.96 ? (z > 0 ? 'up' : 'dn') : 'mu'}">${z >= 0 ? '+' : ''}${z.toFixed(1)}</span>`, ok = a.n >= 20 && c.n >= 20;
+  const rows = ok ? [[T('UFC Apex', 'UFC Apex'), T('KO/TKO rate', 'Taxa de KO/TKO'), a.n, pc(a.ko / a.n), pc(c.ko / c.n), (100 * (a.ko / a.n - c.ko / c.n)).toFixed(1), '', zK.toFixed(1)],
+    [T('UFC Apex', 'UFC Apex'), T('Strikes per minute', 'Golpes por minuto'), a.pace.length, pa.toFixed(2), pc_.toFixed(2), (pa - pc_).toFixed(2), '', zP.toFixed(1)],
+    [T('UFC Apex', 'UFC Apex'), T('Split decisions (% of decisions)', 'Decisões divididas (% das decisões)'), a.dec, a.dec ? pc(a.spl / a.dec) : '—', c.dec ? pc(c.spl / c.dec) : '—', (100 * (a.spl / (a.dec || 1) - c.spl / (c.dec || 1))).toFixed(1), '', zS.toFixed(1)]] : [];
+  const html = `<p class="mu sm" style="margin:.8rem 0 .2rem"><b>${T('UFC Apex vs arenas with a crowd', 'UFC Apex vs. arenas com público')}</b></p>` + (ok ? `<div class="sr" style="grid-template-columns:2fr 1fr 1fr"><span>${T('KO/TKO rate', 'Taxa de KO/TKO')}</span><b>${pc(a.ko / a.n)} <span class="mu sm">(Apex, n=${a.n})</span></b><span>${pc(c.ko / c.n)} <span class="mu sm">(${T('arenas', 'arenas')}, n=${c.n})</span> ${zc(zK)}</span></div>
+    <div class="sr" style="grid-template-columns:2fr 1fr 1fr"><span>${T('Strikes per minute (both fighters)', 'Golpes por minuto (os dois lutadores)')}</span><b>${pa.toFixed(2)} <span class="mu sm">(n=${a.pace.length})</span></b><span>${pc_.toFixed(2)} <span class="mu sm">(n=${c.pace.length})</span> ${zc(zP)}</span></div>
+    <div class="sr" style="grid-template-columns:2fr 1fr 1fr"><span>${T('Split decisions, % of decisions', 'Decisões divididas, % das decisões')}</span><b>${a.dec ? pc(a.spl / a.dec) : '—'} <span class="mu sm">(n=${a.dec})</span></b><span>${c.dec ? pc(c.spl / c.dec) : '—'} <span class="mu sm">(n=${c.dec})</span> ${zc(zS)}</span></div>
+    <p class="mu sm">${T('Apex = Las Vegas events since May 2020 named Fight Night / UFC on ESPN / UFC on ABC / UFC Vegas (numbered PPVs excluded): a rule on the event name and place, not a record of the venue. Arenas with a crowd = every other event since 2018, leaving out March 2020 to June 2021.', 'Apex = eventos em Las Vegas desde maio de 2020 chamados Fight Night / UFC on ESPN / UFC on ABC / UFC Vegas (PPVs numerados excluídos): é uma regra sobre o nome e o local do evento, não um registro do ginásio. Arenas com público = todos os outros eventos desde 2018, sem março de 2020 a junho de 2021.')}</p>` : `<p class="mu sm">${T('Fewer than 20 fights in one of the groups.', 'Menos de 20 lutas em um dos grupos.')}</p>`);
+  return {rows, html};
+}
+
 function homePanel() {
   const c = slopeCal(), by = fmapAll(), loc = evLocs(), acc = () => ({n: 0, y: 0, e: 0, v: 0}), add = (a, y, p) => { a.n++; a.y += y; a.e += p; a.v += p * (1 - p); };
   const G = {all: acc(), dec: acc(), spl: acc(), fin: acc()}, byC = new Map();
@@ -1132,68 +1145,222 @@ function homePanel() {
   const mean = a => a.reduce((x, y) => x + y, 0) / (a.length || 1), vr = a => { const m = mean(a); return a.reduce((x, y) => x + (y - m) ** 2, 0) / Math.max(a.length - 1, 1); };
   const pl = (hi.late / (hi.n || 1)), pb = (lo.late / (lo.n || 1)), pp = (hi.late + lo.late) / ((hi.n + lo.n) || 1), zl = hi.n && lo.n ? (pl - pb) / Math.sqrt(pp * (1 - pp) * (1 / hi.n + 1 / lo.n) || 1) : 0;
   const mh = mean(hi.pr), ml = mean(lo.pr), zp = hi.pr.length > 2 && lo.pr.length > 2 ? (mh - ml) / Math.sqrt(vr(hi.pr) / hi.pr.length + vr(lo.pr) / lo.pr.length || 1) : 0;
+  const AX = apexStats();
   XEXP.reg('lab:home', () => ({kind: 'table', title: T('Home advantage and altitude in the UFC', 'Fator casa e altitude no UFC'), file: 'fator-casa-e-altitude', sub: T('Home fighter results vs pre-fight Elo expectation (past only)', 'Resultado do lutador da casa vs expectativa do Elo pré-luta (só o passado)'),
     cols: [T('Section', 'Seção'), T('Item', 'Item'), 'n', T('Observed', 'Observado'), T('Expected', 'Esperado'), T('Difference (pp)', 'Diferença (pp)'), '±', 'z'],
     rows: [...grp.map(([l, o]) => [T('Home advantage', 'Vantagem de casa'), l, o.n, pc(o.w), pc(o.e), o.d.toFixed(1), o.ci.toFixed(1), o.z.toFixed(1)]),
       ...cty.map(x => [T('By country', 'Por país'), ctryName(x.k), x.a.n, pc(x.a.w), pc(x.a.e), x.a.d.toFixed(1), x.a.ci.toFixed(1), x.a.z.toFixed(1)]),
       ...cty.filter(x => x.d.n >= 15).map(x => [T('Judges’ decisions by country', 'Decisões dos juízes por país'), ctryName(x.k), x.d.n, pc(x.d.w), pc(x.d.e), x.d.d.toFixed(1), x.d.ci.toFixed(1), x.d.z.toFixed(1)]),
       [T('Altitude', 'Altitude'), T('KO/SUB in round 3+ (% of fights): high altitude', 'KO/SUB no 3º round+ (% das lutas): alta altitude'), hi.n, pc(pl), pc(pb), (100 * (pl - pb)).toFixed(1), '', zl.toFixed(1)],
-      [T('Altitude', 'Altitude'), T('Pace R3/R1: high altitude', 'Ritmo R3/R1: alta altitude'), hi.pr.length, mh.toFixed(2), ml.toFixed(2), (100 * (mh - ml)).toFixed(1), '', zp.toFixed(1)]]}));
+      [T('Altitude', 'Altitude'), T('Pace R3/R1: high altitude', 'Ritmo R3/R1: alta altitude'), hi.pr.length, mh.toFixed(2), ml.toFixed(2), (100 * (mh - ml)).toFixed(1), '', zp.toFixed(1)], ...AX.rows]}));
   return `<h2>${T('Home advantage and altitude in the UFC', 'Fator casa e altitude no UFC')}<span class="xbar" data-xk="lab:home"></span></h2><div class="card" style="padding:.8rem 1.1rem">
   <p class="mu sm" style="margin-top:0">${T('A fighter is “at home” when the event country is his own and the opponent is foreign. Difference = home fighter’s win rate minus what the pre-fight Elo expected, with 95% interval; z beyond ±1.96 is colored.', 'O lutador está “em casa” quando o país do evento é o dele e o rival é estrangeiro. Diferença = taxa de vitória do lutador da casa menos o que o Elo pré-luta esperava, com intervalo de 95%; z além de ±1,96 fica colorido.')}</p>
   <div class="tb hd" style="grid-template-columns:1.6fr .6fr .8fr .8fr 1.3fr .6fr"><span></span><span>n</span><span>${T('Observed', 'Observado')}</span><span>${T('Expected', 'Esperado')}</span><span>${T('Difference', 'Diferença')}</span><span>z</span></div>
   ${grp.map(([l, o]) => `<div class="tb" style="grid-template-columns:1.6fr .6fr .8fr .8fr 1.3fr .6fr"><span>${l}</span><span>${o.n}</span><span>${o.n ? pc(o.w) : '—'}</span><span>${o.n ? pc(o.e) : '—'}</span><span>${o.n ? ex(o) : '—'}</span><span>${o.n ? zc(o.z) : '—'}</span></div>`).join('')}
   ${cty.length ? `<p class="mu sm" style="margin:.8rem 0 .2rem"><b>${T('By country (25+ home fights), sorted by the judges’ home bias in decisions', 'Por país (25+ lutas em casa), ordenado pelo viés a favor da casa nas decisões dos juízes')}</b></p><div style="overflow-x:auto"><div class="tb hd" style="min-width:32rem;grid-template-columns:1.2fr .5fr 1.3fr .5fr 1.3fr"><span>${T('Country', 'País')}</span><span>n</span><span>${T('All fights', 'Todas')}</span><span>${T('Dec.', 'Dec.')}</span><span>${T('Decisions: difference', 'Decisões: diferença')}</span></div>
   ${cty.slice(0, 14).map(x => `<div class="tb" style="min-width:32rem;grid-template-columns:1.2fr .5fr 1.3fr .5fr 1.3fr"><span>${esc(ctryName(x.k))}</span><span>${x.a.n}</span><span>${ex(x.a)}</span><span>${x.d.n}</span><span>${x.d.n >= 15 ? ex(x.d) + ' ' + zc(x.d.z) : '—'}</span></div>`).join('')}</div>` : `<p class="mu sm">${T('Not enough fights with known countries yet (the fighter country comes from ESPN).', 'Ainda não há lutas suficientes com países conhecidos (o país do lutador vem da ESPN).')}</p>`}
-  <p class="mu sm" style="margin:.8rem 0 .2rem"><b>${T('High altitude (Mexico City, Salt Lake City, Denver, Albuquerque)', 'Alta altitude (Cidade do México, Salt Lake City, Denver, Albuquerque)')}</b></p>
+  <p class="mu sm" style="margin:.8rem 0 .2rem"><b>${T('High altitude (Mexico City, Salt Lake City, Denver, Albuquerque, Bogotá)', 'Alta altitude (Cidade do México, Salt Lake City, Denver, Albuquerque, Bogotá)')}</b></p>
   ${hi.n >= 10 ? `<div class="sr" style="grid-template-columns:2fr 1fr 1fr"><span>${T('KO/SUB in round 3+, % of fights', 'KO/SUB no 3º round+, % das lutas')}</span><b>${pc(pl)} <span class="mu sm">(n=${hi.n})</span></b><span>${pc(pb)} <span class="mu sm">(${T('sea level', 'nível baixo')}, n=${lo.n})</span> ${zc(zl)}</span></div>
   <div class="sr" style="grid-template-columns:2fr 1fr 1fr"><span>${T('Pace drop: strikes in R3 ÷ R1', 'Queda de ritmo: golpes no R3 ÷ R1')}</span><b>${hi.pr.length > 2 ? mh.toFixed(2) : '—'} <span class="mu sm">(n=${hi.pr.length})</span></b><span>${ml.toFixed(2)} <span class="mu sm">(${T('sea level', 'nível baixo')}, n=${lo.pr.length})</span> ${hi.pr.length > 2 ? zc(zp) : ''}</span></div>` : `<p class="mu sm">${T('Fewer than 10 fights at altitude on record.', 'Menos de 10 lutas em altitude registradas.')}</p>`}
+  ${AX.html}
   <p class="mu sm">${T('The decisions column mixes what judges do with how fights end; treat it as a clue. Small countries have wide intervals: read the ± and the n.', 'A coluna de decisões mistura o que os juízes fazem com como as lutas terminam; trate como uma pista. Países pequenos têm intervalos largos: leia o ± e o n.')}</p></div>`;
 }
 
-/* Ranking oficial do UFC x nota WHR */
-function urkRows() {
-  const U = S.urk; if (!U || !U.divisions) return null;
-  const E = getE('ALL'), cut = new Date(Date.now() - 2.5 * YR).toISOString().slice(0, 10), last = new Map();
-  for (const f of S.fg) for (const q of 'ab') { const id = mid(f[q].id), d = last.get(id); if (!d || f.date >= d.date) last.set(id, {date: f.date, div: divKey(f.div)}); }
-  const pools = new Map();
-  for (const x of E.rows) { const l = last.get(x.id); if (!l || l.date < cut) continue; let a = pools.get(l.div); if (!a) pools.set(l.div, a = []); a.push(x); }
-  pools.forEach(a => a.sort((p, q) => q.cur - p.cur));
-  const rows = [];
-  for (const [dn, d] of Object.entries(U.divisions)) {
-    if (/pound/i.test(dn)) continue;
-    const pool = pools.get(divKey(dn)) || [], pos = new Map(pool.map((x, i) => [x.id, i + 1])), off = new Map();
-    if (d.champ) off.set(d.champ, 0); for (const [id, r] of Object.entries(d.ranks || {})) off.set(id, r);
-    for (const [id, r] of off) {
-      const x = E.RM.get(id), wp = pos.get(id) ?? null, o = r === 0 ? 1 : r;
-      let status = '';
-      if (wp != null && r >= 1 && r <= 10 && wp >= Math.max(15, r + 10)) status = 'over';
-      else if (wp != null && r >= 11 && wp <= 10) status = 'under';
-      else if (wp != null && r >= 1 && wp <= 5 && r - wp >= 5) status = 'under';
-      rows.push({id, div: dn, off: r, wp, gap: wp == null ? null : wp - o, cur: x ? Math.round(x.cur) : null, last: x ? x.last : '', status, pool: pool.length});
-    }
-    pool.slice(0, 10).forEach((x, i) => { if (!off.has(x.id)) rows.push({id: x.id, div: dn, off: null, wp: i + 1, gap: null, cur: Math.round(x.cur), last: x.last, status: 'under', pool: pool.length}); });
-  }
-  return rows;
+
+/* ---------- Precisão e defesa por alvo/posição, ritmo por round, desgaste, técnicas e cinturão linear ---------- */
+const attm = v => { const m = /of\s*(\d+)/.exec(String(v == null ? '' : v)); return m ? +m[1] : 0; };
+const SIGL = () => ({Head: T('Head', 'Cabeça'), Body: T('Body', 'Corpo'), Leg: T('Leg', 'Perna'), Distance: T('Distance', 'Distância'), Clinch: 'Clinch', Ground: T('Ground', 'Solo')});
+const accOf = (o, k) => o.sga[k] >= 30 ? o.sg[k] / o.sga[k] : null;               // precisão = acertados ÷ tentados
+const defOf = (o, k) => o.sgoa[k] >= 30 ? 1 - o.sgo[k] / o.sgoa[k] : null;        // defesa = golpes evitados ÷ tentados contra
+const pcn = v => v == null ? '-' : pc(v), sgn = v => (v > 0 ? '+' : '') + Math.round(v);
+function precDefRows(oa, ob) {
+  const L = SIGL(), line = (t, fn) => `<p class="mu sm" style="margin:.6rem 0 .1rem">${t}</p>` + SIGK.map(k => sr(L[k], pcn(fn(oa, k)), pcn(fn(ob, k)), fn(oa, k) || 0, fn(ob, k) || 0)).join('');
+  return line(T('Accuracy (landed ÷ attempted)', 'Precisão (acertados ÷ tentados)'), accOf) + line(T('Defense (strikes avoided)', 'Defesa (golpes evitados)'), defOf);
 }
-function urkPanel() {
-  const rows = urkRows(), nm_ = id => (S.F.get(id) || {}).name || id, lbl = r => r.off === 0 ? '👑 C' : r.off == null ? 'NR' : '#' + r.off;
-  if (!rows) return `<h2>${T('Official UFC ranking vs the math', 'Ranking oficial UFC vs. Matemática')}</h2><div class="card" style="padding:.8rem 1.1rem"><p class="mu">${T('data/ufc_rankings.json not found (the scraper generates it from the ESPN rankings).', 'data/ufc_rankings.json não encontrado (o scraper gera a partir do ranking da ESPN).')}</p></div>`;
-  const both = rows.filter(r => r.off != null && r.wp != null), n = both.length;
-  const mx = both.reduce((a, r) => a + (r.off === 0 ? 1 : r.off), 0) / (n || 1), my = both.reduce((a, r) => a + r.wp, 0) / (n || 1);
-  let sxy = 0, sxx = 0, syy = 0; both.forEach(r => { const x = (r.off === 0 ? 1 : r.off) - mx, y = r.wp - my; sxy += x * y; sxx += x * x; syy += y * y; });
-  const rho = sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0;
-  const under = rows.filter(r => r.status === 'under').sort((a, b) => (a.wp - (a.off ?? 16)) - (b.wp - (b.off ?? 16))), over = rows.filter(r => r.status === 'over').sort((a, b) => b.gap - a.gap);
-  XEXP.reg('lab:ufc-vs-whr', () => ({kind: 'table', title: T('Official UFC ranking vs WHR', 'Ranking oficial UFC vs. WHR'), file: 'ranking-ufc-vs-whr', sub: `${T('Position inside the division among fighters active in the last 2.5 years', 'Posição dentro da divisão entre os ativos nos últimos 2,5 anos')} · ${T('correlation', 'correlação')} ${rho.toFixed(2)} (n=${n})`,
-    cols: [T('Fighter', 'Lutador'), T('Division', 'Divisão'), T('Official', 'Oficial'), T('WHR position', 'Posição WHR'), T('Gap (WHR − official)', 'Diferença (WHR − oficial)'), T('WHR rating', 'Nota WHR'), T('Last fight', 'Última luta'), T('Verdict', 'Veredito')],
-    rows: rows.map(r => [nm_(r.id), r.div, lbl(r), r.wp ?? '—', r.gap ?? '—', r.cur ?? '—', r.last || '—', r.status === 'under' ? T('Underrated', 'Subestimado') : r.status === 'over' ? T('Overrated', 'Superestimado') : ''])}));
-  const tab = (list, k) => list.length ? `<div style="overflow-x:auto"><div class="tb hd" style="min-width:30rem;grid-template-columns:1.6fr 1.2fr .6fr .6fr .6fr .7fr"><span>${T('Fighter', 'Lutador')}</span><span>${T('Division', 'Divisão')}</span><span>${T('Official', 'Oficial')}</span><span>WHR</span><span>${T('Gap', 'Dif.')}</span><span>${T('Rating', 'Nota')}</span></div>
-    ${list.slice(0, 12).map(r => `<div class="tb" style="min-width:30rem;grid-template-columns:1.6fr 1.2fr .6fr .6fr .6fr .7fr"><span><a href="#/fighter/${r.id}">${esc(nm_(r.id))}</a></span><span>${esc(r.div)}</span><b>${lbl(r)}</b><span>#${r.wp}</span><span class="${k === 'over' ? 'dn' : 'up'}">${r.gap == null ? '—' : (r.gap > 0 ? '+' : '') + r.gap}</span><span>${r.cur ?? '—'}</span></div>`).join('')}</div>` : `<p class="mu sm">${T('None found.', 'Nenhum encontrado.')}</p>`;
-  return `<h2>${T('Official UFC ranking vs the math', 'Ranking oficial UFC vs. Matemática')}<span class="xbar" data-xk="lab:ufc-vs-whr"></span></h2><div class="card" style="padding:.8rem 1.1rem">
-  <p class="mu sm" style="margin-top:0">${T(`${n} ranked fighters compared; agreement between the official order and the WHR order: r = ${rho.toFixed(2)}.`, `${n} lutadores ranqueados comparados; concordância entre a ordem oficial e a ordem do WHR: r = ${rho.toFixed(2)}.`)}</p>
-  <p style="margin:.4rem 0 .2rem"><b>${T('Underrated (dark horses)', 'Subestimados (dark horses)')}</b> <span class="mu sm">${T('unranked or ranked 11–15 but already top 10 by WHR, or top 5 by WHR at least 5 places above their official rank', 'sem ranking ou no 11–15, mas já Top 10 pelo WHR, ou Top 5 pelo WHR com 5+ posições acima do ranking oficial')}</span></p>${tab(under, 'under')}
-  <p style="margin:.8rem 0 .2rem"><b>${T('Overrated', 'Superestimados')}</b> <span class="mu sm">${T('official top 10 but at least 10 places lower by WHR (and below 15th)', 'Top 10 oficial, mas 10+ posições abaixo pelo WHR (e além da 15ª)')}</span></p>${tab(over, 'over')}
-  <p class="mu sm">${T('The WHR position counts only fighters whose latest fight was in this division in the last 2.5 years. A large gap is a question, not a verdict: rankings also weigh style, activity and the voters’ opinion.', 'A posição no WHR conta só lutadores cuja última luta foi nesta divisão nos últimos 2,5 anos. Uma diferença grande é uma pergunta, não um veredito: o ranking também pesa estilo, atividade e a opinião dos votantes.')}</p></div>`;
+function precDefHtml(id) {
+  const o = agg(id, 'all'); if (!SIGK.some(k => o.sga[k] >= 30 || o.sgoa[k] >= 30)) return '';
+  const L = SIGL();
+  return `<div class="card" id="sc-pd" style="padding:.8rem 1.1rem;margin-top:.6rem"><b>${T('Accuracy and defense by target and position', 'Precisão e defesa por alvo e posição')}</b>
+  <div class="tb hd" style="grid-template-columns:1.2fr 1fr 1fr"><span></span><span>${T('Accuracy', 'Precisão')}</span><span>${T('Defense', 'Defesa')}</span></div>
+  ${SIGK.map(k => `<div class="tb" style="grid-template-columns:1.2fr 1fr 1fr"><span>${L[k]}</span><span>${pcn(accOf(o, k))} <span class="mu sm">(${o.sga[k]})</span></span><span>${pcn(defOf(o, k))} <span class="mu sm">(${o.sgoa[k]})</span></span></div>`).join('')}
+  <p class="mu sm">${T('Accuracy = landed ÷ attempted; defense = share of the opponent’s attempts that did not land. Shown with 30+ attempts; the number in parentheses is the sample.', 'Precisão = acertados ÷ tentados; defesa = fração das tentativas do rival que não acertaram. Aparece com 30+ tentativas; o número entre parênteses é a amostra.')}</p></div>`;
+}
+
+/* ritmo por round e rounds de campeonato (R4/R5), a partir de f.rounds.totals */
+function roundsProfile(id) {
+  const R = [0, 1, 2, 3, 4].map(() => ({c: 0, l: 0, a: 0, kf: 0, ka: 0, fought: 0, fl: 0, fa: 0, td: 0})); let w4 = 0, any = false;
+  for (const f of S.fg) {
+    if (mid(f.a.id) !== id && mid(f.b.id) !== id) continue;
+    const me = mid(f.a.id) === id ? 'a' : 'b', op = me === 'a' ? 'b' : 'a', rt = f.rounds && f.rounds.totals, last = parseInt(f.round) || 0, dec = /decision/i.test(f.method || '');
+    if (f.res === me && ((rt && rt.length >= 4) || last >= 4)) w4++;
+    if (!rt) continue;
+    rt.forEach((r, i) => {
+      if (i > 4 || !r[me] || !r[op]) return;
+      const x = R[i], l = num(r[me]['Sig. str.']), a = num(r[op]['Sig. str.']); any = true;
+      x.fought++; x.fl += l; x.fa += a; x.td += num(r[me].Td) - num(r[op].Td);
+      if (dec || i + 1 < last) { x.c++; x.l += l; x.a += a; x.kf += num(r[me].KD); x.ka += num(r[op].KD); }   // só round COMPLETO entra no perfil de ritmo
+    });
+  }
+  const sh = i => R[i].c ? R[i].l / ((R[i].l + R[i].a) || 1) : null, ok = R[0].c >= 4 && R[2].c >= 4, d = ok ? sh(0) - sh(2) : 0;
+  return {R, any, label: !ok ? null : d >= .06 ? 'fast' : d <= -.06 ? 'slow' : 'even', ch: {n4: R[3].fought, n5: R[4].fought, net: R[3].fl - R[3].fa + R[4].fl - R[4].fa, td: R[3].td + R[4].td, wins: w4}};
+}
+const rLab = r => r.label === 'fast' ? T('Fast starter', 'Começa forte (Fast Starter)') : r.label === 'slow' ? T('Slow starter (diesel)', 'Cresce no combate (Diesel)') : r.label === 'even' ? T('Balanced', 'Equilibrado') : '—';
+function roundsHtml(id) {
+  const r = roundsProfile(id); if (!r.any) return '';
+  return `<div class="card" id="sc-rd" style="padding:.8rem 1.1rem;margin-top:.6rem"><b>${T('Pace by round', 'Ritmo por round')}</b> <span class="tag">${rLab(r)}</span>
+  <div class="tb hd" style="grid-template-columns:.5fr .6fr 1fr 1fr 1fr"><span>R</span><span>n</span><span>${T('Net strikes/round', 'Saldo de golpes/round')}</span><span>${T('Strike share', 'Fatia de golpes')}</span><span>KD +/−</span></div>
+  ${r.R.map((x, i) => x.c ? `<div class="tb" style="grid-template-columns:.5fr .6fr 1fr 1fr 1fr"><b>R${i + 1}</b><span>${x.c}</span><span>${sgn((x.l - x.a) / x.c)}</span><span>${pc(x.l / ((x.l + x.a) || 1))}</span><span>${x.kf}/${x.ka}</span></div>` : '').join('')}
+  <p style="margin:.6rem 0 .1rem"><b>${T('Championship rounds (R4 & R5)', 'Rounds de campeonato (R4 e R5)')}</b></p>
+  <div class="xg"><span>${T('Rounds fought', 'Rounds disputados')} <b>R4 ${r.ch.n4} · R5 ${r.ch.n5}</b></span><span>${T('Net strikes', 'Saldo de golpes')} <b>${sgn(r.ch.net)}</b></span><span>${T('Net takedowns', 'Saldo de quedas')} <b>${sgn(r.ch.td)}</b></span><span>${T('Wins from R4 on', 'Vitórias a partir do R4')} <b>${r.ch.wins}</b></span></div>
+  <p class="mu sm">${T('Fast starter: strike share in R1 at least 6 points above R3 (4+ complete rounds each); slow starter: 6 points below. Only complete rounds count; R4/R5 include the round where the fight ended.', 'Fast starter: fatia de golpes no R1 pelo menos 6 pontos acima do R3 (4+ rounds completos de cada); slow starter: 6 pontos abaixo. Só rounds completos contam; R4/R5 incluem o round em que a luta acabou.')}</p></div>`;
+}
+function roundsSimHtml(ia, ib) {
+  const A = roundsProfile(ia), B = roundsProfile(ib); if (!A.any && !B.any) return '';
+  const sh = (r, i) => r.R[i].c >= 3 ? pc(r.R[i].l / ((r.R[i].l + r.R[i].a) || 1)) : '—';
+  return `<h2>${T('Pace by round', 'Ritmo por round')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Profile', 'Perfil'), rLab(A), rLab(B))}${[0, 1, 2].map(i => sr(`R${i + 1} ${T('strike share', 'fatia de golpes')}`, sh(A, i), sh(B, i))).join('')}
+  ${sr(T('Rounds 4 / 5 fought', 'Rounds 4 / 5 disputados'), `${A.ch.n4} / ${A.ch.n5}`, `${B.ch.n4} / ${B.ch.n5}`)}${sr(T('Net strikes R4+R5', 'Saldo de golpes R4+R5'), sgn(A.ch.net), sgn(B.ch.net))}${sr(T('Wins from R4 on', 'Vitórias a partir do R4'), A.ch.wins, B.ch.wins)}</div>`;
+}
+
+/* milhagem de octógono e desgaste */
+const hm = m => `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, '0')}m`;
+function wearStats(id) {
+  let min = 0, head = 0, wars = 0, n = 0;
+  for (const f of S.fg) {
+    if (f.res === 'nc' || (mid(f.a.id) !== id && mid(f.b.id) !== id)) continue;
+    const op = mid(f.a.id) === id ? 'b' : 'a'; n++; min += mins(f);
+    if (f.sig && f.sig[op]) head += num(f.sig[op].Head);
+    if (f.totals && f.totals[op] && num(f.totals[op]['Sig. str.']) >= 70) wars++;
+  }
+  return {min, head, wars, n};
+}
+function wearHtml(id) {
+  const w = wearStats(id); if (!w.n) return '';
+  return `<div class="card" id="sc-wr" style="padding:.8rem 1.1rem;margin-top:.6rem"><b>${T('Career wear & tear', 'Desgaste de carreira')}</b><div class="xg"><span>${T('Octagon time', 'Tempo de octógono')} <b>${hm(w.min)}</b></span><span>${T('Head strikes absorbed', 'Golpes na cabeça absorvidos')} <b>${w.head}</b></span><span>${T('Wars (70+ significant absorbed)', 'Guerras (70+ golpes significativos absorvidos)')} <b>${w.wars}</b></span></div></div>`;
+}
+function wearSimHtml(ia, ib) {
+  const A = wearStats(ia), B = wearStats(ib); if (!A.n && !B.n) return '';
+  return `<h2>${T('Career wear & tear', 'Desgaste de carreira')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Octagon time', 'Tempo de octógono'), hm(A.min), hm(B.min), A.min, B.min)}${sr(T('Head strikes absorbed', 'Golpes na cabeça absorvidos'), A.head, B.head, A.head, B.head)}${sr(T('Wars (70+ absorbed)', 'Guerras (70+ absorvidos)'), A.wars, B.wars, A.wars, B.wars)}</div>`;
+}
+function wearIdx() {
+  if (S._wr && S._wr.n === S.fg.length) return S._wr.m;
+  const fs = [...S.fg].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (b.ord || 0) - (a.ord || 0)), cum = new Map(), m = new Map();
+  for (const f of fs) {
+    const ia = mid(f.a.id), ib = mid(f.b.id);
+    m.set(f.id + '|' + ia, cum.get(ia) || 0); m.set(f.id + '|' + ib, cum.get(ib) || 0);        // acumulado ANTES da luta: nada do futuro entra
+    cum.set(ia, (cum.get(ia) || 0) + (f.sig ? num(f.sig.b && f.sig.b.Head) : 0)); cum.set(ib, (cum.get(ib) || 0) + (f.sig ? num(f.sig.a && f.sig.a.Head) : 0));
+  }
+  S._wr = {n: S.fg.length, m}; return m;
+}
+const wearD = r => { const m = wearIdx(); return (m.get(r.fid + '|' + r.ix) || 0) - (m.get(r.fid + '|' + r.iy) || 0); };
+
+/* anatomia das técnicas de KO/TKO e finalização (texto de f.detail do ufcstats) */
+const TECH = [
+  {k: 'atri', t: 'SUB', re: /arm[- ]?triangle/, en: 'Arm Triangle', pt: 'Triângulo de braço'}, {k: 'tri', t: 'SUB', re: /triangle/, en: 'Triangle Choke', pt: 'Triângulo'},
+  {k: 'rnc', t: 'SUB', re: /rear[- ]?naked|\brnc\b/, en: 'Rear Naked Choke', pt: 'Mata-leão'}, {k: 'guil', t: 'SUB', re: /guillotine/, en: 'Guillotine Choke', pt: 'Guilhotina'},
+  {k: 'darce', t: 'SUB', re: /d['’]?arce/, en: "D'Arce Choke", pt: "D'Arce"}, {k: 'ana', t: 'SUB', re: /anaconda/, en: 'Anaconda Choke', pt: 'Anaconda'},
+  {k: 'kim', t: 'SUB', re: /kimura/, en: 'Kimura', pt: 'Kimura'}, {k: 'kneebar', t: 'SUB', re: /knee ?bar/, en: 'Kneebar', pt: 'Chave de joelho'},
+  {k: 'heel', t: 'SUB', re: /heel hook/, en: 'Heel Hook', pt: 'Chave de calcanhar'}, {k: 'neck', t: 'SUB', re: /neck crank/, en: 'Neck Crank', pt: 'Torção de pescoço'},
+  {k: 'ankle', t: 'SUB', re: /ankle/, en: 'Ankle Lock', pt: 'Chave de tornozelo'}, {k: 'ns', t: 'SUB', re: /north[- ]?south/, en: 'North-South Choke', pt: 'Estrangulamento north-south'},
+  {k: 'ezk', t: 'SUB', re: /ezekiel/, en: 'Ezekiel Choke', pt: 'Ezekiel'}, {k: 'omo', t: 'SUB', re: /omoplata/, en: 'Omoplata', pt: 'Omoplata'},
+  {k: 'amer', t: 'SUB', re: /americana/, en: 'Americana', pt: 'Americana'}, {k: 'bull', t: 'SUB', re: /bulldog/, en: 'Bulldog Choke', pt: 'Bulldog'},
+  {k: 'peru', t: 'SUB', re: /peruvian/, en: 'Peruvian Necktie', pt: 'Peruvian necktie'}, {k: 'vonf', t: 'SUB', re: /von ?flue/, en: 'Von Flue Choke', pt: 'Von Flue'},
+  {k: 'toe', t: 'SUB', re: /toe ?hold/, en: 'Toe Hold', pt: 'Toe hold'}, {k: 'gogo', t: 'SUB', re: /gogoplata/, en: 'Gogoplata', pt: 'Gogoplata'},
+  {k: 'arm', t: 'SUB', re: /arm[- ]?bar/, en: 'Armbar', pt: 'Chave de braço'}, {k: 'subo', t: 'SUB', re: /./, en: 'Other submission', pt: 'Outra finalização'},
+  {k: 'doc', t: 'KO', re: /doctor/, en: 'Doctor Stoppage', pt: 'Paralisação médica'}, {k: 'hk', t: 'KO', re: /head kick|kick to (the )?head|high kick/, en: 'Head Kick', pt: 'Chute na cabeça'},
+  {k: 'fk', t: 'KO', re: /flying knee/, en: 'Flying Knee', pt: 'Joelhada voadora'}, {k: 'sbk', t: 'KO', re: /spinning (back |heel |wheel )?kick/, en: 'Spinning Back Kick', pt: 'Chute giratório'},
+  {k: 'sbe', t: 'KO', re: /spinning (back )?elbow/, en: 'Spinning Back Elbow', pt: 'Cotovelada giratória'}, {k: 'sbf', t: 'KO', re: /spinning back ?fist/, en: 'Spinning Back Fist', pt: 'Backfist giratório'},
+  {k: 'slam', t: 'KO', re: /slam/, en: 'Slam', pt: 'Slam'}, {k: 'lk', t: 'KO', re: /leg kick|calf kick/, en: 'Leg Kick', pt: 'Chute na perna'},
+  {k: 'bk', t: 'KO', re: /body kick|kick to (the )?body|liver/, en: 'Body Kick', pt: 'Chute no corpo'}, {k: 'bp', t: 'KO', re: /body punch|punch(es)? to (the )?body/, en: 'Body Punch', pt: 'Soco no corpo'},
+  {k: 'el', t: 'KO', re: /elbow/, en: 'Elbows', pt: 'Cotoveladas'}, {k: 'gnp', t: 'KO', re: /from (mount|side|back|guard|half|north|crucifix)|ground and pound/, en: 'Punches from Mount/Ground', pt: 'Socos no chão (montada)'},
+  {k: 'kn', t: 'KO', re: /knee/, en: 'Knee', pt: 'Joelhada'}, {k: 'pu', t: 'KO', re: /punch|hook|cross|jab|uppercut|hammer/, en: 'Punch', pt: 'Soco'},
+  {k: 'kick', t: 'KO', re: /kick/, en: 'Kick (other)', pt: 'Chute (outro)'}, {k: 'koo', t: 'KO', re: /./, en: 'Other KO/TKO', pt: 'Outro nocaute/TKO'}];
+const TECHK = Object.fromEntries(TECH.map(e => [e.k, e]));
+const techName = k => (TECHK[k] || {})[S.pt ? 'pt' : 'en'] || k;
+function techOf(f) {
+  const m = cls(f.method); if (m !== 'KO' && m !== 'SUB') return null;
+  const txt = String(f.detail || '').toLowerCase();
+  if (m === 'KO' && /doctor/i.test(f.method || '')) return 'doc';
+  if (!txt.trim()) return '';
+  const e = TECH.find(x => x.t === m && x.re.test(txt)); return e ? e.k : '';
+}
+function techData() {
+  if (S._td && S._td.n === S.fg.length) return S._td.d;
+  const tech = new Map(), per = new Map(), div = new Map(), dec = new Map(); let fin = 0, known = 0;
+  const bump = (m, key, k) => { let x = m.get(key); if (!x) m.set(key, x = {ko: 0, sub: 0, t: new Map()}); x[TECHK[k].t === 'KO' ? 'ko' : 'sub']++; x.t.set(k, (x.t.get(k) || 0) + 1); };
+  for (const f of S.fg) {
+    if ((f.res !== 'a' && f.res !== 'b')) continue; const k = techOf(f); if (k === null) continue; fin++; if (!k) continue; known++;
+    const W = mid((f.res === 'a' ? f.a : f.b).id), L = mid((f.res === 'a' ? f.b : f.a).id);
+    let t = tech.get(k); if (!t) tech.set(k, t = {k, n: 0, spec: new Map()}); t.n++; t.spec.set(W, (t.spec.get(W) || 0) + 1);
+    for (const [id, side] of [[W, 'w'], [L, 'l']]) { let p = per.get(id); if (!p) per.set(id, p = {w: new Map(), l: new Map()}); p[side].set(k, (p[side].get(k) || 0) + 1); }
+    bump(div, f.div, k); bump(dec, Math.floor(+f.date.slice(0, 4) / 10) * 10, k);
+  }
+  const d = {tech, per, div, dec, fin, known}; S._td = {n: S.fg.length, d}; return d;
+}
+const topOf = (m, type) => [...m].filter(([k]) => TECHK[k].t === type).sort((a, b) => b[1] - a[1] || techName(a[0]).localeCompare(techName(b[0])))[0];
+function techCard(id) {
+  const p = techData().per.get(id); if (!p || (!p.w.size && !p.l.size)) return '';
+  const list = (m, type) => [...m].filter(([k]) => TECHK[k].t === type).sort((a, b) => b[1] - a[1] || techName(a[0]).localeCompare(techName(b[0]))).map(([k, n]) => `${techName(k)} ×${n}`).join(' · ');
+  const row = (l, a, b) => (a || b) ? `<div class="sr" style="grid-template-columns:.8fr 2fr"><span class="mu">${l}</span><span>${[a && 'KO/TKO: ' + a, b && T('Submissions', 'Finalizações') + ': ' + b].filter(Boolean).join(' · ')}</span></div>` : '';
+  return `<div class="card" id="sc-tc" style="padding:.8rem 1.1rem;margin-top:.6rem"><b>${T('Fast-finish arsenal (how he finishes and gets finished)', 'Arsenal de vias rápidas (como finaliza e nocauteia)')}</b>
+  ${row(T('Wins by', 'Venceu por'), list(p.w, 'KO'), list(p.w, 'SUB'))}${row(T('Lost by', 'Perdeu por'), list(p.l, 'KO'), list(p.l, 'SUB'))}</div>`;
+}
+function techPanel() {
+  const D = techData(), tr = [...D.tech.values()].sort((a, b) => b.n - a.n || techName(a.k).localeCompare(techName(b.k))), tk = t => D.tech.size ? [...D.tech.values()].filter(x => TECHK[x.k].t === t).reduce((a, x) => a + x.n, 0) : 0;
+  const nko = tk('KO'), nsub = tk('SUB'), nm_ = id => (S.F.get(id) || {}).name || id, spec = x => [...x.spec].sort((a, b) => b[1] - a[1] || nm_(a[0]).localeCompare(nm_(b[0])))[0];
+  const dvs = STD.filter(d => D.div.has(d)), decs = [...D.dec.keys()].sort(), shr = (m, t) => { const x = topOf(m.t, t); const tot = (t === 'KO' ? m.ko : m.sub); return x ? `${techName(x[0])} (${pc(x[1] / (tot || 1))})` : '—'; };
+  XEXP.reg('lab:tech', () => ({kind: 'table', title: T('Anatomy of finishes in the UFC', 'Anatomia de finalizações e nocautes no UFC'), file: 'anatomia-finalizacoes', sub: T(`${D.known} of ${D.fin} finishes with a recorded technique`, `${D.known} de ${D.fin} finalizações com técnica registrada`),
+    cols: [T('Section', 'Seção'), T('Item', 'Item'), T('Type', 'Tipo'), T('Finishes', 'Finalizações'), '%', T('Top specialist', 'Maior especialista'), T('Specialist count', 'Qtd do especialista')],
+    rows: [...tr.map(x => { const sp = spec(x); return [T('Technique', 'Técnica'), techName(x.k), TECHK[x.k].t, x.n, pc(x.n / (TECHK[x.k].t === 'KO' ? nko : nsub)), nm_(sp[0]), sp[1]]; }),
+      ...dvs.map(d => { const m = D.div.get(d); return [T('Division', 'Divisão'), d, 'KO+SUB', m.ko + m.sub, pc(m.ko / ((m.ko + m.sub) || 1)) + ' KO', shr(m, 'KO'), shr(m, 'SUB')]; }),
+      ...decs.map(d => { const m = D.dec.get(d); return [T('Decade', 'Década'), d + 's', 'KO+SUB', m.ko + m.sub, pc(m.ko / ((m.ko + m.sub) || 1)) + ' KO', shr(m, 'KO'), shr(m, 'SUB')]; })]}));
+  return `<h2>${T('Anatomy of finishes in the UFC', 'Anatomia de finalizações e nocautes no UFC')}<span class="xbar" data-xk="lab:tech"></span></h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
+  ${D.known ? `<p class="mu sm" style="margin-top:0">${T(`${D.known} of ${D.fin} KO/TKO and submission finishes have a technique on record (${pc(D.known / (D.fin || 1))}); the rest are left out.`, `${D.known} de ${D.fin} finais por KO/TKO e finalização têm técnica registrada (${pc(D.known / (D.fin || 1))}); o resto fica de fora.`)}</p>
+  <div class="tb hd" style="min-width:34rem;grid-template-columns:1.6fr .6fr .8fr .6fr 1.8fr"><span>${T('Technique', 'Técnica')}</span><span>${T('Type', 'Tipo')}</span><span>${T('Finishes', 'Finaliz.')}</span><span>%</span><span>${T('Top specialist', 'Maior especialista')}</span></div>
+  ${tr.slice(0, 25).map(x => { const sp = spec(x); return `<div class="tb" style="min-width:34rem;grid-template-columns:1.6fr .6fr .8fr .6fr 1.8fr"><span><b>${esc(techName(x.k))}</b></span><span>${TECHK[x.k].t}</span><span>${x.n}</span><span>${pc(x.n / (TECHK[x.k].t === 'KO' ? nko : nsub))}</span><span><a href="#/fighter/${sp[0]}">${esc(nm_(sp[0]))}</a> <span class="mu sm">×${sp[1]}</span></span></div>`; }).join('')}
+  <p class="mu sm" style="margin:.8rem 0 .2rem"><b>${T('By division', 'Por divisão')}</b></p><div class="tb hd" style="min-width:34rem;grid-template-columns:1.4fr .6fr .6fr 1.6fr 1.6fr"><span>${T('Division', 'Divisão')}</span><span>${T('Fin.', 'Final.')}</span><span>KO%</span><span>${T('Top KO', 'Top KO')}</span><span>${T('Top submission', 'Top finalização')}</span></div>
+  ${dvs.map(d => { const m = D.div.get(d); return `<div class="tb" style="min-width:34rem;grid-template-columns:1.4fr .6fr .6fr 1.6fr 1.6fr"><span>${esc(d)}</span><span>${m.ko + m.sub}</span><span>${pc(m.ko / ((m.ko + m.sub) || 1))}</span><span>${esc(shr(m, 'KO'))}</span><span>${esc(shr(m, 'SUB'))}</span></div>`; }).join('')}
+  <p class="mu sm" style="margin:.8rem 0 .2rem"><b>${T('Evolution by decade', 'Evolução por década')}</b></p><div class="tb hd" style="min-width:34rem;grid-template-columns:.8fr .6fr .6fr 1.7fr 1.7fr"><span>${T('Decade', 'Década')}</span><span>${T('Fin.', 'Final.')}</span><span>KO%</span><span>${T('Top KO', 'Top KO')}</span><span>${T('Top submission', 'Top finalização')}</span></div>
+  ${decs.map(d => { const m = D.dec.get(d); return `<div class="tb" style="min-width:34rem;grid-template-columns:.8fr .6fr .6fr 1.7fr 1.7fr"><span>${d}s</span><span>${m.ko + m.sub}</span><span>${pc(m.ko / ((m.ko + m.sub) || 1))}</span><span>${esc(shr(m, 'KO'))}</span><span>${esc(shr(m, 'SUB'))}</span></div>`; }).join('')}` : `<p class="mu">${T('No finish with a recorded technique yet.', 'Ainda não há finalização com técnica registrada.')}</p>`}
+  </div>`;
+}
+
+/* cinturão linear: "o homem que venceu o homem" */
+function linealData() {
+  if (S._ln && S._ln.n === S.fg.length) return S._ln.d;
+  const fs = [...S.fg].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (b.ord || 0) - (a.ord || 0)), DAY = 864e5, Y3 = 3 * 365.25 * DAY, out = {};
+  const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY);
+  for (const dv of STD) out[dv] = {reigns: [], cur: null};
+  const end = (st, date, why) => { st.cur.end = date; st.cur.why = why; st.cur.days = days(st.cur.start, date); st.reigns.push(st.cur); st.cur = null; };
+  for (const f of fs) {
+    const st = out[f.div]; if (!st || (f.res !== 'a' && f.res !== 'b' && f.res !== 'draw')) continue;
+    const ia = mid(f.a.id), ib = mid(f.b.id);
+    if (st.cur && Date.parse(f.date) - Date.parse(st.cur.last) > Y3) end(st, st.cur.last, 'inactive');           // sem lutar na divisão por 3+ anos: a linhagem se encerra
+    if (st.cur) {
+      if (st.cur.id !== ia && st.cur.id !== ib) continue;
+      st.cur.last = f.date;
+      if (f.res === 'draw') continue;
+      const w = f.res === 'a' ? ia : ib;
+      if (w === st.cur.id) st.cur.def++; else { end(st, f.date, 'beaten'); st.cur = {div: f.div, id: w, start: f.date, last: f.date, def: 0, end: null, why: '', days: 0, fid: f.id}; }
+    } else if (f.title && f.res !== 'draw') { const w = f.res === 'a' ? ia : ib; st.cur = {div: f.div, id: w, start: f.date, last: f.date, def: 0, end: null, why: '', days: 0, fid: f.id}; }
+  }
+  const now = new Date().toISOString().slice(0, 10);
+  for (const dv of STD) { const st = out[dv]; if (st.cur && Date.parse(now) - Date.parse(st.cur.last) > Y3) end(st, st.cur.last, 'inactive'); if (st.cur) st.cur.days = days(st.cur.start, now); }
+  S._ln = {n: S.fg.length, d: out}; return out;
+}
+function linealPanel() {
+  const D = linealData(), nm_ = id => (S.F.get(id) || {}).name || id, E = getE('ALL'), now = Date.now(), yr = d => (d / 365.25).toFixed(1);
+  const rows = STD.filter(dv => D[dv].reigns.length || D[dv].cur).map(dv => {
+    const st = D[dv], all = [...st.reigns, ...(st.cur ? [st.cur] : [])], long = all.reduce((a, r) => !a || r.days > a.days ? r : a, null);
+    const off = E.rg.filter(r => !r.end && r.div === dv && now - Date.parse(r.last) < 3 * 365.25 * 864e5).sort((a, b) => b.start < a.start ? -1 : 1)[0];
+    return {dv, cur: st.cur, long, off: off ? off.id : null, n: all.length};
+  });
+  XEXP.reg('lab:lineal', () => ({kind: 'table', title: T('Lineal champions by division', 'Campeões lineares por divisão'), file: 'campeoes-lineares', sub: T('The man who beat the man: the belt moves only when the lineal champion loses in the division; 3+ years without fighting there ends the lineage', 'O homem que venceu o homem: o cinturão só muda quando o campeão linear perde na divisão; 3+ anos sem lutar nela encerra a linhagem'),
+    cols: [T('Division', 'Divisão'), T('Lineal champion', 'Campeão linear'), T('Start', 'Início'), T('End', 'Fim'), T('Days', 'Dias'), T('Linear defenses', 'Defesas lineares'), T('How it ended', 'Como terminou'), T('Current', 'Atual')],
+    rows: STD.flatMap(dv => [...D[dv].reigns, ...(D[dv].cur ? [D[dv].cur] : [])].map(r => [dv, nm_(r.id), r.start, r.end || '—', r.days, r.def, r.end ? (r.why === 'beaten' ? T('beaten', 'derrotado') : T('inactive 3+ years', 'inativo 3+ anos')) : '—', r.end ? '' : T('yes', 'sim')]))}));
+  return `<h2>${T('Lineal champions by division', 'Campeões lineares por divisão')}<span class="xbar" data-xk="lab:lineal"></span></h2><div class="card" style="padding:.6rem 1.1rem;overflow-x:auto">
+  <div class="tb hd" style="min-width:40rem;grid-template-columns:1.2fr 1.5fr .9fr .5fr 1.8fr 1.1fr"><span>${T('Division', 'Divisão')}</span><span>${T('Lineal champion', 'Campeão linear')}</span><span>${T('Since', 'Desde')}</span><span>${T('Def.', 'Def.')}</span><span>${T('Longest lineal reign', 'Maior reinado linear')}</span><span>${T('Official champion', 'Campeão oficial')}</span></div>
+  ${rows.map(r => `<div class="tb" style="min-width:40rem;grid-template-columns:1.2fr 1.5fr .9fr .5fr 1.8fr 1.1fr"><span>${esc(r.dv)}</span><span>${r.cur ? `<a href="#/fighter/${r.cur.id}"><b>${esc(nm_(r.cur.id))}</b></a>` : `<span class="mu">${T('vacant (lineage ended)', 'vago (linhagem encerrada)')}</span>`}</span><span>${r.cur ? fmt(r.cur.start) : '—'}</span><span>${r.cur ? r.cur.def : '—'}</span><span>${r.long ? `${esc(nm_(r.long.id))} · ${yr(r.long.days)} ${T('yrs', 'anos')} · ${r.long.def} ${T('def.', 'def.')}` : '—'}</span><span>${r.off ? `${esc(nm_(r.off))} ${r.cur ? (r.cur.id === r.off ? '<span class="up">✔</span>' : '<span class="dn">≠</span>') : ''}` : '—'}</span></div>`).join('')}
+  <p class="mu sm">${T('Starts at the first title-fight winner in each division. The belt changes hands only when the lineal champion loses a fight in that division (title or not). ✔ = same as the official champion, ≠ = they differ.', 'Começa no vencedor da primeira luta de título de cada divisão. O cinturão só muda de mão quando o campeão linear perde uma luta na divisão (valendo título ou não). ✔ = igual ao campeão oficial, ≠ = diferem.')}</p></div>`;
 }
 
 function logSpec() {
@@ -1215,7 +1382,7 @@ function ageSpec() {
     cols: [T('Age', 'Idade'), T('Fights', 'Lutas'), T('Win rate', 'Vitórias'), T('Expected', 'Esperado'), T('Difference (pp)', 'Diferença (pp)'), '±', T('KO/TKO losses', 'Derrotas por KO/TKO')],
     rows: B.map((b, i) => [AGE_BINS[i].replace('&lt;', '<'), b.n, b.n ? pc(b.w / b.n) : '—', b.n ? pc(b.e / b.n) : '—', b.n ? (100 * (b.w - b.e) / b.n).toFixed(1) : '—', b.n ? (196 * Math.sqrt(b.v) / b.n).toFixed(1) : '—', b.n ? pc(b.ko / b.n) : '—'])};
 }
-function labPanels() { XEXP.reg('lab:log', logSpec); XEXP.reg('lab:age', ageSpec); try { return judgesPanel() + refsPanel() + campsPanel() + urkPanel() + bonusPanel() + homePanel() + agePanel(); } catch (e) { return ''; } }
+function labPanels() { XEXP.reg('lab:log', logSpec); XEXP.reg('lab:age', ageSpec); try { return judgesPanel() + refsPanel() + campsPanel() + bonusPanel() + homePanel() + techPanel() + linealPanel() + agePanel(); } catch (e) { return ''; } }
 
 function extraLab() {
   const E = getE('ALL'), now = Date.now(), byId = new Map(S.fg.map(f => [f.id, f]));
@@ -1490,7 +1657,7 @@ function vFighter(id) {
   const own = [...new Set(fs.map(f => f.div))], opts = ['ALL', ...own];
   const d = S.ps.id === id && opts.includes(S.ps.d) ? S.ps.d : (S.div !== 'ALL' && own.includes(S.div) ? S.div : 'ALL');
   const E = getE(d), me = E.RM.get(id), N = E.N.get(id) || [], nm = new Map(N.map(n => [n.f, n])), el = r => Math.round(1500 + U * r);
-  const skip = ['id', 'name', 'nick', 'record', 'img', 'flag', 'espn_id', 'espn_checked', 'leg_reach', 'style', 'hometown', 'origin', 'origin_src', 'ufc_checked', 'ufc_found', 'ufc_slug'];
+  const skip = ['id', 'name', 'nick', 'record', 'img', 'flag', 'espn_id', 'espn_checked', 'espn_v', 'espn_h', 'espn_r', 'hometown', 'base_arts', 'origin', 'sherdog_id', 'sherdog_url', 'tapology_id', 'tapology_url', 'wd_qid', 'wd_checked', 'leg_reach', 'style', 'origin_src', 'ufc_checked', 'ufc_found', 'ufc_slug'];
   const hist = [...fs].reverse().map(f => {
     const a = mid(f.a.id) === id, o = a ? f.b : f.a, r = f.res === 'draw' ? 'D' : f.res === 'nc' ? 'NC' : (f.res === (a ? 'a' : 'b') ? 'W' : 'L');
     const n = nm.get(f.id), lk = `#/event/${f.ev}/${f.id}`;
@@ -1514,15 +1681,15 @@ function vFighter(id) {
   const sos = wl.length ? wl.reduce((a, x) => a + x.q, 0) / wl.length : null;
   const li = (x, c) => `<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/event/${x.f.ev}/${x.f.id}" style="color:${c}"><b>${esc(name(x.o))}</b></a><span class="mu">${fmt(x.f.date)}</span><span>${el(x.q)}</span></div>`;
   const resume = wl.length ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Résumé highlights', 'Destaques da campanha')}</b>${bw.length ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Best wins (opponent rating then)', 'Melhores vitórias (nota do rival na época)')}</p>${bw.map(x => li(x, 'var(--win)')).join('')}` : ''}${wr ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Worst loss', 'Pior derrota')}</p>${li(wr, 'var(--loss)')}` : ''}${sos != null ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Strength of schedule: average opponent rating', 'Força do calendário: nota média dos rivais')} <b style="color:var(--tx)">${el(sos)}</b></p>` : ''}</div>` : '';
-  const bonusCard = bonusLine(id);
+  const bonusCard = bonusLine(id) + techCard(id);
   M(`<a class="mu" href="#/fighters">${T('Search fighters', 'Buscar lutadores')}</a>
-  <div class="hero">${av(id, p.name, 'big')}<div><h1>${S.me.fav[id] ? '★ ' : ''}${esc(p.name)}${ubadge(id)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}${p.country ? ` • ${esc(p.country)}` : ''}${p.team ? ` (${esc(p.team)})` : ''}</span></div></div>
-  <div class="acts"><button id="fv">${S.me.fav[id] ? T('★ Favorite', '★ Favorito') : T('☆ Add to favorites', '☆ Favoritar')}</button><label class="btn">${T('Photo', 'Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id] ? `<button id="rp">${T('Remove photo', 'Remover foto')}</button>` : ''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight', 'Simular luta')}</a><a class="btn" href="#/xray/${id}">${T('X-Ray', 'Raio-X')}</a><span class="xbar" data-xk="fighter"></span></div>
+  <div class="hero">${av(id, p.name, 'big')}<div><h1>${S.me.fav[id] ? '★ ' : ''}${esc(p.name)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}${p.country ? ` • ${esc(p.country)}` : ''}${p.team ? ` (${esc(p.team)})` : ''}</span></div></div>
+  <div class="acts"><button id="fv">${S.me.fav[id] ? T('★ Favorite', '★ Favorito') : T('☆ Add to favorites', '☆ Favoritar')}</button><label class="btn">${T('Photo', 'Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id] ? `<button id="rp">${T('Remove photo', 'Remover foto')}</button>` : ''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight', 'Simular luta')}</a><a class="btn" href="#/xray/${id}">${T('X-Ray', 'Raio-X')}</a>${extLinks(p)}<span class="xbar" data-xk="fighter"></span></div>
   <div class="seg jmp" id="fj">${me ? jchip('sc-rate', '📊 ' + T('Rating & evolution', 'Nota & Evolução')) : ''}${resume || bonusCard ? jchip('sc-hi', '🏆 ' + T('Highlights', 'Destaques')) : ''}${jchip('sc-an', '🧬 ' + T('Tactical analysis', 'Análise Tática'))}${jchip('sc-notes', '📝 ' + T('Notes & profile', 'Notas & Ficha'))}${jchip('sc-hist', '🥊 ' + T('History', 'Histórico'))}</div>
   <label class="ctl" style="display:grid"><span class="mu sm">${T('Rating scope', 'Escopo da nota')}</span><select id="ps">${opts.map(o => `<option value="${esc(o)}"${o === d ? ' selected' : ''}>${o === 'ALL' ? T('General (all fights)', 'Geral (todas as lutas)') : esc(o)}</option>`).join('')}</select></label>
   ${me ? `<div class="card" id="sc-rate" style="padding:1rem 1.1rem"><div style="display:flex;justify-content:space-between;align-items:end;gap:1rem"><div><span class="mu sm">${T('Current rating', 'Nota atual')}</span><div class="rt" style="text-align:left;font-size:3rem">${Math.round(me.cur)}</div></div><span class="mu sm" style="text-align:right">${T('peak rating', 'nota máxima')} ${Math.round(me.pk)} ${T('in', 'em')} ${me.pkd.slice(0, 4)}<br>${T('all-time score', 'pontuação histórica')} ${Math.round(me.hs)}${me.cq + me.df + me.iv ? `<br>${T('belt', 'cinturão')}: ${me.cq} ${T('won', 'conq.')}, ${me.df} ${T('def.', 'def.')}${me.iv ? `, ${me.iv} ${T('interim', 'interino')}` : ''}` : ''}<br>${me.w}-${me.l}-${me.d}</span></div>${spark(N.map(n => { const f = fs.find(x => x.id === n.f), o = n.gs[0].o, s_ = n.gs[0].s, r_ = s_ === 1 ? (S.pt ? 'V' : 'W') : s_ === 0 ? (S.pt ? 'D' : 'L') : (S.pt ? 'E' : 'D'); return {a: el(n.r), t: f ? `${fmt(n.dt)} · vs ${S.F.get(o.id)?.name || o.id} · ${r_}${f.method ? ' (' + f.method + ')' : ''} · ${T('rating', 'nota')} ${el(n.r)}` : ''}; }))}</div>` : ''}
   <div id="sc-hi">${resume}${bonusCard}</div>${window.XP ? window.XP(id) : ''}
-  <h2 id="sc-an">${T('Analysis', 'Análise')}</h2>${analysis(id)}
+  <h2 id="sc-an">${T('Analysis', 'Análise')}</h2>${analysis(id)}${precDefHtml(id)}${roundsHtml(id)}${wearHtml(id)}
   <h2 id="sc-notes">${T('My notes', 'Minhas anotações')}</h2><textarea id="nt" placeholder="${T('Write anything about this fighter…', 'Escreva o que quiser sobre este lutador…')}">${esc(S.me.note[id] || '')}</textarea>
   <h2>${T('Profile', 'Ficha')}</h2><dl class="card bio">${Object.entries(p).filter(([k]) => !skip.includes(k)).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}${bioExtra(p)}</dl>
   <h2 id="sc-hist">${T('Fight history', 'Histórico')}</h2><p class="mu sm">${T('Per fight: points won or lost (right, with the rating after the fight), win chance, both ratings then, and the opponent’s peak. Tap the date or "View fight" to open the fight with full stats.', 'Em cada luta: pontos ganhos ou perdidos (à direita, com a nota depois da luta), chance de vitória, nota dos dois na época e pico do rival. Toque na data ou em "Ver luta" para abrir a luta com todas as estatísticas.')}</p>${hist || empty()}`);
@@ -1532,7 +1699,6 @@ function vFighter(id) {
     if (bw.length) hi.push({k: T('Best wins', 'Melhores vitórias'), v: bw.map(x => `${name(x.o)} (${el(x.q)})`).join(', ')});
     if (wr) hi.push({k: T('Worst loss', 'Pior derrota'), v: `${name(wr.o)} (${el(wr.q)})`});
     if (sos != null) hi.push({k: T('Average rival rating', 'Nota média dos rivais'), v: String(el(sos))});
-    const ur = S.urk && S.urk.fighter_rank && S.urk.fighter_rank[id]; if (ur) hi.push({k: T('Official UFC ranking', 'Ranking oficial do UFC'), v: `${ur.rank === 0 ? T('Champion', 'Campeão') : ur.rank ? '#' + ur.rank : ''}${ur.div ? ' · ' + ur.div : ''}${ur.p4p ? ' · P4P #' + ur.p4p : ''}`});
     const bx = bonusMap().get(id); if (bx) hi.push({k: T('Night bonuses', 'Bônus da Noite'), v: `${bonusTot(bx)} (${bx.fotn} FOTN, ${bx.perf + bx.ko + bx.sub} Performance/KO/Sub) · ~$${bonusTot(bx) * BONUS_USD}k`});
     if (me) hi.push({k: T('UFC record', 'Cartel no UFC'), v: `${me.w}-${me.l}-${me.d}${me.cq + me.df ? ` · ${T('title wins', 'vitórias de cinturão')} ${me.cq + me.df}` : ''}`});
     return {kind: 'fighter', title: p.name, file: 'atleta-' + XEXP.slug(p.name), share: false, sub: `${p.nick ? '“' + p.nick + '” · ' : ''}${p.record || ''}${p.country ? ' · ' + p.country : ''}${p.team ? ' · ' + p.team : ''}`,
@@ -1558,7 +1724,7 @@ const sr = (l, a, b, x, y) => `<div class="sr"><span style="color:var(--gd)">${a
 
 function pick(q, s) {
   const id = q[s], p = S.F.get(id);
-  return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${s === 'a' ? T('Fighter A', 'Lutador A') : T('Fighter B', 'Lutador B')}</div>${p ? `<div class="sel">${av(id, p.name, 'sm')}<b>${esc(p.name)}</b>${ubadge(id)}<span class="mu sm">${esc(p.record)}</span><button data-clr="${s}">×</button></div>` : `<input data-q="${s}" type="search" placeholder="${T('Search a fighter…', 'Buscar lutador…')}"><div class="res" id="r${s}"></div>`}</div>`;
+  return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${s === 'a' ? T('Fighter A', 'Lutador A') : T('Fighter B', 'Lutador B')}</div>${p ? `<div class="sel">${av(id, p.name, 'sm')}<b>${esc(p.name)}</b><span class="mu sm">${esc(p.record)}</span><button data-clr="${s}">×</button></div>` : `<input data-q="${s}" type="search" placeholder="${T('Search a fighter…', 'Buscar lutador…')}"><div class="res" id="r${s}"></div>`}</div>`;
 }
 
 
@@ -1586,7 +1752,8 @@ function sigHtml(oa, ob, A, B) {
   const al = (o, p) => { const x = sigAlerts(o); return `<p style="margin:.3rem 0"><b>${esc(p.name)}</b>: ${x.length ? x.map(t => `<span class="tag">${t}</span>`).join(' ') : `<span class="mu">${T('no standout target or position tendency', 'sem tendência de alvo ou posição que se destaque')}</span>`}</p>`; };
   return `<h2>${T('Target & position signature', 'Assinatura de alvo e posição')}</h2><div class="card" style="padding:.8rem 1.1rem">${sigRows(oa, ob)}
   ${al(oa, A)}${al(ob, B)}<p class="mu sm">${T('Share of significant strikes landed, by target (head, body, leg) and by position (distance, clinch, ground). Alerts: legs or body from 22%, ground from 25%, with 60+ strikes on record.', 'Fração dos golpes significativos acertados, por alvo (cabeça, corpo, perna) e por posição (distância, clinch, solo). Alertas: perna ou corpo a partir de 22%, solo a partir de 25%, com 60+ golpes registrados.')}</p>
-  <details><summary>${T('What they absorb', 'O que eles absorvem')}</summary>${sigRows(oa, ob, 'sgo')}</details></div>`;
+  <details><summary>${T('What they absorb', 'O que eles absorvem')}</summary>${sigRows(oa, ob, 'sgo')}</details>
+  <details><summary>${T('Accuracy and defense by target and position', 'Precisão e defesa por alvo e posição')}</summary>${precDefRows(oa, ob)}</details></div>`;
 }
 
 function simOut(q) {
@@ -1599,7 +1766,7 @@ function simOut(q) {
   const G = league(), oa = agg(q.a, q.m), ob = agg(q.b, q.m), xa = rates(oa, G), xb = rates(ob, G), el = r => Math.round(1500 + U * r.mu), sd = r => Math.round(U * Math.sqrt(r.v));
   const da = mainDiv(q.a), db = mainDiv(q.b), age = d => { const t = Date.parse(d); return t ? ((Date.now() - t) / YR).toFixed(1) : '-'; };
   let h = `<h2>${T('Win probability', 'Probabilidade de vitória')}</h2><div class="card" style="padding:1rem 1.1rem"><div class="pb"><i style="flex:${p};background:var(--gd)">${pc(p)}</i><i style="flex:${1 - p};background:var(--cb)">${pc(1 - p)}</i></div>
-  <div class="sr"><span style="color:var(--gd)">${esc(A.name)}${ubadge(q.a)}</span><span></span><span style="color:var(--cb)">${esc(B.name)}${ubadge(q.b)}</span></div>
+  <div class="sr"><span style="color:var(--gd)">${esc(A.name)}</span><span></span><span style="color:var(--cb)">${esc(B.name)}</span></div>
   <p class="mu sm">${T('90% interval for A', 'Intervalo de 90% para A')}: ${pc(lo)} – ${pc(hi)}. ${T('Ratings', 'Notas')}: ${el(ra)} ± ${sd(ra)} ${T('vs', 'vs')} ${el(rb)} ± ${sd(rb)} (${q.m === 'peak' ? T('career peak', 'pico da carreira') : T('current form, with uncertainty growing while inactive', 'momento atual, com incerteza crescendo na inatividade')}).${da !== db ? ` ${T('Different main divisions: the rating comparison is indirect.', 'Divisões principais diferentes: a comparação de notas é indireta.')}` : ''}</p></div>
   <h2>${T('Tale of the tape', 'Comparativo')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Record', 'Cartel'), esc(A.record), esc(B.record))}${sr(T('Height', 'Altura'), esc(A.Height || '-'), esc(B.Height || '-'))}${sr(T('Reach', 'Envergadura'), esc(A.Reach || '-'), esc(B.Reach || '-'))}${sr(T('Stance', 'Base'), esc(A.STANCE || '-'), esc(B.STANCE || '-'))}${sr(T('Age', 'Idade'), age(A.DOB), age(B.DOB))}${tapeExtra(A, B)}${sr(T('Main division', 'Divisão principal'), esc(da), esc(db))}${sr(T('Fights used', 'Lutas usadas'), oa.n, ob.n)}</div>`;
   S.simLast = {A, B, p, lo, hi, m: q.m};
@@ -1613,6 +1780,7 @@ function simOut(q) {
   ${sr(T('Submission attempts / 15 min', 'Finalizações tentadas / 15 min'), f1(xa.sub), f1(xb.sub), xa.sub, xb.sub)}${sr(T('Knockdowns / 15 min', 'Knockdowns / 15 min'), f1(xa.kd), f1(xb.kd), xa.kd, xb.kd)}
   ${sr(T('Control time share', 'Fração de controle'), pc(xa.ctl), pc(xb.ctl), xa.ctl, xb.ctl)}${sr(T('Finish rate in wins', 'Taxa de finalização nas vitórias'), pc(xa.fin), pc(xb.fin), xa.fin, xb.fin)}</div>`;
   h += sigHtml(oa, ob, A, B);
+  h += roundsSimHtml(q.a, q.b) + wearSimHtml(q.a, q.b);
   const gk = 15 * Math.max(G.kd, 1) / G.min;
   const pj = (x, y) => ({sl: 15 * x.sl * (y.ab / x.gs), td: x.td * (y.tdab / x.gt15), kd: x.kd * (y.kda / gk), ctl: Math.min(.95, x.ctl * (y.cta / x.gc))});
   const ja = pj(xa, xb), jb = pj(xb, xa);
@@ -1732,7 +1900,7 @@ function tune() {
 const LABSHORT = [[/validation|valida/i, () => T('Validation', 'Validação')], [/calibra/i, () => T('Calibration', 'Calibração')], [/really matters|importa/i, () => T('Variables', 'Variáveis')], [/auto-?tune|autoajuste/i, () => 'Auto-tune'],
   [/reign|reinado/i, () => T('Reigns', 'Reinados')], [/upset|zebra/i, () => T('Upsets', 'Zebras')], [/prediction|palpite|placar|scoreboard/i, () => T('My picks', 'Meus palpites')], [/judge|juíz|juiz/i, () => T('Judges', 'Juízes')],
   [/referee|árbitro|arbitro/i, () => T('Referees', 'Árbitros')], [/gym|academia|camp/i, () => T('Gyms', 'Academias')], [/age curve|curva de idade/i, () => T('Age curve', 'Curva de idade')], [/robber|roubo|decision check|decisões/i, () => T('Possible robberies', 'Possíveis roubos')],
-  [/official ufc|ranking oficial/i, () => T('UFC vs WHR', 'UFC vs. WHR')], [/bonus hunters|caçadores/i, () => T('Bonus hunters', 'Caçadores de bônus')], [/home advantage|fator casa/i, () => T('Home & altitude', 'Casa e altitude')]];
+  [/bonus hunters|caçadores/i, () => T('Bonus hunters', 'Caçadores de bônus')], [/anatomy of|anatomia/i, () => T('Techniques', 'Técnicas')], [/lineal|lineares/i, () => T('Lineal champions', 'Campeões lineares')], [/home advantage|fator casa/i, () => T('Home & altitude', 'Casa e altitude')]];
 function labChips() {
   const root = $('#lb'); if (!root) return;
   let obs = null;
@@ -2164,7 +2332,7 @@ function route() {
     {k:'form', l:T('Recent form (last 3 fights)', 'Fase recente (últimas 3 lutas)'), u:T('wins/3', 'vitórias/3'), f:r => r.x[7], T:.34, s:.01},
     {k:'elo', l:T('Elo gap (control check)', 'Diferença de Elo (teste de controle)'), u:T('points', 'pontos'), f:r => r.x[0] * 400, T:100, s:10},
     {k:'home', l:T('Fighting at home vs away', 'Lutando em casa vs. visitante'), u:'', f:r => homeD(r), T:1, bin:true},
-    {k:'leg_reach', l:T('Leg reach', 'Alcance de pernas'), u:T('inches', 'polegadas'), f:r => legD(r), T:2, s:.5}
+    {k:'wear', l:T('Mileage: head strikes absorbed before the fight', 'Milhagem: golpes na cabeça acumulados antes da luta'), u:T('strikes', 'golpes'), f:r => wearD(r), T:200, s:50}
   ];
   const slope = pop => {
     let c = Math.LN10; if (pop.length < 50) return c;
@@ -2176,21 +2344,28 @@ function route() {
     return c;
   };
   function cross() {
-    const V = VARS().find(v => v.k === Z.v), thr = V.tf ? V.tf(Z.T) : Z.T, fm = fmap(), q = [], base = [], pop = [];
+    const V = VARS().find(v => v.k === Z.v), thr = V.tf ? V.tf(Z.T) : Z.T, fm = fmap(), q = [], base = [], bko = [], pop = [];
     for (const r of pre().rows) {
       if (Z.e3 && (r.nx < 3 || r.ny < 3)) continue;
       const f = fm.get(r.fid); if (!f || +f.date.slice(0, 4) < Z.from || (Z.div !== 'ALL' && f.div !== Z.div)) continue;
       const m = cls(f.method), fin = m === 'KO' || m === 'SUB';
       if (Z.met === 'win' && !(Z.sub === 'all' || (Z.sub === 'fin' && fin) || (Z.sub === 'ko' && m === 'KO') || (Z.sub === 'sub' && m === 'SUB') || (Z.sub === 'dec' && m === 'DEC') || (Z.sub === 'spl' && /split|majority/i.test(f.method || '')))) continue;
+      const koX = r.y === 0 && m === 'KO' ? 1 : 0, koY = r.y === 1 && m === 'KO' ? 1 : 0; if (Z.met === 'kol') bko.push(koX, koY);
       base.push(fin ? 1 : 0); pop.push([r.x[0], r.y]);
       let d = V.f(r); if (Z.side === 'less' && !V.bin) d = -d;
-      if (d >= thr) q.push({y:r.y, e0:r.x[0] * 400, fin:fin ? 1 : 0, date:r.date});
-      else if (d <= -thr) q.push({y:1 - r.y, e0:-r.x[0] * 400, fin:fin ? 1 : 0, date:r.date});
+      if (d >= thr) q.push({y:r.y, e0:r.x[0] * 400, fin:fin ? 1 : 0, ko:koX, date:r.date});
+      else if (d <= -thr) q.push({y:1 - r.y, e0:-r.x[0] * 400, fin:fin ? 1 : 0, ko:koY, date:r.date});
     }
     const key = JSON.stringify([Z.v, Z.T, Z.side, Z.div, Z.sub, Z.met, Z.e3, Z.from]); Z.tests.add(key);
-    const n = q.length, K = Z.tests.size, res = {n, K, V, base:base.length};
+    const n = q.length, K = Z.tests.size, res = {n, K, V, base:Z.met === 'kol' ? bko.length : base.length};
+    if (Z.met === 'kol') {   /* risco de sofrer KO/TKO DESCONTADA a força: esperado = (parte das derrotas que termina em KO) x (1 - chance de vitória pelo Elo) */
+      const cal = slope(pop), E = q.map(r => 1 / (1 + Math.exp(-cal * r.e0 / 400))), k = sum(q.map(r => r.ko)), kap = 2 * sum(bko) / Math.max(bko.length, 1), pk = E.map(e => kap * (1 - e)), Es = sum(pk), Vr = sum(pk.map(p => p * (1 - p)));
+      Object.assign(res, {cal:cal / Math.LN10, k, rate:n ? k / n : 0, ci:wil(k, n), exp:n ? Es / n : 0, basel:sum(bko) / Math.max(bko.length, 1), diff:n ? (k - Es) / n : 0, se:n ? Math.sqrt(Vr) / n : 0, z:Vr ? (k - Es) / Math.sqrt(Vr) : 0});
+      res.p = Vr ? pval(res.z) : 1;
+      return res;
+    }
     if (Z.met === 'fin') {
-      const k = sum(q.map(r => r.fin)), b = sum(base), N = base.length, p1 = k / Math.max(n, 1), p2 = b / Math.max(N, 1), pp = (k + b) / (n + N || 1), se = Math.sqrt(pp * (1 - pp) * (1 / Math.max(n, 1) + 1 / Math.max(N, 1)));
+      const k = sum(base.length ? q.map(r => r.fin) : []), b = sum(base), N = base.length, p1 = k / Math.max(n, 1), p2 = b / Math.max(N, 1), pp = (k + b) / (n + N || 1), se = Math.sqrt(pp * (1 - pp) * (1 / Math.max(n, 1) + 1 / Math.max(N, 1)));
       Object.assign(res, {rate:p1, ci:wil(k, n), basel:p2, diff:p1 - p2, z:se ? (p1 - p2) / se : 0, p:se ? pval((p1 - p2) / se) : 1, se});
       return res;
     }
@@ -2201,13 +2376,13 @@ function route() {
   }
   function zres() {
     const el = $('#zr'); if (!el) return;
-    const r = cross(), pct = Z.met === 'fin';
+    const r = cross(), pct = Z.met === 'fin' || Z.met === 'kol';
     if (r.n < 30) return el.innerHTML = `<div class="card" style="padding:.8rem 1.1rem"><p class="dn">${T(`Only ${r.n} fights match: too few to conclude anything.`, `Só ${r.n} lutas atendem: pouco para concluir qualquer coisa.`)}</p></div>`;
     const al = .05 / r.K, sig = r.p < al, weak = !sig && r.p < .05, row = (l, v) => `<div class="sr" style="grid-template-columns:1fr auto"><span class="mu">${l}</span><b>${v}</b></div>`;
     const verdict = sig ? T(`Evidence of an effect (p = ${r.p.toFixed(4)}).`, `Há evidência de efeito (p = ${r.p.toFixed(4)}).`) : weak ? T(`Weak signal (p = ${r.p.toFixed(3)}).`, `Sinal fraco (p = ${r.p.toFixed(3)}).`) : T(`No evidence of an effect (p = ${r.p.toFixed(2)}).`, `Sem evidência de efeito (p = ${r.p.toFixed(2)}).`);
     el.innerHTML = `<div class="card" style="padding:.9rem 1.1rem"><b>${sig ? '● ' : ''}${verdict}</b>
     ${row(T('Fights matched', 'Lutas encontradas'), r.n.toLocaleString(S.pt ? 'pt-BR' : 'en-US'))}
-    ${pct ? row(T('Finish rate', 'Taxa de finalização'), `${ppf(r.rate)} (${ppf(r.ci[0])} – ${ppf(r.ci[1])})`) + row(T('Difference', 'Diferença'), `${sg2(r.diff * 100)} pp`)
+    ${pct ? row((Z.met === 'kol' ? T('KO/TKO loss rate', 'Taxa de derrota por KO/TKO') : T('Finish rate', 'Taxa de finalização')), `${ppf(r.rate)} (${ppf(r.ci[0])} – ${ppf(r.ci[1])})`) + (Z.met === 'kol' ? row(T('Expected given Elo', 'Esperado dado o Elo'), ppf(r.exp)) : '') + row(T('Difference', 'Diferença'), `${sg2(r.diff * 100)} pp`)
           : row(T('Win rate', 'Taxa de vitória'), `${ppf(r.rate)} (${ppf(r.ci[0])} – ${ppf(r.ci[1])})`) + row(T('Expected from Elo', 'Esperado pelo Elo'), ppf(r.exp)) + row(T('Above expectation', 'Acima do esperado'), `<span style="color:${r.diff >= 0 ? 'var(--win)' : 'var(--loss)'}">${sg2(r.diff * 100)} pp</span>`)}</div>`;
   }
   function tCross() {
@@ -2215,7 +2390,7 @@ function route() {
     const op = (a, v) => a.map(([k, l]) => `<option value="${k}"${String(k) === String(v) ? ' selected' : ''}>${l}</option>`).join('');
     return `<div class="ctl"><label>${T('Trait', 'Característica')}<select data-zf="v">${op(Vs.map(v => [v.k, v.l]), Z.v)}</select></label>
     ${V.bin ? '' : `<label>${T('Gap of at least', 'Diferença mínima')} (${V.u})<input data-zf="T" type="number" step="${V.s || 1}" min="0" value="${Z.T}"></label><label>${T('Side analysed', 'Lado analisado')}<select data-zf="side">${op([['more', T('The higher value', 'O maior valor')], ['less', T('The lower value', 'O menor valor')]], Z.side)}</select></label>`}
-    <label>${T('Outcome', 'Desfecho')}<select data-zf="met">${op([['win', T('That side wins', 'Esse lado vence')], ['fin', T('Fight ends by finish', 'Luta termina em finalização')]], Z.met)}</select></label>
+    <label>${T('Outcome', 'Desfecho')}<select data-zf="met">${op([['win', T('That side wins', 'Esse lado vence')], ['fin', T('Fight ends by finish', 'Luta termina em finalização')], ['kol', T('That side is stopped by KO/TKO', 'Esse lado sofre KO/TKO')]], Z.met)}</select></label>
     ${Z.met === 'win' ? `<label>${T('Method', 'Método')}<select data-zf="sub">${op([['all', T('Any', 'Qualquer')], ['fin', T('Finish', 'Finalização')], ['ko', 'KO/TKO'], ['sub', T('Submission', 'Finalização por chave')], ['dec', T('Decision', 'Decisão')], ['spl', T('Split decision', 'Decisão dividida')]], Z.sub)}</select></label>` : ''}
     <label>${T('Division', 'Divisão')}<select data-zf="div">${op([['ALL', T('All', 'Todas')], ...dv.map(d => [d, d])], Z.div)}</select></label>
     <label>${T('From year', 'A partir do ano')}<input data-zf="from" type="number" min="1993" value="${Z.from}"></label></div><div class="xrow"><span class="xbar" data-xk="el:#zr" data-xt="${T('Cross-tab: tested hypothesis', 'Cruzador: hipótese testada')}"></span></div><div id="zr"></div>`;
