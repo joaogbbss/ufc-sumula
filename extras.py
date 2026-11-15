@@ -18,6 +18,16 @@ K_ELO = 28.0
 FOLDS = 5
 
 
+TOURN_RE = re.compile(r"ultimate fighter|\btuf\b|road to ufc|tournament|ultimate ultimate|ultimate japan", re.I)
+
+
+def is_real_title(f):
+    tt = (f.get("tt") or "").lower()
+    if TOURN_RE.search(tt):
+        return False
+    return bool(f.get("title")) or "championship" in tt
+
+
 # ---------- utilidades ----------
 def norm(s):
     s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode().lower()
@@ -177,7 +187,7 @@ def run_excitement(fights, st, snaps):
         f = s["f"]
         if f["date"] < "2005-01-01" or s["na"] < 2 or s["nb"] < 2 or s["pa"] is None or s["pb"] is None: continue
         p = 1 / (1 + 10 ** ((s["eb"] - s["ea"]) / 400.0))
-        x = [1.0, 1 - abs(2 * p - 1), (s["fa"] + s["fb"]) / 2, ((s["pa"] + s["pb"]) / 2) / lg, 1.0 if f.get("title") else 0.0, math.log(1 + min(s["na"], s["nb"]))]
+        x = [1.0, 1 - abs(2 * p - 1), (s["fa"] + s["fb"]) / 2, ((s["pa"] + s["pb"]) / 2) / lg, 1.0 if is_real_title(f) else 0.0, math.log(1 + min(s["na"], s["nb"]))]
         rows.append((x, 1 if "fight" in (f.get("bonus") or []) else 0, zlib.crc32(f["id"].encode()) % FOLDS))
     if len(rows) < 300 or sum(r[1] for r in rows) < 30:
         print("excitement: poucos dados de bônus; nada gerado."); return
@@ -382,7 +392,7 @@ def run_judges(fights, snaps):
         if not (f.get("ref") or "").strip(): continue
         p = 1 / (1 + 10 ** ((s["eb"] - s["ea"]) / 400.0)); yr = (int(f["date"][:4]) - 2015) / 10.0; k = klass(f.get("method"))
         ft = ((s["fa"] if s["fa"] is not None else lgf) + (s["fb"] if s["fb"] is not None else lgf)) / 2
-        rows.append(([1.0, 1 - abs(2 * p - 1), ft, 1.0 if f.get("title") else 0.0, yr, yr * yr, math.log(1 + min(s["na"], s["nb"]))], k, f))
+        rows.append(([1.0, 1 - abs(2 * p - 1), ft, 1.0 if is_real_title(f) else 0.0, yr, yr * yr, math.log(1 + min(s["na"], s["nb"]))], k, f))
     refs, lgr = {}, {}
     if len(rows) >= 400:
         X = [r[0] for r in rows]; fits = {t: fit_lr(X, [1 if (r[1] in ("ko", "sub") if t == "fin" else r[1] == t) else 0 for r in rows]) for t in ("fin", "ko", "sub")}
@@ -451,7 +461,7 @@ def run_camps(fights, st):
             t["an"] += 1; t["ar"] += x["s"] - x["x"] - mu_all; t["av"] += x["x"] * (1 - x["x"])
             if k < 3: t["dn"] += 1; t["dr"] += x["s"] - x["x"] - mu_deb; t["dv"] += x["x"] * (1 - x["x"])
     for f in fights:
-        if not f.get("title"): continue
+        if not is_real_title(f): continue
         for side in ("a", "b"):
             g = group.get(f[side]["id"])
             if g:

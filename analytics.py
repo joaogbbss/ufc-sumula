@@ -69,6 +69,16 @@ def klass(method):
     return "oth", None
 
 
+TOURN_RE = re.compile(r"ultimate fighter|\btuf\b|road to ufc|tournament|ultimate ultimate|ultimate japan", re.I)
+
+
+def is_real_title(f):
+    tt = (f.get("tt") or "").lower()
+    if TOURN_RE.search(tt):
+        return False
+    return bool(f.get("title")) or "championship" in tt
+
+
 def multiplier(f):
     """Peso do desfecho: KO no 1º round vale mais que decisão dividida."""
     kind, sub = klass(f.get("method"))
@@ -84,7 +94,7 @@ def multiplier(f):
         m = DEC_MULT[sub]
     else:
         m = DQ_MULT if "dq" in (f.get("method") or "").lower() else 1.0
-    return m * (TITLE_MULT if f.get("title") else 1.0)
+    return m * (TITLE_MULT if is_real_title(f) else 1.0)
 
 
 def k_factor(n):
@@ -139,15 +149,15 @@ def run_elo(fights, pre_out=None):
         m = multiplier(f)
         
         # Amortecimento de finalização sobre azarões: evita que finalizar oponentes fracos infle o ELO ao infinito
-        if s == 1.0 and A["r"] - B["r"] > 120 and not f.get("title"):
+        is_title = is_real_title(f)
+        if s == 1.0 and A["r"] - B["r"] > 120 and not is_title:
             m = 1.0 + (m - 1.0) * (1.0 / (1.0 + (A["r"] - B["r"] - 120) / 200.0))
-        elif s == 0.0 and B["r"] - A["r"] > 120 and not f.get("title"):
+        elif s == 0.0 and B["r"] - A["r"] > 120 and not is_title:
             m = 1.0 + (m - 1.0) * (1.0 / (1.0 + (B["r"] - A["r"] - 120) / 200.0))
 
         da = k_factor(A["n"]) * m * (s - ea)
         db = k_factor(B["n"]) * m * ((1 - s) - (1 - ea))
         kind = KEYS.index(klass(f.get("method"))[0])
-        is_title = bool(f.get("title"))
         if is_title:
             A["tf"] += 1
             B["tf"] += 1

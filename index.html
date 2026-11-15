@@ -279,11 +279,14 @@ const TG = (t, won) => !t ? '' : ({
   int: won ? T('won the interim belt', 'conquistou o interino') : T('fought for the interim belt', 'disputou o interino')
 })[t];
 
+const TOURN_RE = /ultimate fighter|\btuf\b|road to ufc|tournament|ultimate ultimate|ultimate japan/i;
+const isTitle = f => (!!f.title || /championship/i.test(f.tt || '')) && !TOURN_RE.test(f.tt || '');
+
 function whr(L, P) {
   const w2 = (P.vol / U) ** 2, tau2 = 6.25;
   const N = new Map(), tag = new Map(), ch = new Map(), cnt = new Map(), rg = [], op = new Map();
   for (const f of L) {
-    if (!f.title || (f.res !== 'a' && f.res !== 'b')) continue;
+    if (!isTitle(f) || (f.res !== 'a' && f.res !== 'b')) continue;
     const W = mid(f[f.res].id), Lo = mid(f[f.res === 'a' ? 'b' : 'a'].id);
     const c = cnt.get(W) || {cq:0, df:0, iv:0};
     cnt.set(W, c);
@@ -304,7 +307,7 @@ function whr(L, P) {
     if (ia === ib) continue;
     const t = Date.parse(f.date) / YR, w = f.res === 'draw' ? .5 : dom(f);
     const sa = f.res === 'a' ? w : f.res === 'b' ? 1 - w : .5;
-    const m = f.title ? 1 + P.title : 1, ip = /interim/i.test(f.tt || ''), ti = !!f.title;
+    const ti = isTitle(f), m = ti ? 1 + P.title : 1, ip = /interim/i.test(f.tt || '');
     const na = {t, r:0, gs:[], f:f.id, id:ia, dt:f.date, ti, ip};
     const nb = {t, r:0, gs:[], f:f.id, id:ib, dt:f.date, ti, ip};
     na.gs.push({o:nb, s:sa, m}); nb.gs.push({o:na, s:1 - sa, m});
@@ -380,7 +383,7 @@ function dm() {
       const g = m.get(id), x = g.get(f.div) || {n:0, w:0, l:0, d:0, last:'', tw:0};
       g.set(f.div, x); x.n++;
       if (f.date > x.last) x.last = f.date;
-      if (f.res === s) { x.w++; if (f.title) x.tw++; } else if (f.res === 'draw') x.d++; else x.l++;
+      if (f.res === s) { x.w++; if (isTitle(f) && !/interim/i.test(f.tt || '')) x.tw++; } else if (f.res === 'draw') x.d++; else x.l++;
     }
   }
   S.dmc = {n: S.fg.length, m};
@@ -1341,7 +1344,7 @@ function linealData() {
       if (f.res === 'draw') continue;
       const w = f.res === 'a' ? ia : ib;
       if (w === st.cur.id) st.cur.def++; else { end(st, f.date, 'beaten'); st.cur = {div: f.div, id: w, start: f.date, last: f.date, def: 0, end: null, why: '', days: 0, fid: f.id}; }
-    } else if (f.title && f.res !== 'draw') { const w = f.res === 'a' ? ia : ib; st.cur = {div: f.div, id: w, start: f.date, last: f.date, def: 0, end: null, why: '', days: 0, fid: f.id}; }
+    } else if (isTitle(f) && !/interim/i.test(f.tt || '') && f.res !== 'draw') { const w = f.res === 'a' ? ia : ib; st.cur = {div: f.div, id: w, start: f.date, last: f.date, def: 0, end: null, why: '', days: 0, fid: f.id}; }
   }
   const now = new Date().toISOString().slice(0, 10);
   for (const dv of STD) { const st = out[dv]; if (st.cur && Date.parse(now) - Date.parse(st.cur.last) > Y3) end(st, st.cur.last, 'inactive'); if (st.cur) st.cur.days = days(st.cur.start, now); }
@@ -1387,7 +1390,7 @@ function labPanels() { XEXP.reg('lab:log', logSpec); XEXP.reg('lab:age', ageSpec
 function extraLab() {
   const E = getE('ALL'), now = Date.now(), byId = new Map(S.fg.map(f => [f.id, f]));
   const rg = E.rg.map(r => {
-    const end = r.end || (now - Date.parse(r.last) > 2 * YR ? r.last : null);
+    const end = r.end || (now - Date.parse(r.last) > 3 * YR ? r.last : null);
     return {...r, e:end, d: ((end ? Date.parse(end) : now) - Date.parse(r.start)) / 864e5};
   }).sort((a, b) => b.d - a.d).slice(0, 10);
   const up = [];
@@ -1668,7 +1671,7 @@ function vFighter(id) {
       ex = `<span style="text-align:right"><b class="${dl >= 0 ? 'up' : 'dn'}">${dl >= 0 ? '+' : ''}${dl.toFixed(1)}</b><br><span class="mu sm">${T('rating', 'nota')} ${el(n.r)}</span></span>`;
       sub = `, ${T('win chance', 'chance')} ${Math.round(pc * 100)}%, ${T('opponent then', 'rival na época')} ${el(q.r)}, ${T('opponent peak', 'pico do rival')} ${Math.round(E.RM.get(q.id).pk)}`;
     }
-    return `<div class="h"><a class="mu" href="${lk}" style="text-decoration:underline">${fmt(f.date)}</a><span><b class="${r === 'W' ? 'up' : r === 'L' ? 'dn' : ''}">${S.pt ? {W:'V', L:'D', D:'E', NC:'SR'}[r] : r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a>${bonusIcon(id, f.id)}<br><span class="mu sm">${esc(f.method)} ${f.round ? 'R' + esc(f.round) : ''}, ${esc(f.div)}${f.title ? ', ' + (TG(E.tag.get(f.id), r === 'W') || T('title fight', 'cinturão')) : ''}${sub}</span><br><a class="sm" style="color:var(--gd)" href="${lk}">${T('View fight and stats', 'Ver luta e estatísticas')}</a></span>${ex}</div>`;
+    return `<div class="h"><a class="mu" href="${lk}" style="text-decoration:underline">${fmt(f.date)}</a><span><b class="${r === 'W' ? 'up' : r === 'L' ? 'dn' : ''}">${S.pt ? {W:'V', L:'D', D:'E', NC:'SR'}[r] : r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a>${bonusIcon(id, f.id)}<br><span class="mu sm">${esc(f.method)} ${f.round ? 'R' + esc(f.round) : ''}, ${esc(f.div)}${isTitle(f) ? ', ' + (TG(E.tag.get(f.id), r === 'W') || T('title fight', 'cinturão')) : ''}${sub}</span><br><a class="sm" style="color:var(--gd)" href="${lk}">${T('View fight and stats', 'Ver luta e estatísticas')}</a></span>${ex}</div>`;
   }).join('');
   const wl = [];
   for (const f of fs) {

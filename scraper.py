@@ -150,8 +150,21 @@ def parse_date(t):
     return t
 
 
+TOURN_RE = re.compile(
+    r"ultimate fighter|\btuf\b|road to ufc|tournament|ultimate ultimate|ultimate japan",
+    re.I,
+)
+
+
+def is_ufc_title(title):
+    t = (title or "").lower()
+    return ("title" in t or "championship" in t) and not TOURN_RE.search(t)
+
+
 def division(title):
     t = title.replace("Catchweight", "Catch Weight").lower()
+    if "superfight" in t:
+        return "Open Weight"
     return next((d for d in DIVS if d.lower() in t), "Outros")
 
 
@@ -260,7 +273,7 @@ def parse_fight(url, ev, order):
         "b": {"id": ppl[1]["id"], "name": ppl[1]["name"]},
         "res": res,
         "div": division(title),
-        "title": "title" in title.lower(),
+        "title": is_ufc_title(title),
         "tt": title,
         "bonus": [i["src"].rsplit("/", 1)[-1].split(".")[0] for i in tl.select("img")] if tl else [],
         "method": info.get("method", ""),
@@ -610,7 +623,7 @@ def upcoming(limit=3):
                     "a": {"id": uid(fl[0]["href"]), "name": txt(fl[0])},
                     "b": {"id": uid(fl[1]["href"]), "name": txt(fl[1])},
                     "div": division(cells),
-                    "title": "title" in cells.lower()
+                    "title": is_ufc_title(cells)
                 })
     return evs
 
@@ -784,7 +797,7 @@ def main():
     if up_ok:
         save("upcoming.json", {"updated": meta["updated"], "events": up})
     issues = validate(events, fights, fighters, upids)
-    save("validation.json", {"updated": meta["updated"], "count": len(issues), "issues": issues})
+    save("scraper_validation.json", {"updated": meta["updated"], "count": len(issues), "issues": issues})
     print(
         f"Pronto: {len(events)} eventos, {len(fights)} lutas, {len(fighters)} lutadores, "
         f"{len(issues)} avisos de validação."
