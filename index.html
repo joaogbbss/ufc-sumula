@@ -297,7 +297,7 @@ function whr(L, P) {
       if (o) { o.def++; o.last = f.date; }
     } else {
       tag.set(f.id, cur === Lo ? 'conq' : 'vago'); c.cq++; ch.set(f.div, W);
-      if (o) o.end = f.date;
+      if (o) o.end = cur === Lo ? f.date : o.last;
       const n = {id:W, div:f.div, start:f.date, last:f.date, end:null, def:0};
       op.set(f.div, n); rg.push(n);
     }
