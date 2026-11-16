@@ -1,0 +1,22 @@
+{
+  "v": 1,
+  "merges": {},
+  "div": {},
+  "exclude": [],
+  "title_vacancies": [
+    {"div": "Open Weight", "id": "dan_severn", "after": "1996-05-17", "end": "1997-02-07", "reason": "Superfight Championship retired upon introduction of weight classes (UFC 12)"},
+    {"div": "Lightweight", "after": "2002-01-11", "before": "2006-10-14", "end": "2002-03-23", "reason": "Jens Pulver stripped/vacated upon leaving the UFC"},
+    {"div": "Welterweight", "after": "2013-11-16", "before": "2014-03-15", "end": "2013-12-13", "reason": "Georges St-Pierre vacated title"},
+    {"div": "Light Heavyweight", "after": "2015-01-03", "before": "2015-05-23", "end": "2015-04-28", "reason": "Jon Jones stripped of title"},
+    {"div": "Featherweight", "after": "2015-12-12", "before": "2016-11-26", "end": "2016-11-26", "reason": "Conor McGregor stripped of Featherweight title"},
+    {"div": "Lightweight", "after": "2016-11-12", "before": "2018-04-07", "end": "2018-04-07", "reason": "Conor McGregor stripped of Lightweight title"},
+    {"div": "Middleweight", "after": "2017-11-04", "before": "2017-12-07", "end": "2017-12-07", "reason": "Georges St-Pierre vacated Middleweight title"},
+    {"div": "Light Heavyweight", "after": "2017-12-29", "before": "2018-12-29", "end": "2018-12-28", "reason": "Daniel Cormier vacated Light Heavyweight title"},
+    {"div": "Flyweight", "after": "2019-01-19", "before": "2020-07-18", "end": "2019-12-19", "reason": "Henry Cejudo vacated Flyweight title"},
+    {"div": "Bantamweight", "after": "2020-05-09", "before": "2020-07-11", "end": "2020-05-11", "reason": "Henry Cejudo retired and vacated Bantamweight title"},
+    {"div": "Light Heavyweight", "after": "2020-02-08", "before": "2020-09-26", "end": "2020-08-17", "reason": "Jon Jones vacated Light Heavyweight title"},
+    {"div": "Lightweight", "after": "2020-10-24", "before": "2021-05-15", "end": "2020-10-24", "reason": "Khabib Nurmagomedov retired and vacated Lightweight title"},
+    {"div": "Women's Bantamweight", "after": "2023-06-10", "before": "2024-01-20", "end": "2023-06-10", "reason": "Amanda Nunes retired"},
+    {"div": "Women's Featherweight", "after": "2021-03-06", "end": "2023-06-10", "reason": "Amanda Nunes retired; division discontinued"}
+  ]
+}
