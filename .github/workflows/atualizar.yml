@@ -26,12 +26,12 @@ jobs:
       - run: python scraper.py --max-minutes 320
       - name: Gerar análises (data/analytics.json)
         run: python analytics.py
-        continue-on-error: true   # se falhar, os dados do scraper ainda são salvos
       - name: Extras
         run: python extras.py
-        continue-on-error: true
+      - name: Validar integridade dos dados
+        run: python tests/check_data.py
       - name: Salvar dados no repositório
-        if: always()
+        if: success()
         run: |
           git config user.name "ufc-bot"
           git config user.email "ufc-bot@users.noreply.github.com"
