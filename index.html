@@ -90,6 +90,12 @@ footer{max-width:980px;margin:auto;padding:0 clamp(1rem,4vw,2rem) 1.5rem;font-si
 .seg{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1rem}.seg button.on{background:var(--gd);color:#000}
 .xs{display:grid;grid-template-columns:1fr;gap:.6rem}
 @media(min-width:620px){.xs{grid-template-columns:1fr 1fr}}
+.chgrid{display:grid;grid-template-columns:1fr;gap:.6rem}
+@media(min-width:560px){.chgrid{grid-template-columns:1fr 1fr}}
+@media(min-width:860px){.chgrid{grid-template-columns:1fr 1fr 1fr}}
+.chc{display:flex;align-items:center;gap:.8rem;padding:.75rem .95rem;margin-bottom:0}
+.chc .chd{font:800 .78rem var(--d);letter-spacing:.08em;text-transform:uppercase;color:var(--gd)}
+.chc .chn{font:800 1.2rem/1.1 var(--d);text-transform:uppercase}
 .stk{display:flex;height:10px;margin:.5rem 0}.stk i{display:block}
 .xg{display:flex;flex-wrap:wrap;gap:.2rem .9rem;font-size:.85rem;color:var(--mu)}.xg b{color:var(--tx)}
 @media(max-width:480px){nav a{font-size:.95rem;letter-spacing:.02em}}
@@ -202,7 +208,7 @@ const photoOf = id => { const k = mid(id); return S.me.ph[id] || S.me.ph[k] || S
 // As iniciais ficam SEMPRE por baixo; se a foto não carregar, ela some e as iniciais aparecem (nunca mais octógono vazio)
 const av = (id, n, c = '') => {
   const im = photoOf(id);
-  return `<span class="ring ${c}"><span>${esc(ini(n))}${im ? `<img src="${esc(im)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top">` : ''}</span></span>`;
+  return `<span class="ring ${c}"><span>${esc(ini(n))}${im ? `<img src="${esc(im)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top">` : ''}</span></span>`;
 };
 const empty = () => `<p class="empty">${
   S.ev.length
@@ -300,6 +306,11 @@ function whr(L, P) {
       if (o) o.end = cur === Lo ? f.date : o.last;
       const n = {id:W, div:f.div, start:f.date, last:f.date, end:null, def:0};
       op.set(f.div, n); rg.push(n);
+    }
+  }
+  for (const v of (S.ov.title_vacancies || [])) {
+    for (const r of rg) {
+      if (r.div === v.div && r.last <= v.after && (!r.end || r.end === r.last)) r.end = v.end;
     }
   }
   for (const f of L) {
@@ -1448,6 +1459,60 @@ function shareCard() {
 }
 
 /* ---------- Views ---------- */
+const ACTIVE_DIVS = ['Heavyweight', 'Light Heavyweight', 'Middleweight', 'Welterweight', 'Lightweight', 'Featherweight', 'Bantamweight', 'Flyweight', "Women's Bantamweight", "Women's Flyweight", "Women's Strawweight"];
+
+function vHome() {
+  const E = getE('ALL'), now = Date.now(), cut = new Date(now - S.P.act * YR).toISOString().slice(0, 10);
+  const champs = ACTIVE_DIVS.map(dv => {
+    const r = E.rg.filter(x => !x.end && x.div === dv && now - Date.parse(x.last) < 3 * YR).sort((a, b) => b.start < a.start ? -1 : 1)[0];
+    return {dv, r, f: r ? S.F.get(r.id) : null};
+  });
+  const topP4P = p4p(false).slice(0, 5);
+  // Maior sequência ativa de vitórias no UFC
+  const strk = new Map();
+  for (const f of [...S.fg].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (b.ord || 0) - (a.ord || 0))) {
+    if (f.res === 'nc' || f.res === 'draw') {
+      if (f.res === 'draw') { strk.set(mid(f.a.id), 0); strk.set(mid(f.b.id), 0); }
+      continue;
+    }
+    const w = mid(f[f.res].id), l = mid(f[f.res === 'a' ? 'b' : 'a'].id);
+    strk.set(w, (strk.get(w) || 0) + 1);
+    strk.set(l, 0);
+  }
+  const activeIds = new Set(E.rows.filter(r => r.last >= cut).map(r => r.id));
+  const bestStreak = [...strk.entries()].filter(([id, s]) => s >= 3 && activeIds.has(id)).sort((a, b) => b[1] - a[1]).slice(0, 4);
+
+  let upHtml = '';
+  const nx = S.up && S.up[0];
+  if (nx) {
+    const days = Math.ceil((Date.parse(nx.date + 'T00:00:00') - now) / 864e5);
+    const when = days > 1 ? T(`in ${days} days`, `em ${days} dias`) : days === 1 ? T('tomorrow', 'amanhã') : T('today', 'hoje');
+    const mf = nx.fights && nx.fights[0];
+    let mainHtml = '';
+    if (mf) {
+      const ia = mid(mf.a.id), ib = mid(mf.b.id), pr = probs(ia, ib);
+      mainHtml = `<div class="fx" style="margin-top:.7rem"><span class="fa">${esc(mf.a.name)}</span><span class="mu">vs</span><span class="fa">${esc(mf.b.name)}</span></div>
+      ${pr ? `<div class="fav" style="margin-top:.5rem"><i style="width:${(pr.pB * 100).toFixed(1)}%"></i></div><div class="fvl"><b>${pc(pr.pB)}</b><span class="mu sm">${T('Model blend', 'Modelo combinado')} · ${esc(mf.div)}</span><b>${pc(1 - pr.pB)}</b></div>` : `<p class="mu sm" style="margin:.4rem 0 0">${esc(mf.div)}</p>`}`;
+    }
+    upHtml = `<h2>${T('Next UFC event', 'Próximo evento do UFC')}</h2><div class="card" style="padding:1rem 1.1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap"><b>${esc(nx.name)}</b><span class="tag">${fmt(nx.date)} · ${when}</span></div>
+      <p class="mu sm" style="margin:.25rem 0 0">${esc(nx.location || '')} · ${nx.fights?.length || 0} ${T('fights', 'lutas')}</p>
+      ${mainHtml}
+      <div class="acts" style="margin-top:.8rem;margin-bottom:0"><a class="btn" href="#/events">${T('Full card & picks', 'Card completo & palpites')}</a>${mf ? `<a class="btn" href="#/sim/${mid(mf.a.id)}/${mid(mf.b.id)}">${T('Simulate main event', 'Simular luta principal')}</a>` : ''}</div>
+    </div>`;
+  }
+
+  M(`<h1>${T('UFC Central', 'Central UFC')}</h1>
+  <p class="mu sm">${S.ev.length} ${T('events', 'eventos')} · ${S.fg.length.toLocaleString(S.pt ? 'pt-BR' : 'en-US')} ${T('fights', 'lutas')} · ${S.F.size.toLocaleString(S.pt ? 'pt-BR' : 'en-US')} ${T('fighters', 'lutadores')}</p>
+  ${upHtml}
+  <h2>${T('Current UFC Champions', 'Campeões Atuais do UFC')}</h2>
+  <div class="chgrid">${champs.map(({dv, r, f}) => r && f ? `<a class="card chc" href="#/fighter/${r.id}">${av(r.id, f.name, 'sm')}<div><div class="chd">${esc(dv)}</div><div class="chn">${esc(f.name)}</div><div class="mu sm">${r.def} ${T('def.', 'def.')} · ${T('since', 'desde')} ${r.start.slice(0, 4)}</div></div></a>` : `<div class="card chc"><span class="ring sm"><span>—</span></span><div><div class="chd">${esc(dv)}</div><div class="mu sm">${T('Vacant', 'Vago')}</div></div></div>`).join('')}</div>
+  <div class="xs" style="margin-top:.8rem">
+    <div><h2>${T('Top 5 Pound-for-Pound (WHR)', 'Top 5 Pound-for-Pound (WHR)')}</h2><div class="card" style="padding:.5rem .9rem">${topP4P.map((x, i) => `<a class="sr" style="grid-template-columns:1.5rem 1fr auto;align-items:center" href="#/fighter/${x.id}"><b style="color:var(--gd)">${i + 1}</b><span><b>${esc(S.F.get(x.id)?.name || x.id)}</b> <span class="mu sm">${esc(x.div)}</span></span><b>${x.v.toFixed(2)}σ</b></a>`).join('')}</div></div>
+    <div><h2>${T('Longest active UFC win streaks', 'Maiores sequências ativas no UFC')}</h2><div class="card" style="padding:.5rem .9rem">${bestStreak.map(([id, s]) => `<a class="sr" style="grid-template-columns:1fr auto;align-items:center" href="#/fighter/${id}"><b>${esc(S.F.get(id)?.name || id)}</b><b class="up">${s} ${T('wins', 'vitórias')}</b></a>`).join('')}</div></div>
+  </div>`);
+}
+
 function vEvents() {
   M(`<h1>${T('Events', 'Eventos')}</h1>${S.up.length ? `<div id="up"><p class="mu">${T('Computing predictions…', 'Calculando previsões…')}</p></div><h2>${T('Past events', 'Eventos passados')}</h2>` : ''}<input id="q" type="search" placeholder="${T('Search event, city or year', 'Buscar evento, cidade ou ano')}" aria-label="search"><div id="l" style="margin-top:1rem"></div>`);
   const draw = () => {
@@ -1768,7 +1833,23 @@ function simOut(q) {
   const s2 = ra.v + rb.v, dm = ra.mu - rb.mu, p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
   const G = league(), oa = agg(q.a, q.m), ob = agg(q.b, q.m), xa = rates(oa, G), xb = rates(ob, G), el = r => Math.round(1500 + U * r.mu), sd = r => Math.round(U * Math.sqrt(r.v));
   const da = mainDiv(q.a), db = mainDiv(q.b), age = d => { const t = Date.parse(d); return t ? ((Date.now() - t) / YR).toFixed(1) : '-'; };
-  let h = `<h2>${T('Win probability', 'Probabilidade de vitória')}</h2><div class="card" style="padding:1rem 1.1rem"><div class="pb"><i style="flex:${p};background:var(--gd)">${pc(p)}</i><i style="flex:${1 - p};background:var(--cb)">${pc(1 - p)}</i></div>
+  let quick = '';
+  if (xa && xb) {
+    const fav = p >= .5 ? A.name : B.name, fp = Math.max(p, 1 - p), fx = p >= .5 ? xa : xb, ux = p >= .5 ? xb : xa;
+    const edges = [];
+    if (Math.abs(fx.sl - ux.sl) >= .8) edges.push(fx.sl > ux.sl ? T('higher striking volume', 'maior volume de golpes') : T('absorbing fewer exchanges', 'ritmo mais cadenciado'));
+    if (fx.td - ux.td >= .8) edges.push(T('stronger wrestling/takedown pressure', 'maior pressão de quedas'));
+    if (fx.tddef - ux.tddef >= .12) edges.push(T('superior takedown defense', 'defesa de quedas superior'));
+    if (fx.fin - ux.fin >= .15) edges.push(T('higher finishing threat', 'maior poder de definição'));
+    const ra_i = inch(A.Reach), rb_i = inch(B.Reach);
+    if (ra_i && rb_i && Math.abs(ra_i - rb_i) >= 3) {
+      const rl = ra_i > rb_i ? A.name : B.name;
+      edges.push(T(`${rl} holds a ${Math.abs(ra_i - rb_i)}" reach advantage`, `${rl} tem ${Math.abs(ra_i - rb_i)} pol. a mais de envergadura`));
+    }
+    const tone = fp >= .7 ? T('Clear favorite', 'Favorito claro') : fp >= .58 ? T('Moderate favorite', 'Favorito moderado') : T('Coin-flip / very close matchup', 'Confronto muito equilibrado');
+    quick = `<div class="card" style="padding:.75rem 1rem;border-left:3px solid var(--gd)"><b>${T('Quick read', 'Leitura rápida')}:</b> ${tone} — <b>${esc(fav)}</b> (${pc(fp)}).${edges.length ? ' ' + T('Key factors:', 'Fatores-chave:') + ' ' + edges.slice(0, 3).join('; ') + '.' : ''}</div>`;
+  }
+  let h = `<h2>${T('Win probability', 'Probabilidade de vitória')}</h2>${quick}<div class="card" style="padding:1rem 1.1rem"><div class="pb"><i style="flex:${p};background:var(--gd)">${pc(p)}</i><i style="flex:${1 - p};background:var(--cb)">${pc(1 - p)}</i></div>
   <div class="sr"><span style="color:var(--gd)">${esc(A.name)}</span><span></span><span style="color:var(--cb)">${esc(B.name)}</span></div>
   <p class="mu sm">${T('90% interval for A', 'Intervalo de 90% para A')}: ${pc(lo)} – ${pc(hi)}. ${T('Ratings', 'Notas')}: ${el(ra)} ± ${sd(ra)} ${T('vs', 'vs')} ${el(rb)} ± ${sd(rb)} (${q.m === 'peak' ? T('career peak', 'pico da carreira') : T('current form, with uncertainty growing while inactive', 'momento atual, com incerteza crescendo na inatividade')}).${da !== db ? ` ${T('Different main divisions: the rating comparison is indirect.', 'Divisões principais diferentes: a comparação de notas é indireta.')}` : ''}</p></div>
   <h2>${T('Tale of the tape', 'Comparativo')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Record', 'Cartel'), esc(A.record), esc(B.record))}${sr(T('Height', 'Altura'), esc(A.Height || '-'), esc(B.Height || '-'))}${sr(T('Reach', 'Envergadura'), esc(A.Reach || '-'), esc(B.Reach || '-'))}${sr(T('Stance', 'Base'), esc(A.STANCE || '-'), esc(B.STANCE || '-'))}${sr(T('Age', 'Idade'), age(A.DOB), age(B.DOB))}${tapeExtra(A, B)}${sr(T('Main division', 'Divisão principal'), esc(da), esc(db))}${sr(T('Fights used', 'Lutas usadas'), oa.n, ob.n)}</div>`;
@@ -2141,10 +2222,11 @@ function uiInit() {
 }
 
 function route() {
-  const [, p, id, fid] = location.hash.split('/'), k = p || 'events';
+  const [, p, id, fid] = location.hash.split('/'), k = p || 'home';
   document.documentElement.lang = S.pt ? 'pt-BR' : 'en';
   $('#lg').textContent = S.pt ? 'EN' : 'PT';
   const NAVS = [
+    ['home', T('Home', 'Início')],
     ['events', T('Events', 'Eventos')],
     ['ranking', 'Rankings'],
     ['fighters', T('Fighters', 'Lutadores')],
@@ -2152,14 +2234,14 @@ function route() {
     ['lab', 'Lab'],
     ...(window.XT ? window.XT() : [])
   ], cur = k === 'event' ? 'events' : k === 'fighter' ? 'fighters' : k;
-  S.nav = {more: NAVS.slice(4)};
-  $('#nv').innerHTML = NAVS.map(([x, l], i) => `<a href="#/${x}" data-p="${x}"${i >= 4 ? ' class="mo"' : ''}>${l}</a>`).join('') + `<button type="button" class="more${S.nav.more.some(([x]) => x === cur) ? ' on' : ''}" id="mo" aria-haspopup="dialog">${T('More', 'Mais')} ☰</button>`;
+  S.nav = {more: NAVS.slice(5)};
+  $('#nv').innerHTML = NAVS.map(([x, l], i) => `<a href="#/${x}" data-p="${x}"${i >= 5 ? ' class="mo"' : ''}>${l}</a>`).join('') + `<button type="button" class="more${S.nav.more.some(([x]) => x === cur) ? ' on' : ''}" id="mo" aria-haspopup="dialog">${T('More', 'Mais')} ☰</button>`;
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.p === cur));
   closeAll();
   $('#ft').textContent = (S.meta.updated ? T('Data updated ', 'Base atualizada em ') + new Date(S.meta.updated).toLocaleString(S.pt ? 'pt-BR' : 'en-US') + '. ' : '') + T('Source: ufcstats.com', 'Fonte: ufcstats.com');
   const run = () => {
     $('#m').onclick = null; $('#m').oninput = null; scrollTo(0, 0);
-    ({events:vEvents, event:vEvent, ranking:vRank, fighters:vFighters, fighter:vFighter, sim:vSim, lab:vLab, ...(window.XV || {})}[k] || vEvents)(decodeURIComponent(id || ''), fid && decodeURIComponent(fid));
+    ({home:vHome, events:vEvents, event:vEvent, ranking:vRank, fighters:vFighters, fighter:vFighter, sim:vSim, lab:vLab, ...(window.XV || {})}[k] || vHome)(decodeURIComponent(id || ''), fid && decodeURIComponent(fid));
   };
   document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches ? document.startViewTransition(run) : run();
 }

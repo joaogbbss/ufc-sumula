@@ -645,7 +645,7 @@ def validate(events, fights, fighters, extra=()):
     for fid, p in fighters.items():
         if fid not in used:
             issues.append(["lutador_sem_luta", fid])
-    by_name, by_dob = {}, {}
+    by_name, by_dob, by_espn = {}, {}, {}
     for p in fighters.values():
         n, dob = p["name"].lower(), p.get("DOB", "")
         if n in by_name:
@@ -655,6 +655,13 @@ def validate(events, fights, fighters, extra=()):
             if (n, dob) in by_dob:
                 issues.append(["possivel_duplicado", by_dob[(n, dob)], p["id"]])
             by_dob[(n, dob)] = p["id"]
+        eid = p.get("espn_id")
+        if eid:
+            eid = str(eid)
+            if eid in by_espn:
+                issues.append(["espn_duplicado", by_espn[eid], p["id"], eid])
+            else:
+                by_espn[eid] = p["id"]
     return issues
 
 
