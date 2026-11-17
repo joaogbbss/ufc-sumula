@@ -253,6 +253,8 @@ async function init() {
   const [ev, fg, fi, ov, meta, up, ph] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos'].map(fetchJson));
     S.pu = (ph && ph.photos) || null; S.rej = ph && ph.rej ? new Set(ph.rej) : null;   // fotos verificadas pelo photos.py
     fetchJson('decisions').then(j => { S.dd = j; }).catch(() => { S.dd = null; });
+    fetchJson('market').then(j => { S.mkt = j; }).catch(() => { S.mkt = null; });
+    fetchJson('ufc_rankings').then(j => { S.urk = j; }).catch(() => { S.urk = null; });
   if (ov) S.ov = {merges:{}, div:{}, exclude:[], ...ov};
   S.ev = ev || [];
   S.meta = meta || {};
@@ -1071,13 +1073,21 @@ const originLabel = p => p && p.origin ? (ORIG[p.origin] || p.origin) : '-';   /
 const artsOf = p => (p && Array.isArray(p.base_arts) ? p.base_arts : []).join(', ');
 function tapeExtra(A, B) {
   const r = [];
+  if (A.leg_reach || B.leg_reach) r.push(sr(T('Leg reach', 'Alcance de perna'), esc(A.leg_reach || '-'), esc(B.leg_reach || '-')));
+  if (A.style || B.style) r.push(sr(T('Fighting style', 'Estilo base'), esc(A.style || '-'), esc(B.style || '-')));
   if (A.hometown || B.hometown) r.push(sr(T('Hometown', 'Cidade natal'), esc(A.hometown || '-'), esc(B.hometown || '-')));
   if (artsOf(A) || artsOf(B)) r.push(sr(T('Base arts', 'Artes de base'), esc(artsOf(A) || '-'), esc(artsOf(B) || '-')));
   if (A.origin || B.origin) r.push(sr(T('UFC origin', 'Origem no UFC'), esc(originLabel(A)), esc(originLabel(B))));
   return r.join('');
 }
 function bioExtra(p) {
-  return [[T('Hometown', 'Cidade natal'), p.hometown], [T('Base arts', 'Artes de base'), artsOf(p)], [T('UFC origin', 'Origem no UFC'), p.origin ? originLabel(p) : '']].filter(r => r[1]).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+  return [[T('Fighting style', 'Estilo base'), p.style], [T('Leg reach', 'Alcance de perna'), p.leg_reach], [T('Hometown', 'Cidade natal'), p.hometown], [T('Base arts', 'Artes de base'), artsOf(p)], [T('UFC origin', 'Origem no UFC'), p.origin ? originLabel(p) : '']].filter(r => r[1]).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+}
+const fmtOdd = o => o == null ? '' : (o > 0 ? '+' + o : String(o));
+function fightMktTag(f) {
+  const m = S.mkt?.fights?.[f.id]; if (!m) return '';
+  const [oa, ob, pa, rka, rkb] = m, rk = (rka != null || rkb != null) ? `<span>Rk: ${rka != null ? (rka === 0 ? 'C' : '#' + rka) : 'NR'} vs ${rkb != null ? (rkb === 0 ? 'C' : '#' + rkb) : 'NR'}</span>` : '';
+  return `<span>Odds: <b>${fmtOdd(oa)}</b> / <b>${fmtOdd(ob)}</b> (${Math.round(pa * 100)}%)</span>${rk}`;
 }
 function extLinks(p) {
   return [['sherdog_url', 'Sherdog'], ['tapology_url', 'Tapology']].filter(([k]) => typeof p[k] === 'string' && /^https:\/\//.test(p[k])).map(([k, n]) => `<a class="btn" href="${esc(p[k])}" target="_blank" rel="noopener noreferrer">${n} ↗</a>`).join('');
@@ -1596,7 +1606,7 @@ function fightRow(f) {
   const side = s => `<a class="fa ${w(s)}" href="#/fighter/${mid(f[s].id)}">${s === 'a' ? av(mid(f[s].id), name(f[s]), 'sm') + ' ' : ''}${esc(name(f[s]))}${s === 'b' ? ' ' + av(mid(f[s].id), name(f[s]), 'sm') : ''}</a>`;
   const out = f.res === 'draw' ? T('Draw', 'Empate') : f.res === 'nc' ? T('No contest', 'Sem resultado') : esc(f.method);
   return `<article class="card fight" id="f${f.id}"><div class="fx">${side('a')}<span class="ring"><span>VS</span></span>${side('b')}</div>
-  <div class="fi"><span>${out}</span>${f.round ? `<span>R${esc(f.round)} ${esc(f.time)}</span>` : ''}<span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${f.ref ? `<span>Ref: <a href="#/lab" data-ref="${esc(f.ref)}" onclick="refGo(this)" style="text-decoration:underline">${esc(f.ref)}</a></span>` : ''}${window.XB ? window.XB(f) : ''}<button data-f="${f.id}">${T('Stats', 'Estatísticas')}</button></div><div class="st"></div></article>`;
+  <div class="fi"><span>${out}</span>${f.round ? `<span>R${esc(f.round)} ${esc(f.time)}</span>` : ''}<span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${fightMktTag(f)}${f.ref ? `<span>Ref: <a href="#/lab" data-ref="${esc(f.ref)}" onclick="refGo(this)" style="text-decoration:underline">${esc(f.ref)}</a></span>` : ''}${window.XB ? window.XB(f) : ''}<button data-f="${f.id}">${T('Stats', 'Estatísticas')}</button></div><div class="st"></div></article>`;
 }
 
 function vEvent(id, fid) {
@@ -1627,21 +1637,40 @@ function vRank() {
     ['min', T('Minimum fights', 'Mínimo de lutas'), 1],
     ['act', T('Active in the last N years (Current view)', 'Ativo nos últimos anos (visão Atual)'), 1]
   ];
-  M(`<h1>${T('Rankings', 'Rankings')}<span class="xbar" data-xk="rank"></span></h1><div class="ctl"><label>${T('View', 'Visão')}<select id="md"><option value="cur">${T('Current (active fighters)', 'Atual (lutadores ativos)')}</option><option value="hist">${T('All-time (career résumé)', 'Histórico (campanha da carreira)')}</option></select></label>
+  M(`<h1>${T('Rankings', 'Rankings')}<span class="xbar" data-xk="rank"></span></h1><div class="ctl"><label>${T('View', 'Visão')}<select id="md"><option value="cur">${T('Current WHR (active fighters)', 'WHR Atual (lutadores ativos)')}</option><option value="hist">${T('All-time WHR (career résumé)', 'WHR Histórico (campanha da carreira)')}</option><option value="off">${T('Official UFC Rankings (Top 15 + Hype vs WHR)', 'Ranking Oficial do UFC (Top 15 + Hype vs WHR)')}</option></select></label>
   <label>${T('Division', 'Divisão')}<select id="dv"><option value="ALL">${T('General (all fights)', 'Geral (todas as lutas)')}</option><option value="P4P">${T('Pound-for-pound (z-score by division)', 'Pound-for-pound (z-score por divisão)')}</option>${divs.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
-</div>
-  <details class="card" style="margin-bottom:1rem;padding:.2rem 1rem .9rem"><summary style="padding:.7rem 0">⚙️ ${T('Model parameters (volatility, weights, activity filter)', 'Parâmetros do Modelo (Volatilidade, Pesos, Filtro de Atividade)')}</summary><div class="ctl" style="margin-top:.4rem">${C.map(([k, l, s]) => `<label>${l}<input data-p="${k}" type="number" step="${s}" min="0" value="${P[k]}"></label>`).join('')}</div><button id="rstP" style="margin-top:.6rem">${T('Restore default', 'Restaurar padrão')}</button></details>
+</div>`);
+  const mEl = $('#m');
+  mEl.insertAdjacentHTML('beforeend', `<details class="card" style="margin-bottom:1rem;padding:.2rem 1rem .9rem"><summary style="padding:.7rem 0">⚙️ ${T('Model parameters (volatility, weights, activity filter)', 'Parâmetros do Modelo (Volatilidade, Pesos, Filtro de Atividade)')}</summary><div class="ctl" style="margin-top:.4rem">${C.map(([k, l, s]) => `<label>${l}<input data-p="${k}" type="number" step="${s}" min="0" value="${P[k]}"></label>`).join('')}</div><button id="rstP" style="margin-top:.6rem">${T('Restore default', 'Restaurar padrão')}</button></details>
   <p class="mu sm" id="cal"></p><div id="rk"></div><div id="tn8"></div>
   <details class="card"><summary>${T('How the numbers are calculated', 'Como os números são calculados')}</summary>
   <p><b>${T('Strength', 'Força')}:</b> ${T('Whole-History Rating (Coulom, 2008) estimates each fighter’s rating at every fight using the entire history, before and after it, so a win over someone who later became elite is worth more. Win chance follows the Bradley–Terry/Elo logistic curve (1952, 1978); ratings drift slowly over time like a random walk (Glickman, 1999).', 'O Whole-History Rating (Coulom, 2008) estima a nota de cada lutador em cada luta usando todo o histórico, antes e depois dela, então uma vitória sobre quem depois virou elite vale mais. A chance de vitória segue a curva logística de Bradley–Terry/Elo (1952, 1978), e a nota varia devagar no tempo como um passeio aleatório (Glickman, 1999).')}</p>
   <p><b>${T('Current', 'Atual')}:</b> ${T('rating at the last fight, only fighters active in the last N years.', 'nota na última luta, só de quem lutou nos últimos N anos.')}</p>
-  <p><b>${T('All-time', 'Histórico')}:</b> ${T('ranks résumés, not strength. A win is worth 1 − p and a loss −p, where p is the chance that a reference elite fighter (top 15% of the division) would beat that same opponent at that time.', 'ordena campanhas, não força. Vitória vale 1 − p e derrota −p, onde p é a chance de um lutador de elite de referência (top 15% da divisão) vencer aquele rival na época.')}</p>
-  <p><b>${T('Divisions', 'Divisões')}:</b> ${T('strength always comes from the whole UFC career; the division only decides who is listed. A fighter who competed in several weight classes appears in every one of them (in the Current view, only where he fought inside the activity window), with his record and belts in that class. Fewer than 3 UFC fights is marked provisional: the rating is pulled toward the average until more evidence arrives.', 'a força vem sempre da carreira inteira no UFC; a divisão só decide quem aparece na lista. Quem lutou em mais de uma categoria aparece em todas (na visão Atual, só onde lutou dentro da janela de atividade), com o cartel e os cinturões daquela categoria. Menos de 3 lutas no UFC aparece como provisório: a nota é puxada para a média até haver mais evidência.')}</p>
-  <p><b>Pound-for-pound:</b> ${T('every fighter is compared with the fighters of his current division (career division in All-time) and gets a z-score: how many standard deviations above that average.', 'cada lutador é comparado com os da sua divisão atual (divisão da carreira, no Histórico) e recebe um z-score: quantos desvios-padrão acima da média dela.')}</p></details>`);
+  <p><b>${T('All-time', 'Histórico')}:</b> ${T('ranks résumés, not strength. A win is worth 1 − p and a loss −p, where p is a reference elite fighter’s win chance.', 'ordena campanhas, não força. Vitória vale 1 − p e derrota −p, onde p é a chance de um lutador de elite de referência vencer aquele rival na época.')}</p>
+  <p><b>${T('Official UFC Rankings', 'Ranking Oficial do UFC')}:</b> ${T('compares the official media-voted UFC Top 15 with each fighter’s WHR rank in the same division to highlight underrated dark horses and overhyped names.', 'compara o Top 15 oficial do UFC (votado pela imprensa) com a posição matemática no WHR da mesma categoria, revelando quem está subestimado (Dark Horse) ou inflado pelo hype.')}</p></details>`);
   $('#dv').value = S.div; $('#md').value = S.mode;
   const draw = () => {
-    const p4 = S.div === 'P4P', dv = p4 ? 'ALL' : S.div, E = getE('ALL'), v = holdoutAll(P), hist = S.mode === 'hist';
+    const p4 = S.div === 'P4P', dv = p4 ? 'ALL' : S.div, E = getE('ALL'), v = holdoutAll(P), hist = S.mode === 'hist', off = S.mode === 'off';
     const cut = P.act ? new Date(Date.now() - P.act * YR).toISOString().slice(0, 10) : '', DM = dm();
+    if (off) {
+      if (!S.urk || !S.urk.divisions) { $('#cal').textContent = ''; $('#rk').innerHTML = `<p class="empty">${T('Loading official UFC rankings…', 'Carregando ranking oficial do UFC…')}</p>`; $('#tn8').innerHTML = ''; return; }
+      const dKey = p4 || dv === 'ALL' ? "Men's Pound-for-Pound" : (S.urk.divisions[dv] ? dv : "Men's Pound-for-Pound");
+      const D = S.urk.divisions[dKey] || {champ: null, ranks: []};
+      const whrDiv = E.rows.filter(x => x.n >= 2 && (!cut || x.last >= cut) && (dKey.includes('Pound') || DM.get(x.id)?.get(dKey))).sort((a, b) => b.cur - a.cur);
+      const whrPos = new Map(whrDiv.map((x, i) => [x.id, i + 1]));
+      const items = [...(D.champ ? [{...D.champ, isC: true}] : []), ...(D.ranks || [])];
+      $('#cal').textContent = T(`Official UFC Rankings (${dKey}) · Released ${S.urk.released || ''} · Historical database: ${S.urk.n_weeks_history || 534} weeks (2013–2026).`, `Ranking Oficial do UFC (${dKey}) · Atualizado em ${S.urk.released || ''} · Base histórica: ${S.urk.n_weeks_history || 534} semanas (2013–2026).`);
+      $('#rk').innerHTML = items.map(it => {
+        const fid = it.id, rm = fid ? E.RM.get(fid) : null, wp = fid ? whrPos.get(fid) : null, cr = fid && S.urk.fighters ? S.urk.fighters[fid] : null;
+        const rkNum = it.isC ? 0 : it.rank, diff = (wp != null && !dKey.includes('Pound')) ? (rkNum + 1) - wp : 0;
+        const hypeTag = diff >= 4 ? `<span class="tag" style="background:var(--win);color:#000">🔥 ${T('Underrated', 'Subestimado')} (WHR #${wp})</span>` : diff <= -5 ? `<span class="tag" style="background:var(--loss);color:#fff">⚠️ Hype (WHR #${wp})</span>` : (wp ? `<span class="mu sm">WHR #${wp}</span>` : '');
+        const mv = it.delta === 99 ? `<b class="up">NEW</b>` : it.delta > 0 ? `<b class="up">▲${it.delta}</b>` : it.delta < 0 ? `<b class="dn">▼${Math.abs(it.delta)}</b>` : `<span class="mu">=</span>`;
+        const wks = cr ? `${cr.w15 || 0} ${T('wks in Top 15', 'sem. no Top 15')}${cr.w5 ? ` · ${cr.w5} Top 5` : ''}${cr.peak != null ? ` · ${T('Peak', 'Pico')}: ${cr.peak === 0 ? 'C' : '#' + cr.peak}` : ''}` : '';
+        return `<a class="card rk" href="${fid ? '#/fighter/' + fid : '#/fighters'}"><span class="ring" style="${it.isC ? '--rc:var(--gd)' : ''}"><span>${it.isC ? 'C' : it.rank}</span></span><span class="nm">${esc(it.name)} ${mv} ${hypeTag}<small>${wks}${it.next ? `<br>📅 ${esc(it.next)}` : ''}</small></span><span class="rt">${rm ? Math.round(rm.cur) : '—'}<small>WHR${rm ? ` · ${rm.w}-${rm.l}-${rm.d}` : ''}</small></span></a>`;
+      }).join('');
+      $('#tn8').innerHTML = '';
+      return;
+    }
     /* na divisão: quem lutou nela (visão Atual: dentro da janela de atividade, NAQUELA divisão) */
     const inDiv = x => { if (dv === 'ALL') return true; const g = DM.get(x.id)?.get(dv); return !!g && (hist || !cut || g.last >= cut); };
     const r = (p4 ? p4p(hist) : E.rows.filter(x => x.n >= P.min && (hist || !cut || x.last >= cut) && inDiv(x)).map(x => ({...x, v: hist ? x.hs : x.cur}))).sort((a, b) => b.v - a.v).slice(0, 150);
@@ -1767,8 +1796,10 @@ function vFighter(id) {
     if (n) {
       const q = n.gs[0].o, pc = 1 / (1 + Math.exp(q.r - n.r)), m = f.title ? 1 + S.P.title : 1;
       const dl = r === 'W' ? 40 * m * dom(f) * (1 - pc) : r === 'L' ? -40 * m * pc : 40 * m * (.5 - pc);
+      const mf = S.mkt?.fights?.[f.id], myOdd = mf ? (a ? mf[0] : mf[1]) : null, myRk = mf ? (a ? mf[3] : mf[4]) : null, opRk = mf ? (a ? mf[4] : mf[3]) : null;
+      const oddStr = myOdd != null ? `, Odd <b>${fmtOdd(myOdd)}</b>` : '', rkStr = (myRk != null || opRk != null) ? `, Rk ${myRk != null ? (myRk === 0 ? 'C' : '#' + myRk) : 'NR'} vs ${opRk != null ? (opRk === 0 ? 'C' : '#' + opRk) : 'NR'}` : '';
       ex = `<span style="text-align:right"><b class="${dl >= 0 ? 'up' : 'dn'}">${dl >= 0 ? '+' : ''}${dl.toFixed(1)}</b><br><span class="mu sm">${T('rating', 'nota')} ${el(n.r)}</span></span>`;
-      sub = `, ${T('win chance', 'chance')} ${Math.round(pc * 100)}%, ${T('opponent then', 'rival na época')} ${el(q.r)}, ${T('opponent peak', 'pico do rival')} ${Math.round(E.RM.get(q.id).pk)}`;
+      sub = `, ${T('win chance', 'chance')} ${Math.round(pc * 100)}%${oddStr}${rkStr}, ${T('opponent then', 'rival na época')} ${el(q.r)}, ${T('opponent peak', 'pico do rival')} ${Math.round(E.RM.get(q.id).pk)}`;
     }
     return `<div class="h"><a class="mu" href="${lk}" style="text-decoration:underline">${fmt(f.date)}</a><span><b class="${r === 'W' ? 'up' : r === 'L' ? 'dn' : ''}">${S.pt ? {W:'V', L:'D', D:'E', NC:'SR'}[r] : r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a>${bonusIcon(id, f.id)}<br><span class="mu sm">${esc(f.method)} ${f.round ? 'R' + esc(f.round) : ''}, ${esc(f.div)}${isTitle(f) ? ', ' + (TG(E.tag.get(f.id), r === 'W') || T('title fight', 'cinturão')) : ''}${sub}</span><br><a class="sm" style="color:var(--gd)" href="${lk}">${T('View fight and stats', 'Ver luta e estatísticas')}</a></span>${ex}</div>`;
   }).join('');
@@ -1783,7 +1814,12 @@ function vFighter(id) {
   const sos = wl.length ? wl.reduce((a, x) => a + x.q, 0) / wl.length : null;
   const li = (x, c) => `<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/event/${x.f.ev}/${x.f.id}" style="color:${c}"><b>${esc(name(x.o))}</b></a><span class="mu">${fmt(x.f.date)}</span><span>${el(x.q)}</span></div>`;
   const resume = wl.length ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Résumé highlights', 'Destaques da campanha')}</b>${bw.length ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Best wins (opponent rating then)', 'Melhores vitórias (nota do rival na época)')}</p>${bw.map(x => li(x, 'var(--win)')).join('')}` : ''}${wr ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Worst loss', 'Pior derrota')}</p>${li(wr, 'var(--loss)')}` : ''}${sos != null ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Strength of schedule: average opponent rating', 'Força do calendário: nota média dos rivais')} <b style="color:var(--tx)">${el(sos)}</b></p>` : ''}</div>` : '';
-  const bonusCard = bonusLine(id) + techCard(id);
+  const crk = S.urk?.fighters?.[id], mktF = S.mkt?.fighters?.[id];
+  const rkCard = (crk || mktF) ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Official UFC Ranking & Betting Market Résumé', 'Currículo no Ranking Oficial do UFC & Casas de Aposta')}</b>
+    ${crk ? `<div class="xg" style="margin-top:.4rem">${crk.cur_rank != null ? `<span>${T('Current Official Rank', 'Ranking Oficial Atual')}: <b>${crk.cur_rank === 0 ? '👑 ' + T('Champion', 'Campeão') : '#' + crk.cur_rank} (${esc(crk.cur_div)})</b></span>` : ''}${crk.p4p ? `<span>P4P: <b>#${crk.p4p}</b></span>` : ''}${crk.peak != null ? `<span>${T('Career Peak Rank', 'Melhor Posição Oficial')}: <b>${crk.peak === 0 ? T('Champion', 'Campeão') : '#' + crk.peak} (${esc(crk.peak_div)})</b></span>` : ''}<span>${T('Weeks in Top 15', 'Semanas no Top 15')}: <b>${crk.w15 || 0}</b></span>${crk.w5 ? `<span>${T('Weeks in Top 5', 'Semanas no Top 5')}: <b>${crk.w5}</b></span>` : ''}${crk.wp4p ? `<span>${T('Weeks in P4P', 'Semanas no P4P')}: <b>${crk.wp4p}</b></span>` : ''}${crk.next ? `<span>📅 ${T('Next / Status', 'Próxima / Status')}: <b>${esc(crk.next)}</b></span>` : ''}</div>` : ''}
+    ${mktF ? `<div class="xg" style="margin-top:.4rem;border-top:1px solid var(--ln);padding-top:.4rem"><span>${T('Fights with Vegas Odds', 'Lutas com Odds em Vegas')}: <b>${mktF[1]}-${mktF[0] - mktF[1]}</b></span><span>${T('As Favorite', 'Como Favorito')}: <b>${mktF[3]}-${mktF[2] - mktF[3]}</b></span><span>${T('As Underdog', 'Como Azarão')}: <b>${mktF[5]}-${mktF[4] - mktF[5]}</b></span><span>${T('Career Betting ROI (1u flat)', 'ROI nas Casas de Aposta (1u)')}: <b class="${mktF[6] >= 0 ? 'up' : 'dn'}">${mktF[6] >= 0 ? '+' : ''}${mktF[6]}u</b></span></div>` : ''}
+  </div>` : '';
+  const bonusCard = rkCard + bonusLine(id) + techCard(id);
   M(`<a class="mu" href="#/fighters">${T('Search fighters', 'Buscar lutadores')}</a>
   <div class="hero">${av(id, p.name, 'big')}<div><h1>${S.me.fav[id] ? '★ ' : ''}${esc(p.name)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}${p.country ? ` • ${esc(p.country)}` : ''}${p.team ? ` (${esc(p.team)})` : ''}</span></div></div>
   <div class="acts"><button id="fv">${S.me.fav[id] ? T('★ Favorite', '★ Favorito') : T('☆ Add to favorites', '☆ Favoritar')}</button><label class="btn">${T('Photo', 'Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id] ? `<button id="rp">${T('Remove photo', 'Remover foto')}</button>` : ''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight', 'Simular luta')}</a><a class="btn" href="#/xray/${id}">${T('X-Ray', 'Raio-X')}</a>${extLinks(p)}<span class="xbar" data-xk="fighter"></span></div>

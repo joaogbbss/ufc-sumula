@@ -4,8 +4,9 @@
    Todo resultado traz validação e tamanho de amostra; onde um modelo não prevê além do acaso, a tela diz isso. */
 (function () {
   'use strict';
-  const X = { tab: 'dna', os: 'z', or: 'finz', cs: 'elo', d: {}, jg: { f: null, sc: [], rev: false }, sc: '', cd: [], ca: '', cb: '', sy: '', pp: 2,
+  const X = { tab: 'dna', os: 'z', or: 'finz', cs: 'elo', ms: 'dog', d: {}, jg: { f: null, sc: [], rev: false }, sc: '', cd: [], ca: '', cb: '', sy: '', pp: 2,
               dna: { mode: 'daily', target: '', gs: [], done: false, won: false },
+              vg: { fights: [], bets: [], rev: false },
               mm: { pool: [], cap: 2400, bouts: [], pickA: '', res: null } };
   const sum = a => a.reduce((x, y) => x + y, 0), p0 = v => (v * 100).toFixed(0) + '%', p1 = v => (v * 100).toFixed(1) + '%';
   const nm = id => (S.F.get(id) || {}).name || id, fm = () => X._fm || (X._fm = new Map(S.fg.map(f => [f.id, f])));
@@ -13,17 +14,18 @@
   const erf = x => { const s = Math.sign(x); x = Math.abs(x); const t = 1 / (1 + .3275911 * x); return s * (1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - .284496736) * t + .254829592) * t * Math.exp(-x * x)); };
   const pval = z => 2 * (1 - .5 * (1 + erf(Math.abs(z) / Math.SQRT2)));
   const llf = (p, y) => -Math.log(Math.max(y ? p : 1 - p, 1e-6));
+  const fOdd = o => o == null ? '—' : (o > 0 ? '+' + o : String(o));
 
   /* ---------- carga sob demanda ---------- */
   async function need(names) {
     const g = async n => { if (n in X.d) return; try { const r = await fetch('data/' + n + '.json', { cache: 'no-cache' }); X.d[n] = r.ok ? await r.json() : null; } catch { X.d[n] = null; } };
     await Promise.all(names.map(g));
   }
-  const TABS = () => [['dna', '🧬 ' + T('Secret DNA', 'DNA Secreto')], ['mm', '🕶️ Matchmaker'], ['jg', T('Be the judge', 'Seja o juiz')], ['sc', 'Scouting'], ['cd', T('Dream card', 'Card dos sonhos')], ['sy', T('Styles', 'Estilos')], ['pp', T('Prospects', 'Prospectos')], ['of', T('Judges & refs', 'Juízes e árbitros')], ['cp', T('Camps', 'Academias')]];
+  const TABS = () => [['dna', '🧬 ' + T('Secret DNA', 'DNA Secreto')], ['vg', '🎰 ' + T('Beat Vegas', 'Desafio Vegas')], ['mkt', '💰 ' + T('Market & Odds', 'Mercado & Odds')], ['mm', '🕶️ Matchmaker'], ['jg', T('Be the judge', 'Seja o juiz')], ['sc', 'Scouting'], ['cd', T('Dream card', 'Card dos sonhos')], ['sy', T('Styles', 'Estilos')], ['pp', T('Prospects', 'Prospectos')], ['of', T('Judges & refs', 'Juízes e árbitros')], ['cp', T('Camps', 'Academias')]];
   const miss = f => `<p class="empty">${T('File ' + f + '.json not found. Run the workflow so the scripts generate it (extras.py needs analytics.py to run before it).', 'Arquivo ' + f + '.json não encontrado. Rode o workflow para os scripts gerarem (o extras.py precisa que o analytics.py rode antes).')}</p>`;
   const slot = (k, lbl) => { const id = X[k], p = S.F.get(id); return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${lbl}</div>${p ? `<div class="sel">${typeof av === 'function' ? av(id, p.name, 'sm') : ''}<b>${esc(p.name)}</b><button data-xc="${k}">×</button></div>` : `<input data-xq="${k}" type="search" placeholder="${T('Search a fighter…', 'Buscar lutador…')}"><div class="res" id="xs${k}"></div>`}</div>`; };
 
-  /* ================= 1A) GAME: DNA SECRETO ================= */
+  /* ================= 1A) GAME: DNA SECRETO 2.0 (CARREIRA OCULTA + RADAR) ================= */
   const DIV_ORD = ["Women's Strawweight", "Women's Flyweight", "Women's Bantamweight", "Women's Featherweight", "Flyweight", "Bantamweight", "Featherweight", "Lightweight", "Welterweight", "Middleweight", "Light Heavyweight", "Heavyweight"];
   function dnaPool() {
     const A = (X.d.analytics || {}).fighters || {}, C = (X.d.cards || {}).cards || {};
@@ -60,49 +62,49 @@
   function tDna() {
     if (!X.d.analytics || !X.d.cards) return miss('cards');
     if (!X.dna.target) dnaInit('daily');
-    const D = X.dna, tid = D.target, A = X.d.analytics.fighters, C = X.d.cards.cards, ta = A[tid], tc = C[tid], tp = S.F.get(tid) || {};
+    const D = X.dna, tid = D.target, A = X.d.analytics.fighters, C = X.d.cards.cards, MKT = (X.d.market || {}).fights || {}, ta = A[tid], tc = C[tid], tp = S.F.get(tid) || {};
     if (!ta || !tc) return `<p class="empty">${T('Loading fighter pool…', 'Carregando base de lutadores…')}</p>`;
     const AL = [T('Striking', 'Trocação'), T('Defense', 'Defesa'), T('Wrestling', 'Quedas'), T('Submissions', 'Finalização'), T('Power', 'Pegada'), T('Cardio', 'Cardio')];
     const fs = S.fg.filter(f => f.res !== 'nc' && (mid(f.a.id) === tid || mid(f.b.id) === tid)).sort((a, b) => a.date < b.date ? -1 : 1);
     const yrs = fs.length ? `${fs[0].date.slice(0, 4)}–${fs.at(-1).date.slice(0, 4)}` : '—';
-    // Melhor vitória do lutador secreto
-    let bestOpp = '—', bestElo = -1;
-    for (const f of fs) {
-      const a = mid(f.a.id) === tid, won = f.res === (a ? 'a' : 'b');
-      if (won) {
-        const oid = mid((a ? f.b : f.a).id), oe = (A[oid] || {}).pk || 1500;
-        if (oe > bestElo) { bestElo = oe; bestOpp = nm(oid); }
-      }
-    }
+    const recent6 = fs.slice(-6).reverse();
     const nGuesses = D.gs.length;
     const hints = [
-      [T('UFC Era & Style', 'Era no UFC & Estilo'), `${yrs} · ${X.d.styles && X.d.styles.fighters[tid] != null ? styName(X.d.styles.fighters[tid]) : T('All-rounder', 'Completo')}`],
-      nGuesses >= 1 || D.done ? [T('Division & Stance', 'Divisão & Base'), `${ta.div} · ${tp.STANCE || 'Orthodox'}`] : null,
-      nGuesses >= 2 || D.done ? [T('Signature UFC win', 'Grande vitória no UFC'), bestOpp] : null,
-      nGuesses >= 3 || D.done ? [T('Country & Gym', 'País & Academia'), `${tp.country || '—'} · ${tp.team || '—'}`] : null,
+      [T('UFC Era & Style', 'Era no UFC & Estilo'), `${yrs} · ${tp.style || (X.d.styles && X.d.styles.fighters[tid] != null ? styName(X.d.styles.fighters[tid]) : T('All-rounder', 'Completo'))}${tp.origin ? ' · ' + tp.origin : ''}`],
+      nGuesses >= 1 || D.done ? [T('Division & Stance', 'Divisão & Base'), `${ta.div} · ${tp.STANCE || 'Orthodox'} · ${tp.Height || ''} (${tp.Reach || ''})` ] : null,
+      nGuesses >= 2 || D.done ? [T('Country & Gym', 'País & Academia'), `${tp.country || '—'} · ${tp.team || '—'}`] : null,
+      nGuesses >= 3 || D.done ? [T('Hometown', 'Cidade Natal'), tp.hometown || '—'] : null,
       nGuesses >= 4 || D.done ? [T('Initials & Nickname', 'Iniciais & Apelido'), `${tp.name ? tp.name.split(/\s+/).map(w => w[0]).join('.') + '.' : ''} ${tp.nick ? '“' + tp.nick + '”' : T('(no nickname)', '(sem apelido)')}`] : null
     ].filter(Boolean);
 
+    const rcIn = s => { const m = String(s || '').match(/(\d+)/); return m ? +m[1] : null; };
     const cmpRow = gid => {
       const ga = A[gid] || {}, gc = C[gid] || [], gp = S.F.get(gid) || {};
       const d1 = DIV_ORD.indexOf(ga.div), d2 = DIV_ORD.indexOf(ta.div);
       const dIcon = ga.div === ta.div ? '🟩' : (d1 >= 0 && d2 >= 0 && Math.abs(d1 - d2) === 1 ? '🟨' : '⬛');
       const ovG = gc[0] || 70, ovT = tc[0] || 70, ovIcon = Math.abs(ovG - ovT) <= 1 ? '🟩' : ovG < ovT ? '↑' : '↓';
+      const rG = rcIn(gp.Reach), rT = rcIn(tp.Reach), rIcon = (rG && rT) ? (rG === rT ? '🟩' : rG < rT ? '↑' : '↓') : '';
       const wG = sum(ga.w || [0]), wT = sum(ta.w || [0]), wIcon = wG === wT ? '🟩' : wG < wT ? '↑' : '↓';
       const cIcon = gp.country && tp.country && gp.country === tp.country ? '🟩' : '⬛';
-      return `<div class="tb" style="grid-template-columns:1.6fr 1.1fr .7fr .7fr .9fr"><span><b>${esc(gp.name || gid)}</b></span><span>${dIcon} ${esc(ga.div || '')}</span><span>${ovIcon} ${ovG}</span><span>${wIcon} ${wG}V</span><span>${cIcon} ${esc(gp.country || '—')}</span></div>`;
+      return `<div class="tb" style="grid-template-columns:1.5fr 1fr .65fr .7fr .7fr 1fr"><span><b>${esc(gp.name || gid)}</b></span><span>${dIcon} ${esc(ga.div || '')}</span><span>${ovIcon} ${ovG}</span><span>${rIcon} ${esc(gp.Reach || '—')}</span><span>${wIcon} ${wG}V</span><span>${cIcon} ${esc(gp.country || '—')}</span></div>`;
     };
 
     let h = `<div class="acts"><button data-xdm="daily" class="${D.mode === 'daily' ? 'pk on' : ''}">${T('Daily Challenge', 'Desafio do Dia')} (${D.date})</button><button data-xdm="free" class="${D.mode === 'free' ? 'pk on' : ''}">${T('Free Play (Unlimited)', 'Modo Livre (Infinito)')}</button>${D.mode === 'free' ? `<button data-xdm="free">${T('New mystery fighter', 'Novo lutador secreto')} ↻</button>` : ''}</div>
-    <p class="mu sm">${T('Guess the secret UFC fighter in up to 6 tries using their tactical attribute DNA and progressive career clues. Arrows (↑/↓) tell you if the secret fighter has a higher or lower value.', 'Descubra quem é o lutador secreto do UFC em até 6 tentativas usando o DNA de atributos táticos e pistas progressivas da carreira. As setas (↑/↓) indicam se o lutador secreto tem valor maior ou menor.')}</p>
+    <p class="mu sm">${T('Guess the secret UFC fighter in up to 6 tries! Each wrong guess reveals one real opponent from their recent fight history AND unlocks a new biographical clue.', 'Descubra quem é o lutador secreto do UFC em até 6 tentativas! Cada palpite revela o nome de um adversário real do histórico recente E desbloqueia uma nova pista biográfica.')}</p>
     <div class="card" style="padding:1rem 1.1rem">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem">
-        <div><b style="font:900 1.5rem var(--d);color:var(--gd)">${D.done ? esc(tp.name) : '??? ' + T('SECRET FIGHTER', 'LUTADOR SECRETO')}</b><div class="mu sm">${T('UFC Record', 'Cartel no UFC')}: <b>${sum(ta.w)}-${sum(ta.l)}-${ta.d}</b> (${ta.w[0]} KO, ${ta.w[1]} SUB, ${ta.w[2]} DEC)${ta.tw ? ` · 🏆 ${ta.tw} ${T('title wins', 'vit. cinturão')}` : ''}</div></div>
+        <div><b style="font:900 1.5rem var(--d);color:var(--gd)">${D.done ? esc(tp.name) : '??? ' + T('SECRET FIGHTER', 'LUTADOR SECRETO')}</b><div class="mu sm">${T('UFC Record', 'Cartel no UFC')}: <b>${sum(ta.w)}-${sum(ta.l)}-${ta.d}</b> (${ta.w[0]} KO, ${ta.w[1]} SUB, ${ta.w[2]} DEC)${ta.tw ? ` · 🏆 ${ta.tw} ${T('title wins', 'vit. cinturão')}` : ''}${ta.chin ? ` · ${T('Chin', 'Queixo')} ${ta.chin}` : ''}</div></div>
         <div class="rt">${D.done ? `OVR ${tc[0]}` : 'OVR ??'}<small>${T('Try', 'Tentativa')} ${D.gs.length}/6</small></div>
       </div>
       <div class="ctl" style="margin-top:.8rem;margin-bottom:.4rem">${AL.map((l, i) => `<div><div style="display:flex;justify-content:space-between;font-size:.8rem"><span class="mu">${l}</span><b>${tc[i + 1]}</b></div><i class="mb"><b style="width:${tc[i + 1]}%"></b></i></div>`).join('')}</div>
-      <div style="margin-top:.7rem;border-top:1px solid var(--ln);padding-top:.6rem">${hints.map(([k, v], i) => `<div class="sr" style="grid-template-columns:auto 1fr"><span class="mu sm">💡 ${T('Clue', 'Pista')} ${i + 1} (${k}):</span><b>${esc(v)}</b></div>`).join('')}
-      ${!D.done && nGuesses < 4 ? `<p class="mu sm" style="margin:.3rem 0 0">${T('Next wrong guess unlocks another clue.', 'O próximo palpite desbloqueia mais uma pista da carreira.')}</p>` : ''}</div>
+      <div style="margin-top:.7rem;border-top:1px solid var(--ln);padding-top:.6rem"><b>🥊 ${T('Last 6 UFC Fights (1 opponent revealed per try)', 'Últimas 6 Lutas no UFC (1 rival revelado por tentativa)')}</b>
+        ${recent6.map((f, idx) => {
+          const isA = mid(f.a.id) === tid, opp = isA ? f.b : f.a, res = f.res === 'draw' ? 'E' : (f.res === (isA ? 'a' : 'b') ? 'V' : 'D');
+          const showOpp = D.done || idx < nGuesses, mf = MKT[f.id], myOdd = mf ? (isA ? mf[0] : mf[1]) : null;
+          return `<div class="sr" style="grid-template-columns:4.8rem 1.8rem 1fr auto;font-size:.84rem"><span class="mu">${f.date.slice(0, 7)}</span><b class="${res === 'V' ? 'up' : res === 'D' ? 'dn' : ''}">${res}</b><span>vs <b>${showOpp ? esc(nm(mid(opp.id))) : '🔒 ??? (' + T('Try ' + (idx + 1), 'Tentativa ' + (idx + 1)) + ')'}</b>${f.title ? ' 🏆' : ''}</span><span class="mu sm">${esc(f.method)}${f.round ? ' R' + f.round : ''}${myOdd != null ? ' · Odd ' + fOdd(myOdd) : ''}</span></div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:.7rem;border-top:1px solid var(--ln);padding-top:.6rem">${hints.map(([k, v], i) => `<div class="sr" style="grid-template-columns:auto 1fr"><span class="mu sm">💡 ${T('Clue', 'Pista')} ${i + 1} (${k}):</span><b>${esc(v)}</b></div>`).join('')}</div>
     </div>`;
 
     if (D.done) {
@@ -116,9 +118,85 @@
     }
 
     if (D.gs.length) {
-      h += `<div class="card" style="padding:.5rem .9rem;overflow-x:auto"><div class="tb hd" style="grid-template-columns:1.6fr 1.1fr .7fr .7fr .9fr"><span>${T('Guess', 'Palpite')}</span><span>${T('Division', 'Divisão')}</span><span>OVR</span><span>${T('UFC Wins', 'Vit. UFC')}</span><span>${T('Country', 'País')}</span></div>${[...D.gs].reverse().map(cmpRow).join('')}</div>`;
+      h += `<div class="card" style="padding:.5rem .9rem;overflow-x:auto"><div class="tb hd" style="grid-template-columns:1.5fr 1fr .65fr .7fr .7fr 1fr"><span>${T('Guess', 'Palpite')}</span><span>${T('Division', 'Divisão')}</span><span>OVR</span><span>${T('Reach', 'Alcance')}</span><span>${T('UFC Wins', 'Vit. UFC')}</span><span>${T('Country', 'País')}</span></div>${[...D.gs].reverse().map(cmpRow).join('')}</div>`;
     }
     return h;
+  }
+
+  /* ================= 1B) GAME: DESAFIO LAS VEGAS (BATA A BANCA COM LUTAS REAIS) ================= */
+  const payUs = (stake, odd) => odd > 0 ? Math.round(stake * (odd / 100)) : Math.round(stake * (100 / -odd));
+  function vgNew() {
+    const M = X.d.market; if (!M || !M.fights) return;
+    const pool = S.fg.filter(f => (f.res === 'a' || f.res === 'b') && M.fights[f.id] && Math.abs(M.fights[f.id][0]) <= 380 && Math.abs(M.fights[f.id][1]) <= 380);
+    const pick = pool.slice().sort(() => Math.random() - .5).slice(0, 5);
+    X.vg = { fights: pick, bets: pick.map(() => ({ side: 'pass', stake: 200 })), rev: false };
+  }
+  function tVg() {
+    if (!X.d.market) return miss('market');
+    if (!X.vg.fights.length) vgNew();
+    const V = X.vg, M = X.d.market.fights, A = (X.d.analytics || {}).fighters || {};
+    let bank = 1000, modelBank = 1000;
+    const rows = V.fights.map((f, i) => {
+      const mf = M[f.id], [oa, ob, pm, rka, rkb, koA, koB, subA, subB] = mf;
+      const b = V.bets[i], ea = (A[mid(f.a.id)] || {}).e || 1500, eb = (A[mid(f.b.id)] || {}).e || 1500, pe = 1 / (1 + Math.pow(10, (eb - ea) / 400));
+      const mPick = pe - pm > .06 ? 'a' : (1 - pe) - (1 - pm) > .06 ? 'b' : 'pass';
+      let net = 0, mNet = 0;
+      if (V.rev) {
+        if (b.side === 'a' || b.side === 'b') net = f.res === b.side ? payUs(b.stake, b.side === 'a' ? oa : ob) : -b.stake;
+        if (mPick === 'a' || mPick === 'b') mNet = f.res === mPick ? payUs(200, mPick === 'a' ? oa : ob) : -200;
+        bank += net; modelBank += mNet;
+      }
+      const rkStr = (rka != null || rkb != null) ? ` · Rk ${rka != null ? (rka === 0 ? 'C' : '#' + rka) : 'NR'} vs ${rkb != null ? (rkb === 0 ? 'C' : '#' + rkb) : 'NR'}` : '';
+      return `<div class="card" style="padding:.85rem 1.1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem">
+          <span class="mu sm"><b>#${i + 1}</b> · ${esc(f.div)}${f.title ? ' · 🏆 ' + T('Title Fight', 'Cinturão') : ''}${rkStr}${V.rev ? ' · ' + fmt(f.date) : ''}</span>
+          <span class="mu sm">${T('Vegas Implied', 'Vegas')}: <b>${p0(pm)} / ${p0(1 - pm)}</b> · ${T('Model', 'Modelo')}: <b>${p0(pe)} / ${p0(1 - pe)}</b></span>
+        </div>
+        <div class="fx" style="margin:.55rem 0"><span class="fa ${V.rev ? (f.res === 'a' ? 'w' : 'l') : ''}" style="color:var(--gd)">${esc(name(f.a))} <small>(${fOdd(oa)})</small></span><span class="mu">vs</span><span class="fa ${V.rev ? (f.res === 'b' ? 'w' : 'l') : ''}" style="color:var(--cb)">${esc(name(f.b))} <small>(${fOdd(ob)})</small></span></div>
+        ${!V.rev ? `<div class="acts" style="margin-bottom:0">
+          <button data-xvg="${i}:a:200" class="pk${b.side === 'a' && b.stake === 200 ? ' on' : ''}">$200 ${esc(name(f.a))} (${fOdd(oa)})</button>
+          <button data-xvg="${i}:b:200" class="pk${b.side === 'b' && b.stake === 200 ? ' on' : ''}">$200 ${esc(name(f.b))} (${fOdd(ob)})</button>
+          <button data-xvg="${i}:pass:0" class="pk${b.side === 'pass' ? ' on' : ''}">${T('Pass ($0)', 'Passar ($0)')}</button>
+        </div>` : `<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--ln);padding-top:.45rem;font-size:.88rem">
+          <span>${T('Result', 'Resultado')}: <b>${esc(name(f[f.res]))}</b> (${esc(f.method)}, R${esc(f.round)}) · <a href="#/event/${f.ev}/${f.id}" style="color:var(--gd);text-decoration:underline">${T('Open fight', 'Ver luta')}</a></span>
+          <b class="${net > 0 ? 'up' : net < 0 ? 'dn' : 'mu'}">${net > 0 ? '+$' + net : net < 0 ? '-$' + Math.abs(net) : '$0'}</b>
+        </div>`}
+      </div>`;
+    }).join('');
+
+    let best = 1000;
+    try { best = Math.max(1000, +(localStorage.sumulaVegasBest || 1000)); if (V.rev && bank > best) { best = bank; localStorage.sumulaVegasBest = String(best); } } catch {}
+
+    return `<p class="mu sm">${T('5 real historical UFC fights with official Las Vegas closing odds. Start with a $1,000 bankroll, compare Vegas implied probabilities against our model to spot value bets, or pass on traps!', '5 lutas reais da história do UFC com as Odds oficiais de fechamento de Las Vegas. Comece com $1.000 de banca, compare a probabilidade de Vegas com a do nosso modelo para achar apostas de valor (Value Bets) ou pule armadilhas!')}</p>
+    <div class="card" style="padding:.85rem 1.1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.8rem;border-left:4px solid var(--gd)">
+      <div><span class="mu sm">${T('Your Bankroll', 'Sua Banca')}</span><div style="font:900 2rem/1 var(--d);color:${bank >= 1000 ? 'var(--win)' : 'var(--loss)'}">$${bank.toLocaleString('en-US')} <span class="mu sm">(${bank >= 1000 ? '+' : ''}${bank - 1000})</span></div></div>
+      ${V.rev ? `<div><span class="mu sm">${T('Model Value Strategy', 'Estratégia do Modelo')}</span><div style="font:900 1.5rem/1 var(--d)">$${modelBank.toLocaleString('en-US')}</div></div>` : ''}
+      <div><span class="mu sm">${T('Personal Record', 'Seu Recorde')}</span><div style="font:900 1.5rem/1 var(--d);color:var(--gd)">$${best.toLocaleString('en-US')}</div></div>
+      <div class="acts" style="margin:0">${!V.rev ? `<button data-xvgr="1" style="background:var(--gd);color:#000">🎲 ${T('Reveal Real Outcomes', 'Revelar Resultados Reais')}</button>` : ''}<button data-xvgn="1">${T('New 5-Fight Card', 'Sortear Novas 5 Lutas')} ↻</button></div>
+    </div>` + rows;
+  }
+
+  /* ================= 1C) PAINEL: MERCADO & ODDS (6.785 LUTAS) ================= */
+  function tMkt() {
+    const M = X.d.market; if (!M || !M.eval) return miss('market');
+    const E = M.eval, up = M.upsets || [], F = M.fighters || {};
+    const dogRows = Object.entries(F).filter(([, v]) => v[4] >= 5).sort((a, b) => X.ms === 'roi' ? b[1][6] - a[1][6] : (b[1][5] - a[1][5] || b[1][6] - a[1][6])).slice(0, 30);
+    return `<p class="mu sm">${T(`Out-of-sample audit across ${E.n.toLocaleString('en-US')} UFC fights with historical Las Vegas closing odds (2010–2026). Average sportsbook overround (vig): ${p1(E.avg_vig)}.`, `Auditoria fora da amostra em ${E.n.toLocaleString('pt-BR')} lutas do UFC com odds históricas de fechamento de Las Vegas (2010–2026). Margem média das casas (overround/vig): ${p1(E.avg_vig)}.`)}</p>
+    <div class="card" style="padding:.8rem 1.1rem">
+      <div class="tb hd" style="grid-template-columns:1.6fr 1fr 1fr 1fr"><span>${T('Predictor', 'Fonte / Modelo')}</span><span>${T('Accuracy', 'Acertos')}</span><span>Brier Score ↓</span><span>Log-Loss ↓</span></div>
+      <div class="tb best" style="grid-template-columns:1.6fr 1fr 1fr 1fr"><span><b>Las Vegas (Closing Odds)</b></span><span>${p1(E.mkt.acc)}</span><span>${E.mkt.brier}</span><span>${E.mkt.ll}</span></div>
+      <div class="tb" style="grid-template-columns:1.6fr 1fr 1fr 1fr"><span><b>${T('Ensemble (65% Vegas + 35% ELO)', 'Combinado (65% Vegas + 35% ELO)')}</b></span><span>${p1(E.blend.acc)}</span><span>${E.blend.brier}</span><span>${E.blend.ll}</span></div>
+      <div class="tb" style="grid-template-columns:1.6fr 1fr 1fr 1fr"><span><b>ELO Puro (Súmula)</b></span><span>${p1(E.elo.acc)}</span><span>${E.elo.brier}</span><span>${E.elo.ll}</span></div>
+    </div>
+    <h2>${T('Las Vegas Calibration Curve (Implied vs. Actual Win Rate)', 'Curva de Calibração de Las Vegas (Previsto vs. Observado)')}</h2>
+    <div class="card" style="padding:.6rem 1.1rem"><div class="tb hd" style="grid-template-columns:.8fr 1fr 1fr 1fr"><span>${T('Fights', 'Lutas')}</span><span>${T('Vegas Implied', 'Previsto Vegas')}</span><span>${T('Actual Win %', 'Observado')}</span><span>${T('Diff', 'Diferença')}</span></div>
+    ${(E.calibration || []).map(b => `<div class="tb" style="grid-template-columns:.8fr 1fr 1fr 1fr"><span>${b.n}</span><span>${p1(b.pred)}</span><span>${p1(b.obs)}</span><span class="${Math.abs(b.obs - b.pred) < .03 ? 'up' : 'mu'}">${b.obs >= b.pred ? '+' : ''}${((b.obs - b.pred) * 100).toFixed(1)} pp</span></div>`).join('')}</div>
+    <h2>⚡ ${T('Biggest Betting Upsets in UFC History', 'Maiores Zebras das Casas de Aposta no UFC')}</h2>
+    <div class="card" style="padding:.6rem 1.1rem">${up.slice(0, 15).map(u => `<div class="sr" style="grid-template-columns:1fr auto"><a href="#/event/${u.ev}/${u.id}"><b>${esc(nm(u.w))}</b> ${T('def.', 'venceu')} ${esc(nm(u.l))} <span class="mu sm">(${fmt(u.date)}, ${esc(u.m)})</span></a><span><b class="up">+${u.odd}</b> <span class="mu sm">(${T('Vegas', 'Vegas')} ${p1(u.p_mkt)} · ELO ${p0(u.p_elo)})</span></span></div>`).join('')}</div>
+    <h2>👑 ${T('Underdog Kings & Career Betting ROI (1u flat bet)', 'Reis da Zebra & Ranking de ROI (Aposta fixa de 1u)')}</h2>
+    <div class="acts"><button data-xms="dog" class="pk${X.ms === 'dog' ? ' on' : ''}">${T('Most Underdog Wins', 'Mais Vitórias como Azarão')}</button><button data-xms="roi" class="pk${X.ms === 'roi' ? ' on' : ''}">${T('Highest Net Profit (ROI)', 'Maior Lucro Líquido (ROI)')}</button></div>
+    <div class="card" style="padding:.5rem .9rem;overflow-x:auto"><div class="tb hd" style="min-width:34rem;grid-template-columns:1.6fr .9fr 1fr 1fr 1fr"><span>${T('Fighter', 'Lutador')}</span><span>${T('Fights w/ Odds', 'Lutas c/ Odds')}</span><span>${T('As Favorite', 'Como Favorito')}</span><span>${T('As Underdog (>=+110)', 'Como Azarão (>=+110)')}</span><span>${T('Net Profit (1u)', 'Lucro Líquido (1u)')}</span></div>
+    ${dogRows.map(([fid, v]) => `<div class="tb" style="min-width:34rem;grid-template-columns:1.6fr .9fr 1fr 1fr 1fr"><a href="#/fighter/${fid}"><b>${esc(nm(fid))}</b></a><span>${v[1]}-${v[0] - v[1]}</span><span>${v[3]}-${v[2] - v[3]}</span><span><b class="up">${v[5]}V</b> / ${v[4]} lutas</span><b class="${v[6] >= 0 ? 'up' : 'dn'}">${v[6] >= 0 ? '+' : ''}${v[6]}u</b></div>`).join('')}</div>`;
   }
 
   /* ================= 1B) GAME: MODO MATCHMAKER (DANA WHITE) ================= */
@@ -389,23 +467,31 @@
   }
 
   /* ================= tela e rota ================= */
-  const VIEW = { dna: tDna, mm: tMm, jg: tJg, sc: tSc, cd: tCd, sy: tSy, pp: tPp, of: tOf, cp: tCp };
-  const DATA = { dna: ['analytics', 'cards', 'styles'], mm: ['analytics', 'cards', 'excitement'], jg: ['decisions'], sc: ['analytics', 'cards', 'styles'], cd: ['excitement'], sy: ['styles'], pp: ['prospects'], of: ['judges'], cp: ['camps'] };
+  const VIEW = { dna: tDna, vg: tVg, mkt: tMkt, mm: tMm, jg: tJg, sc: tSc, cd: tCd, sy: tSy, pp: tPp, of: tOf, cp: tCp };
+  const DATA = { dna: ['analytics', 'cards', 'styles', 'market'], vg: ['market', 'analytics'], mkt: ['market'], mm: ['analytics', 'cards', 'excitement'], jg: ['decisions'], sc: ['analytics', 'cards', 'styles'], cd: ['excitement'], sy: ['styles'], pp: ['prospects'], of: ['judges'], cp: ['camps'] };
   async function draw() {
     const el = document.querySelector('#xx'); if (!el) return;
     await need(DATA[X.tab]); if (!document.querySelector('#xx')) return;
     el.innerHTML = `<div class="seg">${TABS().map(([k, l]) => `<button data-xt="${k}" class="${X.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>` + (['sc', 'cd', 'sy', 'pp', 'cp'].includes(X.tab) ? `<div class="xrow"><span class="xbar" data-xk="x:${X.tab}"></span></div>` : '') + VIEW[X.tab]() + `<p class="mu sm" style="margin-top:1rem">${T('Everything here is exploratory and validated on past data: patterns are hypotheses, not proof.', 'Tudo aqui é exploratório e validado em dados passados: padrões são hipóteses, não provas.')}</p>`;
     const m = document.querySelector('#m');
     m.onclick = e => {
-      const t = e.target.closest('[data-xt],[data-xp],[data-xc],[data-xj],[data-xjr],[data-xjn],[data-xsh],[data-xad],[data-xrm],[data-xos],[data-xor],[data-xcs],[data-xdm],[data-xdsh],[data-xmm]'); if (!t) return; const d = t.dataset;
+      const t = e.target.closest('[data-xt],[data-xp],[data-xc],[data-xj],[data-xjr],[data-xjn],[data-xsh],[data-xad],[data-xrm],[data-xos],[data-xor],[data-xcs],[data-xdm],[data-xdsh],[data-xmm],[data-xvg],[data-xvgr],[data-xvgn],[data-xms]'); if (!t) return; const d = t.dataset;
       if (d.xt) { X.tab = d.xt; draw(); }
       else if (d.xp) { const [k, id] = d.xp.split(':'); if (k === 'dna') dnaGuess(id); else X[k] = id; draw(); }
       else if (d.xc) { X[d.xc] = ''; draw(); }
       else if (d.xdm) { dnaInit(d.xdm); draw(); }
       else if (d.xdsh) {
-        const D = X.dna, txt = `Súmula UFC — DNA Secreto (${D.date}) 🧬 ${D.won ? D.gs.length : 'X'}/6\n` + D.gs.map(g => g === D.target ? '🟩🟩🟩🟩' : '⬛🟨⬛⬛').join('\n');
+        const D = X.dna, txt = `Súmula UFC — DNA Secreto (${D.date}) 🧬 ${D.won ? D.gs.length : 'X'}/6\n` + D.gs.map(g => g === D.target ? '🟩🟩🟩🟩🟩' : '⬛🟨⬛⬛⬛').join('\n');
         if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => alert(T('Result copied!', 'Resultado copiado!')));
       }
+      else if (d.xvg) {
+        const [idx, side, stk] = d.xvg.split(':');
+        X.vg.bets[+idx] = { side, stake: +stk };
+        draw();
+      }
+      else if (d.xvgr) { X.vg.rev = true; draw(); }
+      else if (d.xvgn) { vgNew(); draw(); }
+      else if (d.xms) { X.ms = d.xms; draw(); }
       else if (d.xmm) {
         const M = X.mm, act = d.xmm;
         if (act === 'reset') mmInit();

@@ -767,7 +767,6 @@ def main():
         print(f"Limpeza: {n_ufc} campos de uma versão anterior (fonte descartada).")
     if args.purge_espn:
         print(f"Limpeza: {purge_espn(fighters)} lutadores com dados da ESPN não verificados zerados.")
-    (OUT / "ufc_rankings.json").unlink(missing_ok=True)
     up, upids, up_ok = [], set(), False
     try:
         up = upcoming()
