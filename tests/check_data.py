@@ -79,9 +79,13 @@ def main():
     if dup_espn:
         errors.append(f"espn_id duplicado entre lutadores distintos: {dup_espn}")
 
-    # Stale 2021 rankings file must not exist
-    if (DATA / "ufc_rankings.json").exists():
-        errors.append("data/ufc_rankings.json obsoleto ainda existe")
+    # Validate v2 ufc_rankings.json and market.json
+    ufc_rk = load("ufc_rankings.json")
+    if ufc_rk.get("v") != 2 or len(ufc_rk.get("divisions", {})) < 11:
+        errors.append("data/ufc_rankings.json inválido ou desatualizado")
+    mkt = load("market.json")
+    if mkt.get("v") != 2 or len(mkt.get("fights", {})) < 6000:
+        errors.append("data/market.json inválido ou sem odds históricas")
 
     # Active champions check
     ch = {}
