@@ -44,11 +44,21 @@ def seconds(v):
     return int(m.group(1)) * 60 + int(m.group(2)) if m else 0
 
 
+FMT_RE = re.compile(r"\((\d+(?:-\d+)+)\)")
+
+
 def fight_minutes(f):
     try: rnd = int(f.get("round") or 0)
     except ValueError: rnd = 0
     sec = seconds(f.get("time"))
-    return (rnd - 1) * 5 + sec / 60 if rnd and sec else 0.0
+    if not (rnd and sec): return 0.0
+    m = FMT_RE.search(str(f.get("fmt") or ""))
+    if m:
+        lens = [int(x) for x in m.group(1).split("-")]
+        prev = sum(lens[: rnd - 1]) if rnd - 1 <= len(lens) else (rnd - 1) * 5
+    else:
+        prev = (rnd - 1) * 5
+    return prev + sec / 60
 
 
 def klass(method):
@@ -248,7 +258,11 @@ def run_styles(fights, st, snaps, k=6):
     for s in snaps:
         f = s["f"]
         if f["res"] == "draw" or f["a"]["id"] not in style or f["b"]["id"] not in style or s["na"] < 3 or s["nb"] < 3: continue
-        pairs.append(((s["ea"] - s["eb"]) / 400.0, 1 if f["res"] == "a" else 0, style[f["a"]["id"]], style[f["b"]["id"]]))
+        fl = zlib.crc32(f["id"].encode()) & 1
+        dx = (s["eb"] - s["ea"]) / 400.0 if fl else (s["ea"] - s["eb"]) / 400.0
+        yw = (1 if f["res"] == "b" else 0) if fl else (1 if f["res"] == "a" else 0)
+        sa, sb = (style[f["b"]["id"]], style[f["a"]["id"]]) if fl else (style[f["a"]["id"]], style[f["b"]["id"]])
+        pairs.append((dx, yw, sa, sb))
     c = calib_slope([(x, y) for x, y, _, _ in pairs])
     M = defaultdict(lambda: [0, 0.0, 0.0])
     for x, y, si, sj in pairs:

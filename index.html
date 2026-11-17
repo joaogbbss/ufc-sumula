@@ -291,8 +291,24 @@ const isTitle = f => (!!f.title || /championship/i.test(f.tt || '')) && !TOURN_R
 function whr(L, P) {
   const w2 = (P.vol / U) ** 2, tau2 = 6.25;
   const N = new Map(), tag = new Map(), ch = new Map(), cnt = new Map(), rg = [], op = new Map();
+  const divsInL = new Set(L.map(f => f.div));
+  const proms = (S.ov.title_promotions || []).filter(p => divsInL.has(p.div)).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  let pi = 0;
+  const applyProm = dt => {
+    while (pi < proms.length && (!dt || proms[pi].date <= dt)) {
+      const p = proms[pi++], pid = mid(p.id);
+      if (ch.get(p.div) === pid) continue;
+      const o = op.get(p.div);
+      if (o && !o.end) o.end = o.last;
+      const c = cnt.get(pid) || {cq:0, df:0, iv:0};
+      c.cq++; cnt.set(pid, c); ch.set(p.div, pid);
+      const n = {id:pid, div:p.div, start:p.date, last:p.date, end:null, def:0};
+      op.set(p.div, n); rg.push(n);
+    }
+  };
   for (const f of L) {
     if (!isTitle(f) || (f.res !== 'a' && f.res !== 'b')) continue;
+    applyProm(f.date);
     const W = mid(f[f.res].id), Lo = mid(f[f.res === 'a' ? 'b' : 'a'].id);
     const c = cnt.get(W) || {cq:0, df:0, iv:0};
     cnt.set(W, c);
@@ -308,6 +324,7 @@ function whr(L, P) {
       op.set(f.div, n); rg.push(n);
     }
   }
+  applyProm(null);
   for (const v of (S.ov.title_vacancies || [])) {
     for (const r of rg) {
       if (r.div === v.div && r.last <= v.after && (!r.end || r.end === r.last)) r.end = v.end;
@@ -436,7 +453,14 @@ function holdout(L, P) {
 const num = v => parseFloat(String(v ?? '').split(' of ')[0]) || 0;
 const att = v => { const m = String(v ?? '').match(/of (\d+)/); return m ? +m[1] : 0; };
 const secs = v => { const m = String(v ?? '').match(/^(\d+):(\d+)$/); return m ? +m[1] * 60 + +m[2] : 0; };
-const mins = f => { const r = parseInt(f.round) || 0, m = String(f.time || '').match(/^(\d+):(\d+)$/); return r && m ? (r - 1) * 5 + +m[1] + +m[2] / 60 : 0; };
+const mins = f => {
+  const r = parseInt(f.round) || 0, m = String(f.time || '').match(/^(\d+):(\d+)$/);
+  if (!r || !m) return 0;
+  const fm = String(f.fmt || '').match(/\((\d+(?:-\d+)+)\)/);
+  let prev = (r - 1) * 5;
+  if (fm) { const ls = fm[1].split('-').map(Number); if (r - 1 <= ls.length) prev = ls.slice(0, r - 1).reduce((a, b) => a + b, 0); }
+  return prev + +m[1] + +m[2] / 60;
+};
 const cls = m => /^(ko|tko)/i.test(m) ? 'KO' : /^sub/i.test(m) ? 'SUB' : /decision/i.test(m) ? 'DEC' : 'OTH';
 const KS = ['KO', 'SUB', 'DEC', 'OTH'];
 const SIGK = ['Head', 'Body', 'Leg', 'Distance', 'Clinch', 'Ground'];

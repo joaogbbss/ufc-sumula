@@ -47,13 +47,24 @@ def seconds(v):
     return int(m.group(1)) * 60 + int(m.group(2)) if m else 0
 
 
+FMT_RE = re.compile(r"\((\d+(?:-\d+)+)\)")
+
+
 def fight_minutes(f):
     try:
         rnd = int(f.get("round") or 0)
     except ValueError:
         rnd = 0
     sec = seconds(f.get("time"))
-    return (rnd - 1) * 5 + sec / 60 if rnd and sec else 0.0
+    if not (rnd and sec):
+        return 0.0
+    m = FMT_RE.search(str(f.get("fmt") or ""))
+    if m:
+        lens = [int(x) for x in m.group(1).split("-")]
+        prev = sum(lens[: rnd - 1]) if rnd - 1 <= len(lens) else (rnd - 1) * 5
+    else:
+        prev = (rnd - 1) * 5
+    return prev + sec / 60
 
 
 def klass(method):
@@ -805,8 +816,13 @@ def run_validation(fights, pre_elo):
         ea, eb = pre_elo[f["id"]]
         if ea == BASE and eb == BASE:
             continue  # ignora lutas entre dois estreantes absolutos sem histórico
+        fl = zlib.crc32(f["id"].encode()) & 1
+        if fl:
+            ea, eb = eb, ea
+            y = 1.0 if f["res"] == "b" else 0.0
+        else:
+            y = 1.0 if f["res"] == "a" else 0.0
         p_a = 1.0 / (1.0 + 10 ** ((eb - ea) / 400.0))
-        y = 1.0 if f["res"] == "a" else 0.0
         brier += (p_a - y) ** 2
         p_clip = min(0.999, max(0.001, p_a))
         logloss -= y * math.log(p_clip) + (1.0 - y) * math.log(1.0 - p_clip)
