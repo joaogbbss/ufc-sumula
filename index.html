@@ -852,7 +852,7 @@ function p4p(hist) {
     const sd = Math.sqrt(rs.reduce((a, x) => a + (v(x) - mu) ** 2, 0) / rs.length) || 1;
     for (const x of rs) out.push({...x, v: (v(x) - mu) / sd, div: d});
   }
-  return out;
+  return out.sort((a, b) => b.v - a.v);
 }
 
 function runT(ids, d, hist) {
@@ -1491,7 +1491,7 @@ function vHome() {
     const r = E.rg.filter(x => !x.end && x.div === dv && now - Date.parse(x.last) < 3 * YR).sort((a, b) => b.start < a.start ? -1 : 1)[0];
     return {dv, r, f: r ? S.F.get(r.id) : null};
   });
-  const topP4P = p4p(false).slice(0, 5);
+  const topP4P = p4p(false).filter(x => x.n >= 3).sort((a, b) => b.v - a.v).slice(0, 5);
   // Maior sequência ativa de vitórias no UFC
   const strk = new Map();
   for (const f of [...S.fg].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (b.ord || 0) - (a.ord || 0))) {
