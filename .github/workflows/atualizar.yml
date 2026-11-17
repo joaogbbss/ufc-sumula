@@ -26,6 +26,8 @@ jobs:
       - run: python scraper.py --max-minutes 320
       - name: Gerar análises (data/analytics.json)
         run: python analytics.py
+      - name: Integrar bases externas (Odds, Ranking Oficial UFC, Perfis)
+        run: python enrich_external.py
       - name: Extras
         run: python extras.py
       - name: Validar integridade dos dados
