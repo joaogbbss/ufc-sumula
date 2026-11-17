@@ -357,6 +357,98 @@ def main():
     print(f"Origens enriquecidas via Wikipedia: +{n_orig} lutadores ->", Counter(f.get("origin") for f in fighters if f.get("origin")))
 
     # ---------------------------------------------------------
+    # 2b. Query Única SPARQL na Wikidata (Sherdog, Tapology, Artes Marciais Base e DOB)
+    # ---------------------------------------------------------
+    print("Executando query SPARQL em lote na Wikidata...")
+    SPARQL = """
+    SELECT ?item ?itemLabel ?dob ?sherdog ?tapology (GROUP_CONCAT(DISTINCT ?sportLabel; separator="|") AS ?arts) WHERE {
+      { ?item wdt:P9728 ?sherdog . } UNION { ?item wdt:P9726 ?tapology . }
+      OPTIONAL { ?item wdt:P569 ?dob . }
+      OPTIONAL { ?item wdt:P9728 ?sherdog . }
+      OPTIONAL { ?item wdt:P9726 ?tapology . }
+      OPTIONAL {
+        ?item wdt:P641|wdt:P2416 ?sport .
+        ?sport rdfs:label ?sportLabel .
+        FILTER(LANG(?sportLabel) = "en")
+      }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en,pt". }
+    }
+    GROUP BY ?item ?itemLabel ?dob ?sherdog ?tapology
+    """
+    ARTS_MAP = {
+        "brazilian jiu jitsu": "Brazilian Jiu-Jitsu",
+        "sambo": "Sambo",
+        "combat sambo": "Sambo",
+        "freestyle wrestling": "Freestyle Wrestling",
+        "greco roman wrestling": "Greco-Roman Wrestling",
+        "amateur wrestling": "Amateur Wrestling",
+        "collegiate wrestling": "Wrestling",
+        "wrestling": "Wrestling",
+        "judo": "Judo",
+        "muay thai": "Muay Thai",
+        "kickboxing": "Kickboxing",
+        "boxing": "Boxing",
+        "karate": "Karate",
+        "kyokushin": "Karate",
+        "taekwondo": "Taekwondo",
+        "sanda": "Sanda / Wushu",
+        "lethwei": "Lethwei",
+    }
+    try:
+        r_wd = requests.get(
+            "https://query.wikidata.org/sparql",
+            params={"format": "json", "query": SPARQL},
+            headers={**H, "Accept": "application/sparql-results+json"},
+            timeout=30,
+        )
+        if r_wd.status_code == 200:
+            wd_rows = r_wd.json().get("results", {}).get("bindings", [])
+            n_wd = 0
+            for b in wd_rows:
+                lbl = b.get("itemLabel", {}).get("value", "")
+                fid = by_name.get(norm(lbl))
+                if not fid:
+                    continue
+                fp = fmap[fid]
+                dob_val = b.get("dob", {}).get("value", "")
+                # Se ambos têm ano de nascimento, confere compatibilidade
+                if dob_val and len(dob_val) >= 10:
+                    wy = dob_val[:4]
+                    oy_m = re.search(r"(19|20)\d{2}", str(fp.get("DOB") or ""))
+                    if oy_m and oy_m.group(0) != wy:
+                        continue
+                    if fp.get("DOB") in ("--", "", None) and re.fullmatch(r"\d{4}-\d\d-\d\d", dob_val[:10]):
+                        try:
+                            fp["DOB"] = datetime.strptime(dob_val[:10], "%Y-%m-%d").strftime("%b %d, %Y")
+                        except Exception:
+                            pass
+                qid = b.get("item", {}).get("value", "").rsplit("/", 1)[-1]
+                if qid.startswith("Q"):
+                    fp["wd_qid"] = qid
+                    fp["wd_checked"] = True
+                sh = b.get("sherdog", {}).get("value", "")
+                if sh and not fp.get("sherdog_id"):
+                    fp["sherdog_id"] = sh
+                    fp["sherdog_url"] = f"https://www.sherdog.com/fighter/{sh}"
+                tp = b.get("tapology", {}).get("value", "")
+                if tp and not fp.get("tapology_id"):
+                    fp["tapology_id"] = tp
+                    fp["tapology_url"] = f"https://www.tapology.com/fightcenter/fighters/{tp}"
+                arts_raw = b.get("arts", {}).get("value", "")
+                if arts_raw:
+                    found_arts = []
+                    for part in arts_raw.split("|"):
+                        mapped = ARTS_MAP.get(norm(part))
+                        if mapped and mapped not in found_arts:
+                            found_arts.append(mapped)
+                    if found_arts:
+                        fp["base_arts"] = found_arts
+                n_wd += 1
+            print(f"Wikidata SPARQL em lote: {n_wd} lutadores enriquecidos (Sherdog/Tapology/Artes de Base).")
+    except Exception as ex:
+        print(f"aviso: query SPARQL Wikidata falhou ({ex}).")
+
+    # ---------------------------------------------------------
     # 3. Processar ultimate_ufc_dataset.csv -> data/market.json + fallback físico
     # ---------------------------------------------------------
     print("Baixando ultimate_ufc_dataset.csv (Odds & Ranks no dia da luta)...")

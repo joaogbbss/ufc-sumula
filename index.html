@@ -255,6 +255,7 @@ async function init() {
     fetchJson('decisions').then(j => { S.dd = j; }).catch(() => { S.dd = null; });
     fetchJson('market').then(j => { S.mkt = j; }).catch(() => { S.mkt = null; });
     fetchJson('ufc_rankings').then(j => { S.urk = j; }).catch(() => { S.urk = null; });
+    fetchJson('analytics').then(j => { S.an = j; }).catch(() => { S.an = null; });
   if (ov) S.ov = {merges:{}, div:{}, exclude:[], ...ov};
   S.ev = ev || [];
   S.meta = meta || {};
@@ -759,6 +760,28 @@ function picksSpec(e) {
     sub: `${fmt(e.date)}${e.location ? ' · ' + e.location : ''} · ${n}/${e.fights.length} ${T('picks', 'palpites')} · ${T('model probabilities refer to the first-named fighter', 'probabilidades dos modelos são do primeiro lutador citado')}`,
     cols: [T('Fight', 'Luta'), T('My pick', 'Meu palpite'), 'Elo', 'WHR', T('Stats', 'Estat.'), T('Blend', 'Combinado')], rows};
 }
+function upAlerts(e, f, ia, ib) {
+  const out = [], evT = Date.parse(e.date), loc = (e.location || '').toLowerCase();
+  if (/salt lake|mexico city|cidade do mexico|denver|bogot/i.test(loc)) out.push(`<span class="tag" style="background:var(--cb);color:#fff">🏔️ ${T('High Altitude', 'Altitude Elevada')}</span>`);
+  for (const [id, nm_] of [[ia, lastName(f.a.name)], [ib, lastName(f.b.name)]]) {
+    const fs = S.fg.filter(x => x.res !== 'nc' && (mid(x.a.id) === id || mid(x.b.id) === id)).sort((a, b) => a.date < b.date ? -1 : 1);
+    if (!fs.length) continue;
+    const last = fs.at(-1), days = Math.round((evT - Date.parse(last.date)) / 864e5);
+    const meSide = mid(last.a.id) === id ? 'a' : 'b';
+    if (last.res !== meSide && last.res !== 'draw' && /^(ko|tko)/i.test(last.method || '') && days > 0 && days <= 240) {
+      out.push(`<span class="tag" style="background:var(--loss);color:#fff">⚠️ ${T(`KO Turnaround: ${nm_} (${days}d ago)`, `Retorno pós-KO: ${nm_} (${days}d)`)}</span>`);
+    } else if (days >= 420) {
+      out.push(`<span class="tag" style="background:var(--s2);color:var(--mu)">⏳ ${T(`Layoff: ${nm_} (${Math.round(days / 30)}mo)`, `Inativo: ${nm_} (${Math.round(days / 30)}m)`)}</span>`);
+    }
+    if (!NONSTD.has(f.div) && !NONSTD.has(last.div) && f.div !== last.div) {
+      const i0 = STD.indexOf(last.div), i1 = STD.indexOf(f.div);
+      const dir = i1 > i0 ? '⬆️ ' + T('Moving up', 'Subindo') : '⬇️ ' + T('Moving down', 'Descendo');
+      out.push(`<span class="tag" style="background:var(--s2);color:var(--gd)">${dir}: ${esc(nm_)} (${esc(last.div)} → ${esc(f.div)})</span>`);
+    }
+  }
+  return out.length ? `<div class="fi" style="margin-top:.35rem">${out.join('')}</div>` : '';
+}
+
 function drawUp() {
   const el = $('#up');
   if (!el) return;
@@ -784,7 +807,7 @@ function drawUp() {
     }
     return `<div class="card fight${S.upX.has(k) ? ' open' : ''}"><div class="fx up-fx"><a class="fa" href="#/fighter/${ia}">${av(ia, f.a.name, 'sm')}<span>${esc(f.a.name)}</span></a><span class="ring"><span>VS</span></span><a class="fa" href="#/fighter/${ib}"><span>${esc(f.b.name)}</span>${av(ib, f.b.name, 'sm')}</a></div>
     ${pr ? `<div class="fav" role="img" aria-label="${pc(pb)} / ${pc(1 - pb)}"><i style="width:${(pb * 100).toFixed(1)}%"></i></div><div class="fvl"><b style="color:var(--gd)">${pc(pb)}</b><span class="mu">★ ${pr.best}</span><b style="color:var(--cb)">${pc(1 - pb)}</b></div>` : ''}
-    <div class="fi"><span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${pr ? `<span>Elo ${pc(pr.pE)} · WHR ${pc(pr.pW)} · ${T('Stats', 'Estat.')} ${pc(pr.pS)}</span>` : `<span>${T('no rating yet', 'sem nota ainda')}</span>`}</div>
+    <div class="fi"><span>${esc(f.div)}</span>${f.title ? `<span class="tag">${T('Title', 'Cinturão')}</span>` : ''}${pr ? `<span>Elo ${pc(pr.pE)} · WHR ${pc(pr.pW)} · ${T('Stats', 'Estat.')} ${pc(pr.pS)}</span>` : `<span>${T('no rating yet', 'sem nota ainda')}</span>`}</div>${upAlerts(e, f, ia, ib)}
     <div class="fa2"><button class="pk${S.upX.has(k) ? ' on' : ''}" data-upx="${k}">🔍 ${T('X-Ray', 'Raio-X')}</button><span class="pickbox"><span class="mu sm">${T('Pick', 'Palpite')}:</span><button class="pk${pk === 'a' ? ' on' : ''}" data-pick="${k}:a">${esc(lastName(f.a.name))}</button><button class="pk${pk === 'b' ? ' on' : ''}" data-pick="${k}:b">${esc(lastName(f.b.name))}</button></span></div><div class="st" id="upx-${e.id}-${ia}-${ib}">${S.upX.has(k) ? upxHtml(e, f, i, ia, ib, k, pr, pb) : ''}</div></div>`;
   }).join(''); return upEvent(e, idx, body, tm); }).join('');
   if (dirty) saveMe();
@@ -1814,9 +1837,18 @@ function vFighter(id) {
   const sos = wl.length ? wl.reduce((a, x) => a + x.q, 0) / wl.length : null;
   const li = (x, c) => `<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/event/${x.f.ev}/${x.f.id}" style="color:${c}"><b>${esc(name(x.o))}</b></a><span class="mu">${fmt(x.f.date)}</span><span>${el(x.q)}</span></div>`;
   const resume = wl.length ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Résumé highlights', 'Destaques da campanha')}</b>${bw.length ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Best wins (opponent rating then)', 'Melhores vitórias (nota do rival na época)')}</p>${bw.map(x => li(x, 'var(--win)')).join('')}` : ''}${wr ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Worst loss', 'Pior derrota')}</p>${li(wr, 'var(--loss)')}` : ''}${sos != null ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Strength of schedule: average opponent rating', 'Força do calendário: nota média dos rivais')} <b style="color:var(--tx)">${el(sos)}</b></p>` : ''}</div>` : '';
-  const crk = S.urk?.fighters?.[id], mktF = S.mkt?.fighters?.[id];
-  const rkCard = (crk || mktF) ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Official UFC Ranking & Betting Market Résumé', 'Currículo no Ranking Oficial do UFC & Casas de Aposta')}</b>
-    ${crk ? `<div class="xg" style="margin-top:.4rem">${crk.cur_rank != null ? `<span>${T('Current Official Rank', 'Ranking Oficial Atual')}: <b>${crk.cur_rank === 0 ? '👑 ' + T('Champion', 'Campeão') : '#' + crk.cur_rank} (${esc(crk.cur_div)})</b></span>` : ''}${crk.p4p ? `<span>P4P: <b>#${crk.p4p}</b></span>` : ''}${crk.peak != null ? `<span>${T('Career Peak Rank', 'Melhor Posição Oficial')}: <b>${crk.peak === 0 ? T('Champion', 'Campeão') : '#' + crk.peak} (${esc(crk.peak_div)})</b></span>` : ''}<span>${T('Weeks in Top 15', 'Semanas no Top 15')}: <b>${crk.w15 || 0}</b></span>${crk.w5 ? `<span>${T('Weeks in Top 5', 'Semanas no Top 5')}: <b>${crk.w5}</b></span>` : ''}${crk.wp4p ? `<span>${T('Weeks in P4P', 'Semanas no P4P')}: <b>${crk.wp4p}</b></span>` : ''}${crk.next ? `<span>📅 ${T('Next / Status', 'Próxima / Status')}: <b>${esc(crk.next)}</b></span>` : ''}</div>` : ''}
+  const crk = S.urk?.fighters?.[id], mktF = S.mkt?.fighters?.[id], anF = S.an?.fighters?.[id];
+  const opaHtml = anF && anF.opa_s != null ? `<div class="xg" style="margin-top:.4rem;border-top:1px solid var(--ln);padding-top:.4rem">
+    <span>OPA™ ${T('Striking vs Rival Def.', 'Trocação Ajustada')}: <b class="${anF.opa_s >= 0 ? 'up' : 'dn'}">${anF.opa_s >= 0 ? '+' : ''}${anF.opa_s}/min</b> <span class="mu sm">(${T('raw', 'bruto')} ${anF.raw_s || 0}/m)</span></span>
+    <span>OPA™ ${T('Defense vs Rival Str.', 'Defesa Ajustada')}: <b class="${anF.opa_d >= 0 ? 'up' : 'dn'}">${anF.opa_d >= 0 ? '+' : ''}${anF.opa_d}/min</b></span>
+    <span>OPA™ ${T('Wrestling Pressure', 'Pressão de Quedas')}: <b class="${anF.opa_g >= 0 ? 'up' : 'dn'}">${anF.opa_g >= 0 ? '+' : ''}${anF.opa_g}/15m</b></span>
+    ${anF.stam ? `<span>${T('State-Free Cardio', 'Cardio Livre de Viés')}: <b>${Math.round(anF.stam * 100)}%</b></span>` : ''}
+    ${anF.chin ? `<span>${T('Chin Index', 'Índice de Queixo')}: <b>${anF.chin}/100</b></span>` : ''}
+    ${anF.wt_mv ? `<span>${anF.wt_mv[0] > 0 ? '⬆️ ' + T('Moved up', 'Subiu') : '⬇️ ' + T('Moved down', 'Desceu')}: <b>${esc(anF.wt_mv[1])} → ${esc(anF.wt_mv[2])}</b></span>` : ''}
+  </div>` : '';
+  const rkCard = (crk || mktF || opaHtml) ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Advanced Metrics (OPA™), Official Ranking & Betting Résumé', 'Métricas Ajustadas (OPA™), Ranking Oficial & Casas de Aposta')}</b>
+    ${opaHtml}
+    ${crk ? `<div class="xg" style="margin-top:.4rem;border-top:1px solid var(--ln);padding-top:.4rem">${crk.cur_rank != null ? `<span>${T('Current Official Rank', 'Ranking Oficial Atual')}: <b>${crk.cur_rank === 0 ? '👑 ' + T('Champion', 'Campeão') : '#' + crk.cur_rank} (${esc(crk.cur_div)})</b></span>` : ''}${crk.p4p ? `<span>P4P: <b>#${crk.p4p}</b></span>` : ''}${crk.peak != null ? `<span>${T('Career Peak Rank', 'Melhor Posição Oficial')}: <b>${crk.peak === 0 ? T('Champion', 'Campeão') : '#' + crk.peak} (${esc(crk.peak_div)})</b></span>` : ''}<span>${T('Weeks in Top 15', 'Semanas no Top 15')}: <b>${crk.w15 || 0}</b></span>${crk.w5 ? `<span>${T('Weeks in Top 5', 'Semanas no Top 5')}: <b>${crk.w5}</b></span>` : ''}${crk.wp4p ? `<span>${T('Weeks in P4P', 'Semanas no P4P')}: <b>${crk.wp4p}</b></span>` : ''}${crk.next ? `<span>📅 ${T('Next / Status', 'Próxima / Status')}: <b>${esc(crk.next)}</b></span>` : ''}</div>` : ''}
     ${mktF ? `<div class="xg" style="margin-top:.4rem;border-top:1px solid var(--ln);padding-top:.4rem"><span>${T('Fights with Vegas Odds', 'Lutas com Odds em Vegas')}: <b>${mktF[1]}-${mktF[0] - mktF[1]}</b></span><span>${T('As Favorite', 'Como Favorito')}: <b>${mktF[3]}-${mktF[2] - mktF[3]}</b></span><span>${T('As Underdog', 'Como Azarão')}: <b>${mktF[5]}-${mktF[4] - mktF[5]}</b></span><span>${T('Career Betting ROI (1u flat)', 'ROI nas Casas de Aposta (1u)')}: <b class="${mktF[6] >= 0 ? 'up' : 'dn'}">${mktF[6] >= 0 ? '+' : ''}${mktF[6]}u</b></span></div>` : ''}
   </div>` : '';
   const bonusCard = rkCard + bonusLine(id) + techCard(id);
@@ -1901,18 +1933,20 @@ function simOut(q) {
   const E = getE(q.d), ra = rt(q.a, E, q.m), rb = rt(q.b, E, q.m);
   if (!ra || !rb) return `<p class="empty">${T('At least one fighter has no rating in this scope. Try "General".', 'Pelo menos um lutador não tem nota neste escopo. Tente "Geral".')}</p>`;
   const G = league(), oa = agg(q.a, q.m), ob = agg(q.b, q.m), xa = rates(oa, G), xb = rates(ob, G), el = r => Math.round(1500 + U * r.mu), sd = r => Math.round(U * Math.sqrt(r.v));
-  const env = q.env || 'std';
+  const env = q.env || 'std', nRds = +(q.rds || 3), anA = S.an?.fighters?.[q.a] || {}, anB = S.an?.fighters?.[q.b] || {};
+  const stA = anA.stam || 1, stB = anB.stam || 1;
   let envAdj = 0, envNote = '';
   if (xa && xb && env === 'apex') {
     const grA = (xa.td / 3) + xa.ctl * 2 + xa.fin, grB = (xb.td / 3) + xb.ctl * 2 + xb.fin;
     envAdj = Math.max(-.18, Math.min(.18, (grA - grB) * .06));
     envNote = T('25ft Apex cage: +finish & takedown pressure.', 'Octógono Apex 25 pés: maior pressão de quedas e finalizações.');
   } else if (xa && xb && env === 'alt') {
-    const wa = wearStats(q.a), wb = wearStats(q.b), ca = wa ? wa.dr : 0, cb = wb ? wb.dr : 0;
+    const wa = wearStats(q.a), wb = wearStats(q.b), ca = wa ? wa.dr : (stA - 1), cb = wb ? wb.dr : (stB - 1);
     envAdj = Math.max(-.15, Math.min(.15, (ca - cb) * .25 + (xa.sl - xb.sl) * .02));
     envNote = T('High altitude (>1,500m): favors late-round cardio retention.', 'Altitude elevada (>1.500m): favorece retenção de cardio nos rounds finais.');
   }
-  const s2 = ra.v + rb.v, dm = (ra.mu - rb.mu) + envAdj, p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
+  const rdsAdj = nRds === 5 ? Math.max(-.14, Math.min(.14, (stA - stB) * .35)) : 0;
+  const s2 = ra.v + rb.v, dm0 = (ra.mu - rb.mu) + envAdj, dm = dm0 + rdsAdj, p3 = sg(dm0 / Math.sqrt(1 + Math.PI * s2 / 8)), p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
   const da = mainDiv(q.a), db = mainDiv(q.b), age = d => { const t = Date.parse(d); return t ? ((Date.now() - t) / YR).toFixed(1) : '-'; };
   let quick = '';
   if (xa && xb) {
@@ -1938,14 +1972,17 @@ function simOut(q) {
   h += `<div class="acts" style="margin-top:.6rem"><button id="shr">${T('Share card', 'Cartão para compartilhar')}</button><a class="btn" href="#/xray/${q.a}/${q.b}">${T('Open in X-Ray', 'Abrir no Raio-X')}</a></div>`;
   h += models(q, p); h += h2hHtml(q);
   if (!xa || !xb) return h + `<p class="empty">${T('Not enough fight stats in the database.', 'Sem estatísticas de luta suficientes na base.')}</p>`;
-  const gta = ((oa.sg.Ground + 4 * oa.sub) + 6) / (oa.ct / 60 + 2), gtb = ((ob.sg.Ground + 4 * ob.sub) + 6) / (ob.ct / 60 + 2);
-  const cha = Math.round(100 / (1 + .45 * (xa.kda / Math.max(15 * G.kd / G.min, .05)))), chb = Math.round(100 / (1 + .45 * (xb.kda / Math.max(15 * G.kd / G.min, .05))));
-  h += `<h2>${T('Striking and grappling profile', 'Perfil de trocação e solo')}</h2><div class="card" style="padding:.8rem 1.1rem">
-  ${sr(T('Sig. strikes landed / min', 'Golpes sig. acertados / min'), f1(xa.sl), f1(xb.sl), xa.sl, xb.sl)}${sr(T('Sig. strikes absorbed / min', 'Golpes sig. recebidos / min'), f1(xa.ab), f1(xb.ab), xa.ab, xb.ab)}
+  const gta = anA.gt != null ? anA.gt : ((oa.sg.Ground + 4 * oa.sub) + 6) / (oa.ct / 60 + 2), gtb = anB.gt != null ? anB.gt : ((ob.sg.Ground + 4 * ob.sub) + 6) / (ob.ct / 60 + 2);
+  const cha = anA.chin != null ? anA.chin : Math.round(100 / (1 + .45 * (xa.kda / Math.max(15 * G.kd / G.min, .05)))), chb = anB.chin != null ? anB.chin : Math.round(100 / (1 + .45 * (xb.kda / Math.max(15 * G.kd / G.min, .05))));
+  const fSgn = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2);
+  h += `<h2>${T('Striking and grappling profile (Raw + OPA™ Opponent-Adjusted)', 'Perfil de trocação e solo (Bruto + OPA™ Ajustado pelo Rival)')}</h2><div class="card" style="padding:.8rem 1.1rem">
+  ${anA.opa_s != null || anB.opa_s != null ? sr(T('OPA™ Striking vs Rival Defense (/min)', 'OPA™ Trocação Ajustada pelo Rival (/min)'), fSgn(anA.opa_s), fSgn(anB.opa_s), (anA.opa_s || 0) + 3, (anB.opa_s || 0) + 3) + sr(T('OPA™ Defense vs Rival Striking (/min)', 'OPA™ Defesa Ajustada pelo Rival (/min)'), fSgn(anA.opa_d), fSgn(anB.opa_d), (anA.opa_d || 0) + 3, (anB.opa_d || 0) + 3) + sr(T('OPA™ Wrestling Pressure (/15m)', 'OPA™ Pressão de Quedas Ajustada (/15m)'), fSgn(anA.opa_g), fSgn(anB.opa_g), (anA.opa_g || 0) + 5, (anB.opa_g || 0) + 5) : ''}
+  ${sr(T('Sig. strikes landed / min (raw)', 'Golpes sig. acertados / min (bruto)'), f1(xa.sl), f1(xb.sl), xa.sl, xb.sl)}${sr(T('Sig. strikes absorbed / min', 'Golpes sig. recebidos / min'), f1(xa.ab), f1(xb.ab), xa.ab, xb.ab)}
   ${sr(T('Striking accuracy', 'Precisão de golpes'), pc(xa.acc), pc(xb.acc), xa.acc, xb.acc)}${sr(T('Striking defense', 'Defesa de golpes'), pc(xa.def), pc(xb.def), xa.def, xb.def)}
   ${sr(T('Takedowns / 15 min', 'Quedas / 15 min'), f1(xa.td), f1(xb.td), xa.td, xb.td)}${sr(T('Takedown accuracy', 'Precisão de quedas'), pc(xa.tdacc), pc(xb.tdacc), xa.tdacc, xb.tdacc)}${sr(T('Takedown defense', 'Defesa de quedas'), pc(xa.tddef), pc(xb.tddef), xa.tddef, xb.tddef)}
   ${sr(T('Submission attempts / 15 min', 'Finalizações tentadas / 15 min'), f1(xa.sub), f1(xb.sub), xa.sub, xb.sub)}${sr(T('Knockdowns / 15 min', 'Knockdowns / 15 min'), f1(xa.kd), f1(xb.kd), xa.kd, xb.kd)}
   ${sr(T('Control time share', 'Fração de controle'), pc(xa.ctl), pc(xb.ctl), xa.ctl, xb.ctl)}${sr(T('Damaging control (Ground threat / min)', 'Controle produtivo (Ameaça no solo / min)'), f1(gta), f1(gtb), gta, gtb)}
+  ${sr(T('State-Free Cardio Retention', 'Cardio Livre de Viés de Estado'), pc(stA), pc(stB), stA, stB)}
   ${sr(T('Chin durability index (0–100)', 'Índice de resistência de queixo (0–100)'), cha, chb, cha, chb)}${sr(T('Finish rate in wins', 'Taxa de finalização nas vitórias'), pc(xa.fin), pc(xb.fin), xa.fin, xb.fin)}</div>`;
   h += sigHtml(oa, ob, A, B);
   h += roundsSimHtml(q.a, q.b) + wearSimHtml(q.a, q.b);
@@ -1955,9 +1992,28 @@ function simOut(q) {
   h += `<h2>${T('Projected matchup (per 15 minutes)', 'Projeção do confronto (a cada 15 minutos)')}</h2><div class="card" style="padding:.8rem 1.1rem">
   ${sr(T('Sig. strikes landed', 'Golpes sig. acertados'), f1(ja.sl), f1(jb.sl), ja.sl, jb.sl)}${sr(T('Takedowns', 'Quedas'), f1(ja.td), f1(jb.td), ja.td, jb.td)}${sr(T('Knockdowns', 'Knockdowns'), f1(ja.kd), f1(jb.kd), ja.kd, jb.kd)}${sr(T('Control time share', 'Fração de controle'), pc(ja.ctl), pc(jb.ctl), ja.ctl, jb.ctl)}</div>`;
   const ma = meth(oa, ob, G), mb = meth(ob, oa, G), nm = {KO:'KO/TKO', SUB:T('Submission', 'Finalização'), DEC:T('Decision', 'Decisão'), OTH:T('Other', 'Outro')};
-  h += `<h2>${T('How it ends', 'Como termina')}</h2><div class="card" style="padding:.8rem 1.1rem">${KS.filter(k => k !== 'OTH').map(k => sr(nm[k], pc(p * ma[k]), pc((1 - p) * mb[k]), p * ma[k], (1 - p) * mb[k])).join('')}
-  <p class="mu sm">${T('Goes the distance', 'Vai para a decisão')}: ${pc(p * ma.DEC + (1 - p) * mb.DEC)}.</p></div>
-  <details class="card"><summary>${T('Method', 'Método')}</summary><p>${T('Win probability comes from the rating model (WHR) with uncertainty. Method probabilities combine how each fighter wins with how the opponent loses (naive Bayes, smoothed toward the UFC average).', 'A probabilidade vem do modelo de notas (WHR) com incerteza. As chances por método combinam como cada lutador vence com como o rival perde (Bayes ingênuo, suavizado para a média do UFC).')}</p></details>`;
+  // Modelo de Sobrevivência em Tempo Discreto (R1..nRds)
+  const baseHz = [0.165, 0.125, 0.095, 0.085, 0.080], envMult = env === 'apex' ? 1.08 : 1.0;
+  const fA0 = Math.min(.92, ma.KO + ma.SUB), fB0 = Math.min(.92, mb.KO + mb.SUB);
+  let surv = 1.0, rdProbs = [], totFinA = 0, totFinB = 0;
+  for (let r = 0; r < nRds; r++) {
+    const stModA = r >= 2 ? Math.pow(stA, r - 1) : 1.0, stModB = r >= 2 ? Math.pow(stB, r - 1) : 1.0;
+    const hA = Math.min(.38, baseHz[r] * envMult * (fA0 / .52) * p * stModA);
+    const hB = Math.min(.38, baseHz[r] * envMult * (fB0 / .52) * (1 - p) * stModB);
+    const pFinA = surv * hA, pFinB = surv * hB;
+    totFinA += pFinA; totFinB += pFinB;
+    rdProbs.push([r + 1, pFinA, pFinB, surv]);
+    surv = Math.max(0.05, surv * (1 - hA - hB));
+  }
+  const koShA = (ma.KO + ma.SUB) > 0 ? ma.KO / (ma.KO + ma.SUB) : .6, koShB = (mb.KO + mb.SUB) > 0 ? mb.KO / (mb.KO + mb.SUB) : .6;
+  const decShA = (p - totFinA) > 0 ? (p - totFinA) : surv * p, decShB = Math.max(0, surv - decShA);
+  const mA_adj = {KO: totFinA * koShA, SUB: totFinA * (1 - koShA), DEC: decShA};
+  const mB_adj = {KO: totFinB * koShB, SUB: totFinB * (1 - koShB), DEC: decShB};
+  h += `<h2>${T(`How it ends & Survival Curve (${nRds} Rounds)`, `Como termina & Curva de Sobrevivência (${nRds} Rounds)`)}</h2><div class="card" style="padding:.8rem 1.1rem">${['KO', 'SUB', 'DEC'].map(k => sr(nm[k], pc(mA_adj[k]), pc(mB_adj[k]), mA_adj[k], mB_adj[k])).join('')}
+  <div style="margin-top:.7rem;border-top:1px solid var(--ln);padding-top:.55rem"><b>⏱️ ${T('Round-by-Round Finish Hazard (KO/Sub)', 'Risco de Nocaute/Finalização Round a Round')}</b>
+  ${rdProbs.map(([r, pa, pb]) => sr(`Round ${r}`, pc(pa), pc(pb), pa, pb)).join('')}</div>
+  <p class="mu sm">${T('Goes to the judges', 'Vai para os juízes (Decisão)')}: <b>${pc(surv)}</b>.${nRds === 5 ? ` ${T(`5-Round Championship shift vs 3 Rounds: ${esc(A.name)} ${pc(p3)} → ${pc(p)}.`, `Efeito 5 Rounds vs 3 Rounds: ${esc(A.name)} ${pc(p3)} → ${pc(p)}.`)}` : ''}</p></div>
+  <details class="card"><summary>${T('Method', 'Método')}</summary><p>${T('Win probability comes from the rating model (WHR) with uncertainty and stamina adjustment for 5-round fights. Round-by-round finish probabilities follow a discrete-time survival hazard model.', 'A probabilidade vem do modelo de notas (WHR) com incerteza e ajuste de retenção de cardio para 5 rounds. As chances round a round seguem um modelo de sobrevivência em tempo discreto.')}</p></details>`;
   return h;
 }
 
@@ -1968,15 +2024,17 @@ function mainDiv(id) {
 }
 
 function vSim(a, b) {
-  const q = S.sim; if (a) q.a = mid(a); if (b) q.b = mid(b); if (!q.env) q.env = 'std';
+  const q = S.sim; if (a) q.a = mid(a); if (b) q.b = mid(b); if (!q.env) q.env = 'std'; if (!q.rds) q.rds = 3;
   const divs = [...new Set(S.fg.map(f => f.div))].sort();
   M(`<h1>${T('Simulator', 'Simulador')}</h1><div class="ctl"><label>${T('Mode', 'Modo')}<select id="sm"><option value="cur">${T('Current form (now)', 'Momento atual')}</option><option value="peak">${T('Career peak (all-time)', 'Pico da carreira (histórico)')}</option></select></label>
   <label>${T('Rating scope', 'Escopo da nota')}<select id="sd"><option value="ALL">${T('General (all fights)', 'Geral (todas as lutas)')}</option>${divs.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
+  <label>${T('Scheduled Rounds', 'Duração / Rounds')}<select id="srds"><option value="3">${T('3 Rounds (15 min)', '3 Rounds (15 min)')}</option><option value="5">${T('5 Rounds (25 min — Title / Main)', '5 Rounds (25 min — Cinturão / Main)')}</option></select></label>
   <label>${T('Cage / Environment', 'Octógono / Ambiente')}<select id="se"><option value="std">${T('Standard 30ft Octagon', 'Octógono Padrão (30 pés)')}</option><option value="apex">${T('Apex 25ft Cage (-30% area)', 'Octógono Apex (25 pés, -30% área)')}</option><option value="alt">${T('High Altitude (>1,500m)', 'Altitude Elevada (>1.500m)')}</option></select></label></div>${pick(q, 'a')}<div class="acts" style="justify-content:center;margin:.2rem 0"><button id="swp" type="button">⇄ ${T('Swap A / B', 'Inverter A / B')}</button></div>${pick(q, 'b')}<div id="out"></div>`);
-  $('#sm').value = q.m; $('#sd').value = q.d; $('#se').value = q.env;
+  $('#sm').value = q.m; $('#sd').value = q.d; $('#se').value = q.env; $('#srds').value = String(q.rds);
   $('#sm').onchange = e => { q.m = e.target.value; vSim(); };
   $('#sd').onchange = e => { q.d = e.target.value; vSim(); };
   $('#se').onchange = e => { q.env = e.target.value; vSim(); };
+  $('#srds').onchange = e => { q.rds = +e.target.value; vSim(); };
   $('#swp').onclick = () => { const t = q.a; q.a = q.b; q.b = t; vSim(); };
   $('#out').innerHTML = simOut(q);
   const sb = $('#shr'); if (sb) sb.onclick = shareCard;

@@ -38,13 +38,26 @@ KEYS = ("ko", "sub", "dec", "oth")
 # ---------- utilitários ----------
 def num(v):
     """'34 of 71' -> 34.0 ; '0' -> 0.0 ; '---' -> 0.0"""
-    m = re.match(r"\s*(\d+(?:\.\d+)?)", str(v if v is not None else ""))
-    return float(m.group(1)) if m else 0.0
+    if not v:
+        return 0.0
+    s = str(v).strip().partition(" ")[0].rstrip("%")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
 
 
 def seconds(v):
-    m = re.match(r"^\s*(\d+):(\d+)\s*$", str(v if v is not None else ""))
-    return int(m.group(1)) * 60 + int(m.group(2)) if m else 0
+    if not v:
+        return 0
+    s = str(v).strip()
+    if ":" not in s:
+        return 0
+    a, _, b = s.partition(":")
+    try:
+        return int(a) * 60 + int(b)
+    except ValueError:
+        return 0
 
 
 FMT_RE = re.compile(r"\((\d+(?:-\d+)+)\)")
@@ -225,7 +238,290 @@ def division_profile(e):
     return cur, main, divs
 
 
-# ---------- 2) DLI: dano, letalidade, resistência de queixo e ameaça no solo ----------
+# ---------- 2b) MMA-RAPM (Ridge Gauss-Seidel Ajustado por Oponente + Tempo em Pé Limpo) ----------
+DIV_WEIGHT_ORDER = [
+    "Women's Strawweight", "Women's Flyweight", "Women's Bantamweight", "Women's Featherweight",
+    "Flyweight", "Bantamweight", "Featherweight", "Lightweight", "Welterweight",
+    "Middleweight", "Light Heavyweight", "Heavyweight"
+]
+DIV_IDX = {d: idx for idx, d in enumerate(DIV_WEIGHT_ORDER)}
+W_FEMALE = {d for d in DIV_WEIGHT_ORDER if d.startswith("Women")}
+
+
+def _days_since(d_str, ref_str="2026-11-15"):
+    try:
+        y1, m1, d1 = (int(x) for x in d_str[:10].split("-"))
+        y2, m2, d2 = (int(x) for x in ref_str[:10].split("-"))
+        return max(0, (y2 - y1) * 365 + (m2 - m1) * 30 + (d2 - d1))
+    except Exception:
+        return 0
+
+
+def run_rapm_and_context(fights):
+    """Calcula:
+    1) OPA™ (MMA-RAPM via Gauss-Seidel com meia-vida de 3,0 anos e Tempo em Pé Limpo):
+       - opa_s : ataque em pé ajustado pela defesa dos rivais (golpes/min em pé limpo acima do esperado)
+       - opa_d : defesa em pé ajustada pelo ataque dos rivais (golpes/min evitados)
+       - opa_g : pressão de wrestling/controle por 15 min ajustada pela defesa dos rivais
+       - opa_td: neutralização de grappling ajustada pelo wrestling dos rivais
+       - raw_s : ritmo bruto em pé limpo (golpes em pé / min em pé)
+    2) Cardio Livre de Viés de Estado (stam):
+       - Desconta a fração do round gasta controlado por baixo no solo antes de comparar R3+ vs R1.
+    3) Sobrevivência Round a Round (hazard rates R1..R5 de KO e SUB) e Mudanças de Peso (Subir vs Descer).
+    """
+    max_dt = max((f.get("date") or "2026-11-15") for f in fights) if fights else "2026-11-15"
+    bouts_str = []
+    bouts_grp = []
+    div_str_sum = defaultdict(lambda: [0.0, 0.0])
+    div_grp_sum = defaultdict(lambda: [0.0, 0.0])
+    raw_stand = defaultdict(lambda: [0.0, 0.0])  # [weighted_str, weighted_min]
+    stamina_acc = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])  # [r1_out, n1, r3_out, n3]
+
+    # Sobrevivência por round (R1..R5): [expostos, KOs, SUBs]
+    rd_haz = [[0, 0, 0] for _ in range(5)]
+    # Histórico longitudinal de categoria e KO
+    last_div = {}
+    wt_move = {}
+    wt_jumps = {
+        "up": {"n": 0, "w": 0, "ko_w": 0, "ko_l": 0},
+        "down": {"n": 0, "w": 0, "ko_w": 0, "ko_l": 0},
+    }
+
+    for f in fights:
+        dt = f.get("date") or max_dt
+        dv = f.get("div") or "Outros"
+        kind, _ = klass(f.get("method"))
+        try:
+            end_rd = int(f.get("round") or 0)
+        except ValueError:
+            end_rd = 0
+        if end_rd >= 1 and f.get("res") in ("a", "b", "draw"):
+            max_r = min(5, end_rd)
+            for r_i in range(max_r):
+                rd_haz[r_i][0] += 1
+            if f.get("res") in ("a", "b") and 1 <= end_rd <= 5:
+                if kind == "ko":
+                    rd_haz[end_rd - 1][1] += 1
+                elif kind == "sub":
+                    rd_haz[end_rd - 1][2] += 1
+
+        # Mudança de categoria (apenas entre categorias oficiais do mesmo gênero)
+        if dv in DIV_IDX and f.get("res") in ("a", "b", "draw"):
+            cur_idx = DIV_IDX[dv]
+            for side in ("a", "b"):
+                fid = f[side]["id"]
+                prev_dv = last_div.get(fid)
+                if prev_dv and prev_dv != dv and (prev_dv in W_FEMALE) == (dv in W_FEMALE):
+                    p_idx = DIV_IDX[prev_dv]
+                    direction = "up" if cur_idx > p_idx else "down"
+                    wt_move[fid] = [1 if direction == "up" else -1, prev_dv, dv, dt]
+                    st_j = wt_jumps[direction]
+                    st_j["n"] += 1
+                    if f["res"] == side:
+                        st_j["w"] += 1
+                        if kind == "ko":
+                            st_j["ko_w"] += 1
+                    elif f["res"] in ("a", "b") and kind == "ko":
+                        st_j["ko_l"] += 1
+                last_div[fid] = dv
+
+        T = f.get("totals")
+        if not T or not T.get("a") or not T.get("b"):
+            continue
+        mn = fight_minutes(f)
+        if mn < 0.5:
+            continue
+        G = f.get("sig") or {}
+        ca = seconds(T["a"].get("Ctrl")) / 60.0
+        cb = seconds(T["b"].get("Ctrl")) / 60.0
+        t_stand = max(0.5, mn - 0.85 * (ca + cb))
+        # Decaimento exponencial com meia-vida de 3,0 anos (1095 dias)
+        decay = 2.0 ** (-_days_since(dt, max_dt) / 1095.0)
+        w_str = t_stand * decay
+        w_grp = mn * decay
+
+        ia, ib = f["a"]["id"], f["b"]["id"]
+        for me, op, uid, oid in (("a", "b", ia, ib), ("b", "a", ib, ia)):
+            sl_tot = num(T[me].get("Sig. str."))
+            gnd_s = num((G.get(me) or {}).get("Ground"))
+            stand_s = max(0.0, sl_tot - gnd_s) if G.get(me) else sl_tot * 0.82
+            rate_s = stand_s / t_stand
+            bouts_str.append((uid, oid, dv, rate_s, w_str))
+            div_str_sum[dv][0] += rate_s * w_str
+            div_str_sum[dv][1] += w_str
+            raw_stand[uid][0] += stand_s * decay
+            raw_stand[uid][1] += t_stand * decay
+
+            td_l = num(T[me].get("Td"))
+            c_me = ca if me == "a" else cb
+            rate_g = 15.0 * (td_l + 0.45 * c_me) / mn
+            bouts_grp.append((uid, oid, dv, rate_g, w_grp))
+            div_grp_sum[dv][0] += rate_g * w_grp
+            div_grp_sum[dv][1] += w_grp
+
+        # Cardio livre de viés de estado (descontando tempo controlado no solo em cada round)
+        rp = [(r["a"], r["b"]) for r in ((f.get("rounds") or {}).get("totals") or []) if r.get("a") and r.get("b")]
+        done = rp if kind == "dec" else rp[:-1]
+        if len(done) >= 3:
+            for s_idx, uid in ((0, ia), (1, ib)):
+                o_idx = 1 - s_idx
+                c_op_1 = min(0.85, seconds(done[0][o_idx].get("Ctrl")) / 300.0)
+                out_1 = (num(done[0][s_idx].get("Sig. str.")) + 3.0 * num(done[0][s_idx].get("Td")) + 2.0 * num(done[0][s_idx].get("Sub. att"))) / max(0.25, 1.0 - 0.75 * c_op_1)
+                late_outs = []
+                for r_pair in done[2:]:
+                    c_op_r = min(0.85, seconds(r_pair[o_idx].get("Ctrl")) / 300.0)
+                    late_outs.append((num(r_pair[s_idx].get("Sig. str.")) + 3.0 * num(r_pair[s_idx].get("Td")) + 2.0 * num(r_pair[s_idx].get("Sub. att"))) / max(0.25, 1.0 - 0.75 * c_op_r))
+                sa_acc = stamina_acc[uid]
+                sa_acc[0] += out_1 * decay
+                sa_acc[1] += decay
+                sa_acc[2] += sum(late_outs) * decay
+                sa_acc[3] += len(late_outs) * decay
+
+    def _solve_ridge(bouts, div_sums, lam):
+        mu_div = {d: (s[0] / s[1] if s[1] else 3.5) for d, s in div_sums.items()}
+        by_att = defaultdict(list)
+        by_def = defaultdict(list)
+        w_att = defaultdict(float)
+        w_def = defaultdict(float)
+        for u, v, dv, y, w in bouts:
+            r0 = y - mu_div.get(dv, 3.5)
+            by_att[u].append((v, r0, w))
+            by_def[v].append((u, r0, w))
+            w_att[u] += w
+            w_def[v] += w
+        alpha = defaultdict(float)
+        beta = defaultdict(float)
+        for _ in range(7):
+            for u, items in by_att.items():
+                alpha[u] = sum(w * (r0 + beta[v]) for v, r0, w in items) / (w_att[u] + lam)
+            for v, items in by_def.items():
+                beta[v] = sum(w * (alpha[u] - r0) for u, r0, w in items) / (w_def[v] + lam)
+        return alpha, beta, mu_div
+
+    a_str, b_str, mu_s = _solve_ridge(bouts_str, div_str_sum, lam=22.0)
+    a_grp, b_grp, mu_g = _solve_ridge(bouts_grp, div_grp_sum, lam=25.0)
+
+    rapm_out = {}
+    all_uids = set(a_str) | set(a_grp) | set(raw_stand)
+    for uid in all_uids:
+        rs = raw_stand[uid]
+        raw_rate = rs[0] / rs[1] if rs[1] > 0 else 0.0
+        sa_v = stamina_acc[uid]
+        if sa_v[1] > 0 and sa_v[3] > 0 and sa_v[0] > 0:
+            raw_ratio = (sa_v[2] / sa_v[3]) / (sa_v[0] / sa_v[1])
+            stam = (raw_ratio * sa_v[3] + 1.0 * 3.5) / (sa_v[3] + 3.5)
+        else:
+            stam = 1.0
+        rapm_out[uid] = {
+            "opa_s": round(a_str[uid], 2),
+            "opa_d": round(b_str[uid], 2),
+            "opa_g": round(a_grp[uid], 2),
+            "opa_td": round(b_grp[uid], 2),
+            "raw_s": round(raw_rate, 2),
+            "stam": round(max(0.55, min(1.45, stam)), 3),
+        }
+
+    haz_summary = {
+        "ko": [round(x[1] / max(x[0], 1), 4) for x in rd_haz],
+        "sub": [round(x[2] / max(x[0], 1), 4) for x in rd_haz],
+    }
+    wj_summary = {}
+    for k, v in wt_jumps.items():
+        n = max(v["n"], 1)
+        wj_summary[k] = {
+            "n": v["n"],
+            "win_pct": round(v["w"] / n, 4),
+            "ko_for_pct": round(v["ko_w"] / n, 4),
+            "ko_against_pct": round(v["ko_l"] / n, 4),
+        }
+    return rapm_out, wt_move, haz_summary, wj_summary
+
+
+def run_whr_py(fights):
+    """Whole-History Rating (Coulom, 2008) em Python puro com incerteza dinâmica (Glicko/WHR SD)."""
+    U = 400.0 / math.log(10.0)
+    w2 = (80.0 / U) ** 2
+    tau2 = 6.25
+    N = defaultdict(list)
+    for f in fights:
+        if f.get("res") == "nc":
+            continue
+        ia, ib = f["a"]["id"], f["b"]["id"]
+        if ia == ib:
+            continue
+        try:
+            y, mo, da = (int(x) for x in f["date"][:10].split("-"))
+            t = y + (mo - 1) / 12.0 + da / 365.25
+        except Exception:
+            t = 2020.0
+        kind, sub = klass(f.get("method"))
+        dom = 1.0 if kind in ("ko", "sub") else (0.7 if sub == "split" else 0.8 if sub == "majority" else 0.9)
+        sa = 0.5 if f["res"] == "draw" else (dom if f["res"] == "a" else 1.0 - dom)
+        m = 1.25 if is_real_title(f) else 1.0
+        na = {"t": t, "r": 0.0, "vr": 1.0, "gs": [], "dt": f["date"]}
+        nb = {"t": t, "r": 0.0, "vr": 1.0, "gs": [], "dt": f["date"]}
+        na["gs"].append((nb, sa, m))
+        nb["gs"].append((na, 1.0 - sa, m))
+        N[ia].append(na)
+        N[ib].append(nb)
+
+    chains = list(N.values())
+    for _ in range(7):
+        mx = 0.0
+        for a in chains:
+            n = len(a)
+            d = [0.0] * n
+            e = [0.0] * n
+            g = [0.0] * n
+            for i, x in enumerate(a):
+                gi = di = 0.0
+                xr = x["r"]
+                for o, s, m in x["gs"]:
+                    diff = max(-20.0, min(20.0, o["r"] - xr))
+                    p = 1.0 / (1.0 + math.exp(diff))
+                    gi += m * (s - p)
+                    di += m * p * (1.0 - p)
+                if i == 0:
+                    gi -= xr / tau2
+                    di += 1.0 / tau2
+                else:
+                    v = w2 * max(x["t"] - a[i - 1]["t"], 0.05)
+                    gi -= (xr - a[i - 1]["r"]) / v
+                    di += 1.0 / v
+                    e[i - 1] = -1.0 / v
+                if i < n - 1:
+                    v = w2 * max(a[i + 1]["t"] - x["t"], 0.05)
+                    gi += (a[i + 1]["r"] - xr) / v
+                    di += 1.0 / v
+                d[i] = di
+                g[i] = gi
+            for i in range(1, n):
+                fac = e[i - 1] / d[i - 1]
+                d[i] -= fac * e[i - 1]
+                g[i] -= fac * g[i - 1]
+            for i in range(n):
+                a[i]["vr"] = 1.0 / max(d[i], 1e-6)
+            g[n - 1] /= d[n - 1]
+            for i in range(n - 2, -1, -1):
+                g[i] = (g[i] - e[i] * g[i + 1]) / d[i]
+            for i in range(n):
+                st = max(-2.0, min(2.0, g[i]))
+                a[i]["r"] += st
+                if abs(st) > mx:
+                    mx = abs(st)
+        if mx < 2e-3:
+            break
+
+    out = {}
+    for fid, a in N.items():
+        last = a[-1]
+        pk = max(x["r"] for x in a)
+        inact_yrs = _days_since(last["dt"]) / 365.25
+        tot_var = last["vr"] + w2 * max(0.0, inact_yrs)
+        out[fid] = (round(1500.0 + U * last["r"], 1), round(1500.0 + U * pk, 1), round(U * math.sqrt(tot_var), 1))
+    return out
+
+
 def run_damage(fights):
     acc = defaultdict(lambda: {"sl": 0.0, "sa": 0.0, "kd": 0.0, "ka": 0.0, "fs": 0,
                                "ha": 0.0, "gs": 0.0, "sb": 0.0, "ct": 0.0, "kol": 0, "last_ko": ""})
@@ -300,7 +596,7 @@ def run_benchmarks(fights):
 # ---------- 4) checagem de decisões: o resultado oficial bate com os números? ----------
 DEC_NAMES = ["sig", "tot", "td", "kd", "ctrl", "sub", "led_sig", "led_ctrl"]
 CLS_CUTS = (0.60, 0.35, 0.15)     # P(resultado oficial | números): >=.60 coerente, >=.35 apertada, >=.15 questionável, abaixo disso: possível roubo
-FOLDS = 5
+FOLDS = 3
 
 
 def sgn(x):
@@ -365,34 +661,45 @@ def inv(M):
     return [row[n:] for row in A]
 
 
-def fit_lr(X, y, lam=1.0):
+def fit_lr(X, y, lam=1.0, max_iter=3):
     """Regressão logística ridge (Newton), variáveis padronizadas. Sem dependências."""
     n, k = len(X), len(X[0])
     sd = [math.sqrt(sum(x[j] ** 2 for x in X) / n) or 1.0 for j in range(k)]
     Z = [[x[j] / sd[j] for j in range(k)] for x in X]
     b, H = [0.0] * k, None
-    for _ in range(30):
-        g, H = [0.0] * k, [[0.0] * k for _ in range(k)]
+    exp = math.exp
+    rng_k = range(k)
+    for _ in range(max_iter):
+        g = [0.0] * k
+        H = [[0.0] * k for _ in rng_k]
         for z, t in zip(Z, y):
-            s = max(-30.0, min(30.0, sum(bj * zj for bj, zj in zip(b, z))))
-            p = 1.0 / (1.0 + math.exp(-s))
+            s = sum(bj * zj for bj, zj in zip(b, z))
+            if s > 30.0:
+                s = 30.0
+            elif s < -30.0:
+                s = -30.0
+            p = 1.0 / (1.0 + exp(-s))
             w = p * (1.0 - p)
-            for j in range(k):
-                g[j] += (t - p) * z[j]
+            err = t - p
+            for j in rng_k:
+                zj = z[j]
+                g[j] += err * zj
+                wz = w * zj
+                Hj = H[j]
                 for l in range(j + 1):
-                    H[j][l] += w * z[j] * z[l]
-        for j in range(k):
+                    Hj[l] += wz * z[l]
+        for j in rng_k:
             g[j] -= lam * b[j]
             H[j][j] += lam
             for l in range(j):
                 H[l][j] = H[j][l]
         Hi = inv(H)
-        d = [sum(Hi[j][l] * g[l] for l in range(k)) for j in range(k)]
+        d = [sum(Hi[j][l] * g[l] for l in rng_k) for j in rng_k]
         b = [bj + dj for bj, dj in zip(b, d)]
-        if max(abs(v) for v in d) < 1e-6:
+        if max(abs(v) for v in d) < 5e-4:
             break
     Hi = inv(H)
-    return {"b": b, "sd": sd, "se": [math.sqrt(max(Hi[j][j], 0.0)) for j in range(k)]}
+    return {"b": b, "sd": sd, "se": [math.sqrt(max(Hi[j][j], 0.0)) for j in rng_k]}
 
 
 def lr_logit(m, x):
@@ -407,15 +714,13 @@ DEC_GROUPS = {"strike": [0, 1, 6], "grap": [2, 4, 7], "sub": [5], "kd": [3]}
 
 
 def cv_logloss(rows, drop=()):
-    """Log-loss da validação cruzada sem as variáveis em `drop` (importância por grupo)."""
+    """Log-loss sem as variáveis em `drop` (importância por grupo)."""
     keep = [j for j in range(len(DEC_NAMES)) if j not in drop]
+    m = fit_lr([[r["x"][j] for j in keep] for r in rows], [r["y"] for r in rows], max_iter=4)
     tot = 0.0
-    for k in range(FOLDS):
-        tr = [r for r in rows if r["fold"] != k]
-        m = fit_lr([[r["x"][j] for j in keep] for r in tr], [r["y"] for r in tr])
-        for r in (r for r in rows if r["fold"] == k):
-            p = sig_(lr_logit(m, [r["x"][j] for j in keep]))
-            tot -= math.log(max(p if r["y"] == 1.0 else 1.0 - p, 1e-6))
+    for r in rows:
+        p = sig_(lr_logit(m, [r["x"][j] for j in keep]))
+        tot -= math.log(max(p if r["y"] == 1.0 else 1.0 - p, 1e-6))
     return tot / len(rows)
 
 
@@ -556,8 +861,15 @@ CARD_W = {
 
 
 def att_of(v):
-    m = re.search(r"of\s+(\d+)", str(v if v is not None else ""))
-    return float(m.group(1)) if m else 0.0
+    if not v:
+        return 0.0
+    s = str(v)
+    if "of " not in s:
+        return 0.0
+    try:
+        return float(s.partition("of ")[2].strip().partition(" ")[0])
+    except ValueError:
+        return 0.0
 
 
 def z_to_fifa_rating(z, sos_adj=0.0, low=48.0, high=98.0, k=0.72):
@@ -619,14 +931,19 @@ def run_cards(fights, fighters):
         wins = sum(f["w"])
         ko_rate = (f["w"][0] + 0.8) / (wins + 6)
         sub_rate = (f["w"][1] + 0.6) / (wins + 6)
-        
+        opa_s = f.get("opa_s", 0.0)
+        opa_d = f.get("opa_d", 0.0)
+        opa_g = f.get("opa_g", 0.0)
+        opa_td = f.get("opa_td", 0.0)
+        stam = f.get("stam", ratio)
+
         met[i] = {
-            "tro": [sh(x["sl"], g_sl), card(x["sl"], x["sat"], g_acc, 70), f["ks"]],
-            "def": [1 - card(x["sa"], x["oat"], g_acc, 70), -sh(x["sa"], g_sl), 1 - card(x["otl"], x["ota"], g_ta, 10), -f["kas"]],
-            "lut": [15 * sh(x["tl"], g_tl), card(x["tl"], x["ta"], g_ta, 10), sh(x["ct"] / 60.0, g_ct)],
+            "tro": [sh(x["sl"], g_sl) + 0.65 * opa_s, card(x["sl"], x["sat"], g_acc, 70), f["ks"]],
+            "def": [1 - card(x["sa"], x["oat"], g_acc, 70) + 0.04 * opa_d, -sh(x["sa"], g_sl) + 0.55 * opa_d, 1 - card(x["otl"], x["ota"], g_ta, 10) + 0.03 * opa_td, -f["kas"]],
+            "lut": [15 * sh(x["tl"], g_tl) + 0.45 * opa_g, card(x["tl"], x["ta"], g_ta, 10), sh(x["ct"] / 60.0, g_ct)],
             "sub": [15 * sh(x["sb"], g_sb), sub_rate],
             "peg": [f["ks"], ko_rate],
-            "car": [ratio, avg_dur],
+            "car": [0.65 * stam + 0.35 * ratio, avg_dur],
         }
 
     groups = defaultdict(list)
@@ -875,16 +1192,21 @@ def main():
         return 0
     pre_elo = {}
     elo = run_elo(fights, pre_elo)
+    whr_map = run_whr_py(fights)
+    rapm_map, wt_move, haz_summary, wj_summary = run_rapm_and_context(fights)
     dmg, p0, g_gt = run_damage(fights)
     bench = run_benchmarks(fights)
     k100_lg = 100 * p0
     fighters = {}
     for i, e in elo.items():
         d = dmg.get(i)
+        rp = rapm_map.get(i, {})
+        whr_cur, whr_pk, whr_sd = whr_map.get(i, (round(e["r"], 1), round(e["pk"], 1), 110.0))
         wins = sum(e["w"])
         top3 = sorted(e["wins_opp"], reverse=True)[:3]
         cur_div, main_div, all_divs = division_profile(e)
         row = {"n": e["n"], "e": round(e["r"], 1), "pk": round(e["pk"], 1),
+               "whr": whr_cur, "whr_pk": whr_pk, "whr_sd": whr_sd,
                "opp": r1(sum(e["opp"]) / len(e["opp"])) if e["opp"] else None,
                "qw": r1(sum(top3) / len(top3)) if top3 else None,
                "w": e["w"], "l": e["l"], "d": e["d"],
@@ -892,6 +1214,10 @@ def main():
                "last": e["last"],
                "div": cur_div, "div_main": main_div, "divs": all_divs,
                "fin": round((e["w"][0] + e["w"][1]) / wins, 3) if wins else None}
+        if rp:
+            row.update(rp)
+        if i in wt_move:
+            row["wt_mv"] = wt_move[i]
         if d and d["fs"]:
             sl, sa, kd, ka = d["sl"], d["sa"], d["kd"], d["ka"]
             ks = 100 * (kd + p0 * PRIOR_STRIKES) / (sl + PRIOR_STRIKES)
@@ -899,21 +1225,25 @@ def main():
             ss = (sl + PRIOR_STRIKES) / (kd + p0 * PRIOR_STRIKES) if (kd + p0 * PRIOR_STRIKES) else None
             ct_m = d["ct"] / 60.0
             gt = ((d["gs"] + 4.0 * d["sb"]) + 3.0 * g_gt) / (ct_m + 3.0)
-            # Índice de Resistência de Queixo (0-100, média ~65): combina KDs sofridos + KOs sofridos por golpe absorvido
-            vuln = (kas / (k100_lg or 0.27)) * 0.65 + ((d["kol"] + 0.4) / (d["fs"] + 4.0) / 0.10) * 0.35
+            # Índice de Resistência de Queixo (0-100, média ~65): combina KDs sofridos + KOs sofridos por golpe absorvido + recência pós-KO
+            ko_rec_pen = 0.35 * math.exp(-_days_since(d["last_ko"]) / 210.0) if d.get("last_ko") else 0.0
+            vuln = (kas / (k100_lg or 0.27)) * 0.60 + ((d["kol"] + 0.4) / (d["fs"] + 4.0) / 0.10) * 0.35 + ko_rec_pen
             chin = int(round(max(20.0, min(98.0, 100.0 / (1.0 + 0.55 * vuln)))))
             row.update({"fs": d["fs"], "sl": int(sl), "sa": int(sa), "kd": int(kd), "ka": int(ka),
                         "k100": r1(100 * kd / sl, 2) if sl else None, "spk": r1(sl / kd, 0) if kd else None,
                         "ks": round(ks, 3), "ss": r1(ss, 0), "kas": round(kas, 3),
                         "dli": round(100 * ks / k100_lg) if k100_lg else None,
                         "gt": round(gt, 2), "chin": chin})
+            if d.get("last_ko"):
+                row["last_ko"] = d["last_ko"]
         fighters[i] = row
     out = {
-        "v": 2,
+        "v": 3,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "params": {"base": BASE, "k": [K_NEW, K_MID, K_VET], "title": TITLE_MULT, "prior_strikes": PRIOR_STRIKES,
                    "ko": KO_MULT, "sub": SUB_MULT, "dec": DEC_MULT},
-        "league": {"k100": round(k100_lg, 3), "spk": round(1 / p0, 1) if p0 else None},
+        "league": {"k100": round(k100_lg, 3), "spk": round(1 / p0, 1) if p0 else None,
+                   "hazards": haz_summary, "weight_jumps": wj_summary},
         "divisions": bench,
         "fighters": fighters,
     }
