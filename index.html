@@ -559,8 +559,14 @@ const hash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCo
 
 function feat(X, id, date) {
   const p = S.F.get(id) || {}, t = Date.parse(date), b = Date.parse(p.DOB), rc = inch(p.Reach), ht = inch(p.Height), k = 20;
+  let ageVal = null;
+  if (!isNaN(b)) {
+    const rawAge = (t - b) / YR, dv = X.div || '';
+    const prime = /light heavy|heavy/i.test(dv) ? 33.0 : /lightweight|welter|middle/i.test(dv) ? 30.5 : 29.5;
+    ageVal = (rawAge - prime + 30.0) / 10;
+  }
   return [
-    (X.elo - 1500) / 400, Math.log(1 + X.n), isNaN(b) ? null : (t - b) / YR / 10,
+    (X.elo - 1500) / 400, Math.log(1 + X.n), ageVal,
     rc == null ? null : rc / 10, ht == null ? null : ht / 10, /south/i.test(p.STANCE || '') ? 1 : 0,
     X.last ? Math.min(2, (t - X.last) / YR) : null,
     X.rec.length ? X.rec.slice(-3).reduce((s, v) => s + v, 0) / Math.min(3, X.rec.length) : .5,
@@ -584,7 +590,7 @@ function pre() {
     const s = f.res === 'draw' ? .5 : f.res === 'a' ? 1 : 0, e = 1 / (1 + 10 ** ((B.elo - A.elo) / 400)), m = mins(f), t = Date.parse(f.date);
     A.elo += 28 * (s - e); B.elo -= 28 * (s - e);
     for (const [X, sd, od, r] of [[A, 'a', 'b', s], [B, 'b', 'a', 1 - s]]) {
-      X.n++; X.last = t; X.rec.push(r);
+      X.n++; X.last = t; X.rec.push(r); X.div = f.div;
       if (f.totals && m) {
         X.min += m; X.sl += num(f.totals[sd]['Sig. str.']); X.al += num(f.totals[od]['Sig. str.']); X.td += num(f.totals[sd].Td);
       }
@@ -1060,7 +1066,7 @@ function agePanel() {
 
 /* ---------- Ranking oficial do UFC, Bônus da Noite, fator casa e altitude ---------- */
 const divKey = t => NRM(t).replace(/['’]/g, '').replace(/\bwomens\b/g, 'women').replace(/\b(ufc|interim|title|bout|championship|mens)\b/g, '').replace(/\s+/g, ' ').trim();
-const ORIG = {TUF: 'The Ultimate Fighter', DWCS: "Dana White's Contender Series", WEC: 'WEC', PRIDE: 'PRIDE', Strikeforce: 'Strikeforce'};
+const ORIG = {TUF: 'The Ultimate Fighter', RTU: 'Road to UFC', DWCS: "Dana White's Contender Series", WEC: 'WEC', PRIDE: 'PRIDE', Strikeforce: 'Strikeforce'};
 const originLabel = p => p && p.origin ? (ORIG[p.origin] || p.origin) : '-';   // só existe quando o evento de estreia prova
 const artsOf = p => (p && Array.isArray(p.base_arts) ? p.base_arts : []).join(', ');
 function tapeExtra(A, B) {
@@ -1528,6 +1534,10 @@ function vHome() {
 
   M(`<h1>${T('UFC Central', 'Central UFC')}</h1>
   <p class="mu sm">${S.ev.length} ${T('events', 'eventos')} · ${S.fg.length.toLocaleString(S.pt ? 'pt-BR' : 'en-US')} ${T('fights', 'lutas')} · ${S.F.size.toLocaleString(S.pt ? 'pt-BR' : 'en-US')} ${T('fighters', 'lutadores')}</p>
+  <div class="card" style="padding:.85rem 1.1rem;display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap;border-left:3px solid var(--gd)">
+    <div><b>🎮 ${T('UFC Lab Games: Secret DNA & Matchmaker Mode', 'Games Súmula UFC: DNA Secreto & Modo Matchmaker')}</b><div class="mu sm">${T('Guess today’s mystery fighter from their tactical radar or build a 5-fight card under a salary cap.', 'Adivinhe o lutador do dia pelo radar tático ou monte um card de 5 lutas sob teto salarial.')}</div></div>
+    <a class="btn" style="background:var(--gd);color:#000" href="#/extras">${T('Play now', 'Jogar agora')}</a>
+  </div>
   ${upHtml}
   <h2>${T('Current UFC Champions', 'Campeões Atuais do UFC')}</h2>
   <div class="chgrid">${champs.map(({dv, r, f}) => r && f ? `<a class="card chc" href="#/fighter/${r.id}">${av(r.id, f.name, 'sm')}<div><div class="chd">${esc(dv)}</div><div class="chn">${esc(f.name)}</div><div class="mu sm">${r.def} ${T('def.', 'def.')} · ${T('since', 'desde')} ${r.start.slice(0, 4)}</div></div></a>` : `<div class="card chc"><span class="ring sm"><span>—</span></span><div><div class="chd">${esc(dv)}</div><div class="mu sm">${T('Vacant', 'Vago')}</div></div></div>`).join('')}</div>
@@ -1854,8 +1864,19 @@ function simOut(q) {
   if (q.a === q.b) return `<p class="empty">${T('Pick two different fighters.', 'Escolha dois lutadores diferentes.')}</p>`;
   const E = getE(q.d), ra = rt(q.a, E, q.m), rb = rt(q.b, E, q.m);
   if (!ra || !rb) return `<p class="empty">${T('At least one fighter has no rating in this scope. Try "General".', 'Pelo menos um lutador não tem nota neste escopo. Tente "Geral".')}</p>`;
-  const s2 = ra.v + rb.v, dm = ra.mu - rb.mu, p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
   const G = league(), oa = agg(q.a, q.m), ob = agg(q.b, q.m), xa = rates(oa, G), xb = rates(ob, G), el = r => Math.round(1500 + U * r.mu), sd = r => Math.round(U * Math.sqrt(r.v));
+  const env = q.env || 'std';
+  let envAdj = 0, envNote = '';
+  if (xa && xb && env === 'apex') {
+    const grA = (xa.td / 3) + xa.ctl * 2 + xa.fin, grB = (xb.td / 3) + xb.ctl * 2 + xb.fin;
+    envAdj = Math.max(-.18, Math.min(.18, (grA - grB) * .06));
+    envNote = T('25ft Apex cage: +finish & takedown pressure.', 'Octógono Apex 25 pés: maior pressão de quedas e finalizações.');
+  } else if (xa && xb && env === 'alt') {
+    const wa = wearStats(q.a), wb = wearStats(q.b), ca = wa ? wa.dr : 0, cb = wb ? wb.dr : 0;
+    envAdj = Math.max(-.15, Math.min(.15, (ca - cb) * .25 + (xa.sl - xb.sl) * .02));
+    envNote = T('High altitude (>1,500m): favors late-round cardio retention.', 'Altitude elevada (>1.500m): favorece retenção de cardio nos rounds finais.');
+  }
+  const s2 = ra.v + rb.v, dm = (ra.mu - rb.mu) + envAdj, p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
   const da = mainDiv(q.a), db = mainDiv(q.b), age = d => { const t = Date.parse(d); return t ? ((Date.now() - t) / YR).toFixed(1) : '-'; };
   let quick = '';
   if (xa && xb) {
@@ -1871,7 +1892,7 @@ function simOut(q) {
       edges.push(T(`${rl} holds a ${Math.abs(ra_i - rb_i)}" reach advantage`, `${rl} tem ${Math.abs(ra_i - rb_i)} pol. a mais de envergadura`));
     }
     const tone = fp >= .7 ? T('Clear favorite', 'Favorito claro') : fp >= .58 ? T('Moderate favorite', 'Favorito moderado') : T('Coin-flip / very close matchup', 'Confronto muito equilibrado');
-    quick = `<div class="card" style="padding:.75rem 1rem;border-left:3px solid var(--gd)"><b>${T('Quick read', 'Leitura rápida')}:</b> ${tone} — <b>${esc(fav)}</b> (${pc(fp)}).${edges.length ? ' ' + T('Key factors:', 'Fatores-chave:') + ' ' + edges.slice(0, 3).join('; ') + '.' : ''}</div>`;
+    quick = `<div class="card" style="padding:.75rem 1rem;border-left:3px solid var(--gd)"><b>${T('Quick read', 'Leitura rápida')}:</b> ${tone} — <b>${esc(fav)}</b> (${pc(fp)}).${edges.length ? ' ' + T('Key factors:', 'Fatores-chave:') + ' ' + edges.slice(0, 3).join('; ') + '.' : ''}${envNote ? ` <span class="tag">${envNote}</span>` : ''}</div>`;
   }
   let h = `<h2>${T('Win probability', 'Probabilidade de vitória')}</h2>${quick}<div class="card" style="padding:1rem 1.1rem"><div class="pb"><i style="flex:${p};background:var(--gd)">${pc(p)}</i><i style="flex:${1 - p};background:var(--cb)">${pc(1 - p)}</i></div>
   <div class="sr"><span style="color:var(--gd)">${esc(A.name)}</span><span></span><span style="color:var(--cb)">${esc(B.name)}</span></div>
@@ -1881,12 +1902,15 @@ function simOut(q) {
   h += `<div class="acts" style="margin-top:.6rem"><button id="shr">${T('Share card', 'Cartão para compartilhar')}</button><a class="btn" href="#/xray/${q.a}/${q.b}">${T('Open in X-Ray', 'Abrir no Raio-X')}</a></div>`;
   h += models(q, p); h += h2hHtml(q);
   if (!xa || !xb) return h + `<p class="empty">${T('Not enough fight stats in the database.', 'Sem estatísticas de luta suficientes na base.')}</p>`;
+  const gta = ((oa.sg.Ground + 4 * oa.sub) + 6) / (oa.ct / 60 + 2), gtb = ((ob.sg.Ground + 4 * ob.sub) + 6) / (ob.ct / 60 + 2);
+  const cha = Math.round(100 / (1 + .45 * (xa.kda / Math.max(15 * G.kd / G.min, .05)))), chb = Math.round(100 / (1 + .45 * (xb.kda / Math.max(15 * G.kd / G.min, .05))));
   h += `<h2>${T('Striking and grappling profile', 'Perfil de trocação e solo')}</h2><div class="card" style="padding:.8rem 1.1rem">
   ${sr(T('Sig. strikes landed / min', 'Golpes sig. acertados / min'), f1(xa.sl), f1(xb.sl), xa.sl, xb.sl)}${sr(T('Sig. strikes absorbed / min', 'Golpes sig. recebidos / min'), f1(xa.ab), f1(xb.ab), xa.ab, xb.ab)}
   ${sr(T('Striking accuracy', 'Precisão de golpes'), pc(xa.acc), pc(xb.acc), xa.acc, xb.acc)}${sr(T('Striking defense', 'Defesa de golpes'), pc(xa.def), pc(xb.def), xa.def, xb.def)}
   ${sr(T('Takedowns / 15 min', 'Quedas / 15 min'), f1(xa.td), f1(xb.td), xa.td, xb.td)}${sr(T('Takedown accuracy', 'Precisão de quedas'), pc(xa.tdacc), pc(xb.tdacc), xa.tdacc, xb.tdacc)}${sr(T('Takedown defense', 'Defesa de quedas'), pc(xa.tddef), pc(xb.tddef), xa.tddef, xb.tddef)}
   ${sr(T('Submission attempts / 15 min', 'Finalizações tentadas / 15 min'), f1(xa.sub), f1(xb.sub), xa.sub, xb.sub)}${sr(T('Knockdowns / 15 min', 'Knockdowns / 15 min'), f1(xa.kd), f1(xb.kd), xa.kd, xb.kd)}
-  ${sr(T('Control time share', 'Fração de controle'), pc(xa.ctl), pc(xb.ctl), xa.ctl, xb.ctl)}${sr(T('Finish rate in wins', 'Taxa de finalização nas vitórias'), pc(xa.fin), pc(xb.fin), xa.fin, xb.fin)}</div>`;
+  ${sr(T('Control time share', 'Fração de controle'), pc(xa.ctl), pc(xb.ctl), xa.ctl, xb.ctl)}${sr(T('Damaging control (Ground threat / min)', 'Controle produtivo (Ameaça no solo / min)'), f1(gta), f1(gtb), gta, gtb)}
+  ${sr(T('Chin durability index (0–100)', 'Índice de resistência de queixo (0–100)'), cha, chb, cha, chb)}${sr(T('Finish rate in wins', 'Taxa de finalização nas vitórias'), pc(xa.fin), pc(xb.fin), xa.fin, xb.fin)}</div>`;
   h += sigHtml(oa, ob, A, B);
   h += roundsSimHtml(q.a, q.b) + wearSimHtml(q.a, q.b);
   const gk = 15 * Math.max(G.kd, 1) / G.min;
@@ -1908,13 +1932,15 @@ function mainDiv(id) {
 }
 
 function vSim(a, b) {
-  const q = S.sim; if (a) q.a = mid(a); if (b) q.b = mid(b);
+  const q = S.sim; if (a) q.a = mid(a); if (b) q.b = mid(b); if (!q.env) q.env = 'std';
   const divs = [...new Set(S.fg.map(f => f.div))].sort();
   M(`<h1>${T('Simulator', 'Simulador')}</h1><div class="ctl"><label>${T('Mode', 'Modo')}<select id="sm"><option value="cur">${T('Current form (now)', 'Momento atual')}</option><option value="peak">${T('Career peak (all-time)', 'Pico da carreira (histórico)')}</option></select></label>
-  <label>${T('Rating scope', 'Escopo da nota')}<select id="sd"><option value="ALL">${T('General (all fights)', 'Geral (todas as lutas)')}</option>${divs.map(d => `<option>${esc(d)}</option>`).join('')}</select></label></div>${pick(q, 'a')}<div class="acts" style="justify-content:center;margin:.2rem 0"><button id="swp" type="button">⇄ ${T('Swap A / B', 'Inverter A / B')}</button></div>${pick(q, 'b')}<div id="out"></div>`);
-  $('#sm').value = q.m; $('#sd').value = q.d;
+  <label>${T('Rating scope', 'Escopo da nota')}<select id="sd"><option value="ALL">${T('General (all fights)', 'Geral (todas as lutas)')}</option>${divs.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
+  <label>${T('Cage / Environment', 'Octógono / Ambiente')}<select id="se"><option value="std">${T('Standard 30ft Octagon', 'Octógono Padrão (30 pés)')}</option><option value="apex">${T('Apex 25ft Cage (-30% area)', 'Octógono Apex (25 pés, -30% área)')}</option><option value="alt">${T('High Altitude (>1,500m)', 'Altitude Elevada (>1.500m)')}</option></select></label></div>${pick(q, 'a')}<div class="acts" style="justify-content:center;margin:.2rem 0"><button id="swp" type="button">⇄ ${T('Swap A / B', 'Inverter A / B')}</button></div>${pick(q, 'b')}<div id="out"></div>`);
+  $('#sm').value = q.m; $('#sd').value = q.d; $('#se').value = q.env;
   $('#sm').onchange = e => { q.m = e.target.value; vSim(); };
   $('#sd').onchange = e => { q.d = e.target.value; vSim(); };
+  $('#se').onchange = e => { q.env = e.target.value; vSim(); };
   $('#swp').onclick = () => { const t = q.a; q.a = q.b; q.b = t; vSim(); };
   $('#out').innerHTML = simOut(q);
   const sb = $('#shr'); if (sb) sb.onclick = shareCard;

@@ -4,7 +4,9 @@
    Todo resultado traz validação e tamanho de amostra; onde um modelo não prevê além do acaso, a tela diz isso. */
 (function () {
   'use strict';
-  const X = { tab: 'jg', os: 'z', or: 'finz', cs: 'elo', d: {}, jg: { f: null, sc: [], rev: false }, sc: '', cd: [], ca: '', cb: '', sy: '', pp: 2 };
+  const X = { tab: 'dna', os: 'z', or: 'finz', cs: 'elo', d: {}, jg: { f: null, sc: [], rev: false }, sc: '', cd: [], ca: '', cb: '', sy: '', pp: 2,
+              dna: { mode: 'daily', target: '', gs: [], done: false, won: false },
+              mm: { pool: [], cap: 2400, bouts: [], pickA: '', res: null } };
   const sum = a => a.reduce((x, y) => x + y, 0), p0 = v => (v * 100).toFixed(0) + '%', p1 = v => (v * 100).toFixed(1) + '%';
   const nm = id => (S.F.get(id) || {}).name || id, fm = () => X._fm || (X._fm = new Map(S.fg.map(f => [f.id, f])));
   const sg = z => 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
@@ -17,9 +19,203 @@
     const g = async n => { if (n in X.d) return; try { const r = await fetch('data/' + n + '.json', { cache: 'no-cache' }); X.d[n] = r.ok ? await r.json() : null; } catch { X.d[n] = null; } };
     await Promise.all(names.map(g));
   }
-  const TABS = () => [['jg', T('Be the judge', 'Seja o juiz')], ['sc', 'Scouting'], ['cd', T('Dream card', 'Card dos sonhos')], ['sy', T('Styles', 'Estilos')], ['pp', T('Prospects', 'Prospectos')], ['of', T('Judges & refs', 'Juízes e árbitros')], ['cp', T('Camps', 'Academias')]];
+  const TABS = () => [['dna', '🧬 ' + T('Secret DNA', 'DNA Secreto')], ['mm', '🕶️ Matchmaker'], ['jg', T('Be the judge', 'Seja o juiz')], ['sc', 'Scouting'], ['cd', T('Dream card', 'Card dos sonhos')], ['sy', T('Styles', 'Estilos')], ['pp', T('Prospects', 'Prospectos')], ['of', T('Judges & refs', 'Juízes e árbitros')], ['cp', T('Camps', 'Academias')]];
   const miss = f => `<p class="empty">${T('File ' + f + '.json not found. Run the workflow so the scripts generate it (extras.py needs analytics.py to run before it).', 'Arquivo ' + f + '.json não encontrado. Rode o workflow para os scripts gerarem (o extras.py precisa que o analytics.py rode antes).')}</p>`;
   const slot = (k, lbl) => { const id = X[k], p = S.F.get(id); return `<div class="card" style="padding:.8rem 1rem"><div class="mu sm">${lbl}</div>${p ? `<div class="sel">${typeof av === 'function' ? av(id, p.name, 'sm') : ''}<b>${esc(p.name)}</b><button data-xc="${k}">×</button></div>` : `<input data-xq="${k}" type="search" placeholder="${T('Search a fighter…', 'Buscar lutador…')}"><div class="res" id="xs${k}"></div>`}</div>`; };
+
+  /* ================= 1A) GAME: DNA SECRETO ================= */
+  const DIV_ORD = ["Women's Strawweight", "Women's Flyweight", "Women's Bantamweight", "Women's Featherweight", "Flyweight", "Bantamweight", "Featherweight", "Lightweight", "Welterweight", "Middleweight", "Light Heavyweight", "Heavyweight"];
+  function dnaPool() {
+    const A = (X.d.analytics || {}).fighters || {}, C = (X.d.cards || {}).cards || {};
+    return Object.keys(C).filter(id => A[id] && A[id].n >= 10 && S.F.has(id) && (A[id].e >= 1560 || A[id].pk >= 1650 || A[id].tw > 0)).sort();
+  }
+  function dnaInit(mode) {
+    const pool = dnaPool(); if (!pool.length) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (mode === 'daily') {
+      let h = 2166136261;
+      for (const c of today) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+      const target = pool[Math.abs(h) % pool.length];
+      let saved = null;
+      try { saved = JSON.parse(localStorage.sumulaDna || 'null'); } catch {}
+      if (saved && saved.date === today && saved.target === target) {
+        X.dna = { mode: 'daily', date: today, target, gs: saved.gs || [], done: !!saved.done, won: !!saved.won };
+      } else {
+        X.dna = { mode: 'daily', date: today, target, gs: [], done: false, won: false };
+      }
+    } else {
+      const target = pool[Math.floor(Math.random() * pool.length)];
+      X.dna = { mode: 'free', date: today, target, gs: [], done: false, won: false };
+    }
+  }
+  function dnaGuess(id) {
+    const D = X.dna; if (D.done || !id || D.gs.includes(id)) return;
+    D.gs.push(id);
+    if (id === D.target) { D.done = true; D.won = true; }
+    else if (D.gs.length >= 6) { D.done = true; D.won = false; }
+    if (D.mode === 'daily') {
+      try { localStorage.sumulaDna = JSON.stringify({ date: D.date, target: D.target, gs: D.gs, done: D.done, won: D.won }); } catch {}
+    }
+  }
+  function tDna() {
+    if (!X.d.analytics || !X.d.cards) return miss('cards');
+    if (!X.dna.target) dnaInit('daily');
+    const D = X.dna, tid = D.target, A = X.d.analytics.fighters, C = X.d.cards.cards, ta = A[tid], tc = C[tid], tp = S.F.get(tid) || {};
+    if (!ta || !tc) return `<p class="empty">${T('Loading fighter pool…', 'Carregando base de lutadores…')}</p>`;
+    const AL = [T('Striking', 'Trocação'), T('Defense', 'Defesa'), T('Wrestling', 'Quedas'), T('Submissions', 'Finalização'), T('Power', 'Pegada'), T('Cardio', 'Cardio')];
+    const fs = S.fg.filter(f => f.res !== 'nc' && (mid(f.a.id) === tid || mid(f.b.id) === tid)).sort((a, b) => a.date < b.date ? -1 : 1);
+    const yrs = fs.length ? `${fs[0].date.slice(0, 4)}–${fs.at(-1).date.slice(0, 4)}` : '—';
+    // Melhor vitória do lutador secreto
+    let bestOpp = '—', bestElo = -1;
+    for (const f of fs) {
+      const a = mid(f.a.id) === tid, won = f.res === (a ? 'a' : 'b');
+      if (won) {
+        const oid = mid((a ? f.b : f.a).id), oe = (A[oid] || {}).pk || 1500;
+        if (oe > bestElo) { bestElo = oe; bestOpp = nm(oid); }
+      }
+    }
+    const nGuesses = D.gs.length;
+    const hints = [
+      [T('UFC Era & Style', 'Era no UFC & Estilo'), `${yrs} · ${X.d.styles && X.d.styles.fighters[tid] != null ? styName(X.d.styles.fighters[tid]) : T('All-rounder', 'Completo')}`],
+      nGuesses >= 1 || D.done ? [T('Division & Stance', 'Divisão & Base'), `${ta.div} · ${tp.STANCE || 'Orthodox'}`] : null,
+      nGuesses >= 2 || D.done ? [T('Signature UFC win', 'Grande vitória no UFC'), bestOpp] : null,
+      nGuesses >= 3 || D.done ? [T('Country & Gym', 'País & Academia'), `${tp.country || '—'} · ${tp.team || '—'}`] : null,
+      nGuesses >= 4 || D.done ? [T('Initials & Nickname', 'Iniciais & Apelido'), `${tp.name ? tp.name.split(/\s+/).map(w => w[0]).join('.') + '.' : ''} ${tp.nick ? '“' + tp.nick + '”' : T('(no nickname)', '(sem apelido)')}`] : null
+    ].filter(Boolean);
+
+    const cmpRow = gid => {
+      const ga = A[gid] || {}, gc = C[gid] || [], gp = S.F.get(gid) || {};
+      const d1 = DIV_ORD.indexOf(ga.div), d2 = DIV_ORD.indexOf(ta.div);
+      const dIcon = ga.div === ta.div ? '🟩' : (d1 >= 0 && d2 >= 0 && Math.abs(d1 - d2) === 1 ? '🟨' : '⬛');
+      const ovG = gc[0] || 70, ovT = tc[0] || 70, ovIcon = Math.abs(ovG - ovT) <= 1 ? '🟩' : ovG < ovT ? '↑' : '↓';
+      const wG = sum(ga.w || [0]), wT = sum(ta.w || [0]), wIcon = wG === wT ? '🟩' : wG < wT ? '↑' : '↓';
+      const cIcon = gp.country && tp.country && gp.country === tp.country ? '🟩' : '⬛';
+      return `<div class="tb" style="grid-template-columns:1.6fr 1.1fr .7fr .7fr .9fr"><span><b>${esc(gp.name || gid)}</b></span><span>${dIcon} ${esc(ga.div || '')}</span><span>${ovIcon} ${ovG}</span><span>${wIcon} ${wG}V</span><span>${cIcon} ${esc(gp.country || '—')}</span></div>`;
+    };
+
+    let h = `<div class="acts"><button data-xdm="daily" class="${D.mode === 'daily' ? 'pk on' : ''}">${T('Daily Challenge', 'Desafio do Dia')} (${D.date})</button><button data-xdm="free" class="${D.mode === 'free' ? 'pk on' : ''}">${T('Free Play (Unlimited)', 'Modo Livre (Infinito)')}</button>${D.mode === 'free' ? `<button data-xdm="free">${T('New mystery fighter', 'Novo lutador secreto')} ↻</button>` : ''}</div>
+    <p class="mu sm">${T('Guess the secret UFC fighter in up to 6 tries using their tactical attribute DNA and progressive career clues. Arrows (↑/↓) tell you if the secret fighter has a higher or lower value.', 'Descubra quem é o lutador secreto do UFC em até 6 tentativas usando o DNA de atributos táticos e pistas progressivas da carreira. As setas (↑/↓) indicam se o lutador secreto tem valor maior ou menor.')}</p>
+    <div class="card" style="padding:1rem 1.1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem">
+        <div><b style="font:900 1.5rem var(--d);color:var(--gd)">${D.done ? esc(tp.name) : '??? ' + T('SECRET FIGHTER', 'LUTADOR SECRETO')}</b><div class="mu sm">${T('UFC Record', 'Cartel no UFC')}: <b>${sum(ta.w)}-${sum(ta.l)}-${ta.d}</b> (${ta.w[0]} KO, ${ta.w[1]} SUB, ${ta.w[2]} DEC)${ta.tw ? ` · 🏆 ${ta.tw} ${T('title wins', 'vit. cinturão')}` : ''}</div></div>
+        <div class="rt">${D.done ? `OVR ${tc[0]}` : 'OVR ??'}<small>${T('Try', 'Tentativa')} ${D.gs.length}/6</small></div>
+      </div>
+      <div class="ctl" style="margin-top:.8rem;margin-bottom:.4rem">${AL.map((l, i) => `<div><div style="display:flex;justify-content:space-between;font-size:.8rem"><span class="mu">${l}</span><b>${tc[i + 1]}</b></div><i class="mb"><b style="width:${tc[i + 1]}%"></b></i></div>`).join('')}</div>
+      <div style="margin-top:.7rem;border-top:1px solid var(--ln);padding-top:.6rem">${hints.map(([k, v], i) => `<div class="sr" style="grid-template-columns:auto 1fr"><span class="mu sm">💡 ${T('Clue', 'Pista')} ${i + 1} (${k}):</span><b>${esc(v)}</b></div>`).join('')}
+      ${!D.done && nGuesses < 4 ? `<p class="mu sm" style="margin:.3rem 0 0">${T('Next wrong guess unlocks another clue.', 'O próximo palpite desbloqueia mais uma pista da carreira.')}</p>` : ''}</div>
+    </div>`;
+
+    if (D.done) {
+      h += `<div class="card" style="padding:.9rem 1.1rem;border-left:3px solid ${D.won ? 'var(--win)' : 'var(--loss)'}">
+        <b class="${D.won ? 'up' : 'dn'}" style="font-size:1.1rem">${D.won ? T(`Solved in ${D.gs.length}/6 tries!`, `Você acertou em ${D.gs.length}/6 tentativas!`) : T('Out of tries! The fighter was:', 'Fim das tentativas! O lutador era:')}</b>
+        <div style="display:flex;align-items:center;gap:.8rem;margin-top:.6rem">${typeof av === 'function' ? av(tid, tp.name, 'sm') : ''}<div><b><a href="#/fighter/${tid}">${esc(tp.name)}</a></b> <span class="mu sm">${esc(tp.nick || '')} · ${esc(ta.div)} · OVR ${tc[0]}</span></div></div>
+        <div class="acts" style="margin-top:.7rem;margin-bottom:0"><button data-xdsh="1">${T('Copy result to share', 'Copiar resultado para compartilhar')} 📋</button><button data-xdm="free">${T('Play another (Free mode)', 'Jogar outro (Modo Livre)')} ▶</button></div>
+      </div>`;
+    } else {
+      h += `<div class="card" style="padding:.8rem 1rem"><input data-xq="dna" type="search" placeholder="${T('Type a fighter name to guess…', 'Digite o nome de um lutador para chutar…')}"><div class="res" id="xsdna"></div></div>`;
+    }
+
+    if (D.gs.length) {
+      h += `<div class="card" style="padding:.5rem .9rem;overflow-x:auto"><div class="tb hd" style="grid-template-columns:1.6fr 1.1fr .7fr .7fr .9fr"><span>${T('Guess', 'Palpite')}</span><span>${T('Division', 'Divisão')}</span><span>OVR</span><span>${T('UFC Wins', 'Vit. UFC')}</span><span>${T('Country', 'País')}</span></div>${[...D.gs].reverse().map(cmpRow).join('')}</div>`;
+    }
+    return h;
+  }
+
+  /* ================= 1B) GAME: MODO MATCHMAKER (DANA WHITE) ================= */
+  function mmCost(id) {
+    const c = ((X.d.cards || {}).cards || {})[id], a = ((X.d.analytics || {}).fighters || {})[id];
+    const ovr = c ? c[0] : 72, tw = a ? a.tw || 0 : 0;
+    return Math.round((80 + Math.pow(Math.max(0, ovr - 65), 1.75) * 4.2 + tw * 45) / 10) * 10; // em milhares ($k)
+  }
+  function mmInit() {
+    const A = (X.d.analytics || {}).fighters || {}, C = (X.d.cards || {}).cards || {}, E = (X.d.excitement || {}).fighters || {};
+    const cut = '2024-01-01';
+    const dvs = ['Lightweight', 'Welterweight', 'Middleweight', 'Featherweight', 'Bantamweight', 'Heavyweight', 'Light Heavyweight'];
+    const pickDvs = dvs.sort(() => Math.random() - .5).slice(0, 3);
+    const pool = [];
+    for (const dv of pickDvs) {
+      const cands = Object.keys(C).filter(id => A[id] && E[id] && A[id].div === dv && A[id].last >= cut && S.F.has(id)).sort(() => Math.random() - .5).slice(0, 6);
+      for (const id of cands) pool.push({ id, div: dv, ovr: C[id][0], cost: mmCost(id) });
+    }
+    pool.sort((a, b) => a.div.localeCompare(b.div) || b.ovr - a.ovr);
+    X.mm = { pool, cap: 2400, bouts: [], pickA: '', res: null };
+  }
+  function mmSim() {
+    const M = X.mm, A = X.d.analytics.fighters;
+    if (M.bouts.length < 5) return;
+    const out = []; let totEx = 0;
+    for (let i = 0; i < M.bouts.length; i++) {
+      const b = M.bouts[i], r = fotn(b.a, b.b, i === 0), pA = r ? r.pw : .5, aWins = Math.random() < pA;
+      const w = aWins ? b.a : b.b, l = aWins ? b.b : b.a, wa = A[w] || {}, finR = wa.fin != null ? wa.fin : .5;
+      const isFin = Math.random() < Math.min(.85, finR * (r ? r.pace : 1));
+      const koShare = (wa.w && (wa.w[0] + wa.w[1]) > 0) ? wa.w[0] / (wa.w[0] + wa.w[1]) : .55;
+      const method = isFin ? (Math.random() < koShare ? 'KO/TKO' : 'Submission') : (Math.random() < .22 ? 'Split Decision' : 'Unanimous Decision');
+      const maxRd = i === 0 ? 5 : 3, rd = isFin ? (1 + Math.floor(Math.random() * maxRd)) : maxRd;
+      const ex = (r ? r.p : .08) * (isFin ? 1.35 : method === 'Split Decision' ? 1.2 : .85) * (0.85 + Math.random() * .3);
+      totEx += r ? r.p : .08;
+      out.push({ ...b, w, l, method, rd, ex, fotnP: r ? r.p : .08, bal: r ? r.bal : .5, isUpset: (aWins && pA < .42) || (!aWins && pA > .58) });
+    }
+    const fotnIdx = out.reduce((best, x, idx) => x.ex > out[best].ex ? idx : best, 0);
+    const score = Math.min(100, Math.round(totEx * 115 + out.reduce((s, x) => s + x.bal * 8, 0) + (out.filter(x => x.method !== 'Unanimous Decision').length * 4)));
+    const grade = score >= 90 ? 'S+' : score >= 82 ? 'S' : score >= 74 ? 'A' : score >= 65 ? 'B' : 'C';
+    const ppv = Math.round(180 + score * 8.5 + M.bouts.reduce((s, b) => s + mmCost(b.a) + mmCost(b.b), 0) * .18);
+    M.res = { out, fotnIdx, score, grade, ppv };
+  }
+  function tMm() {
+    if (!X.d.analytics || !X.d.cards || !X.d.excitement) return miss('excitement');
+    if (!X.mm.pool.length) mmInit();
+    const M = X.mm, used = new Set(M.bouts.flatMap(b => [b.a, b.b])), spent = M.bouts.reduce((s, b) => s + mmCost(b.a) + mmCost(b.b), 0), rem = M.cap - spent;
+    let h = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem">
+      <p class="mu sm" style="margin:0">${T('Book a 5-fight UFC Main Card under the $2,400k salary cap. Pair fighters from the same division to maximize Fight of the Night excitement and competitive balance.', 'Monte um Main Card de 5 lutas respeitando o teto salarial de $2.400k. Case lutadores da mesma categoria para maximizar a chance de Fight of the Night e o equilíbrio competitivo.')}</p>
+      <button data-xmm="reset">${T('New Roster Pool', 'Sortear Novo Elenco')} ↻</button>
+    </div>
+    <div class="card" style="padding:.8rem 1.1rem;margin-top:.6rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.8rem">
+      <div><span class="mu sm">${T('Main Card Fights', 'Lutas Fechadas')}</span><div style="font:900 1.6rem var(--d)">${M.bouts.length} / 5</div></div>
+      <div><span class="mu sm">${T('Budget Remaining', 'Orçamento Restante')}</span><div style="font:900 1.6rem var(--d);color:${rem < 200 ? 'var(--loss)' : 'var(--gd)'}">$${rem.toLocaleString('en-US')}k <span class="mu sm">/ $${M.cap.toLocaleString('en-US')}k</span></div></div>
+      <button data-xmm="sim" style="background:var(--gd);color:#000" ${M.bouts.length === 5 ? '' : 'disabled'}>🔥 ${T('Run Event Live (5/5)', 'Realizar Evento Ao Vivo (5/5)')}</button>
+    </div>`;
+
+    if (M.bouts.length) {
+      h += `<h2>${T('Booked Main Card', 'Main Card Escalado')}</h2><div class="card" style="padding:.6rem 1.1rem">${M.bouts.map((b, i) => {
+        const r = fotn(b.a, b.b, i === 0), ca = mmCost(b.a), cb = mmCost(b.b);
+        return `<div class="sr" style="grid-template-columns:1.5rem 1fr auto auto;align-items:center">
+          <b style="color:var(--gd)">${i === 0 ? '👑' : i + 1}</b>
+          <span><b>${esc(nm(b.a))}</b> vs <b>${esc(nm(b.b))}</b> <span class="mu sm">(${esc(b.div)})</span><br><span class="mu sm">${i === 0 ? T('Main Event (5 Rds)', 'Luta Principal (5 Rds)') : T('Main Card (3 Rds)', 'Card Principal (3 Rds)')} · $${ca + cb}k · FOTN ${r ? p1(r.p) : '—'} · ${T('Balance', 'Equilíbrio')} ${r ? p0(r.bal) : '—'}</span></span>
+          <b style="color:var(--gd)">${r ? p1(r.p) : '—'}</b>
+          <button data-xmm="rm:${i}">×</button>
+        </div>`;
+      }).join('')}</div>`;
+    }
+
+    if (M.res) {
+      const R = M.res;
+      h += `<h2>🏆 ${T('Event Results & Dana White Grade', 'Resultados do Evento & Nota de Matchmaker')}</h2>
+      <div class="card" style="padding:1rem 1.1rem;border-left:4px solid var(--gd)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.8rem">
+          <div><span class="mu sm">${T('Matchmaker Grade', 'Nota do Matchmaker')}</span><div style="font:900 3rem/1 var(--d);color:var(--gd)">${R.grade} <span style="font-size:1.3rem;color:var(--tx)">(${R.score}/100)</span></div></div>
+          <div style="text-align:right"><span class="mu sm">${T('Estimated PPV Buys', 'Vendas Estimadas de PPV')}</span><div style="font:900 1.8rem var(--d)">${R.ppv.toLocaleString('en-US')}k</div></div>
+        </div>
+        <div style="margin-top:.8rem;border-top:1px solid var(--ln);padding-top:.6rem">${R.out.map((o, i) => `<div class="sr" style="grid-template-columns:1fr auto">
+          <span><b>${esc(nm(o.w))}</b> ${T('def.', 'venceu')} ${esc(nm(o.l))} <span class="mu sm">(${o.method}, R${o.rd})</span>${i === R.fotnIdx ? ` <span class="tag">🔥 FOTN $50k</span>` : ''}${o.isUpset ? ` <span class="tag" style="background:var(--cb);color:#fff">⚡ ${T('UPSET', 'ZEBRA')}</span>` : ''}</span>
+          <span class="mu sm">FOTN ${p1(o.fotnP)}</span>
+        </div>`).join('')}</div>
+      </div>`;
+    }
+
+    if (M.bouts.length < 5) {
+      const pA = M.pickA ? M.pool.find(x => x.id === M.pickA) : null;
+      h += `<h2>${pA ? T(`Select opponent for ${nm(pA.id)} (${pA.div})`, `Escolha o adversário de ${nm(pA.id)} (${pA.div})`) : T('Available Roster (Tap two from the same division)', 'Elenco Disponível (Toque em dois da mesma divisão)')}</h2>
+      <div class="chgrid">${M.pool.filter(x => !used.has(x.id)).map(x => {
+        const isSel = M.pickA === x.id, canPair = !pA || (pA.id !== x.id && pA.div === x.div && pA.cost + x.cost <= rem), cantAfford = !pA && x.cost > rem;
+        const f = S.F.get(x.id) || {};
+        return `<button type="button" data-xmm="pick:${x.id}" class="card chc${isSel ? ' hl' : ''}" style="text-align:left;width:100%;opacity:${canPair && !cantAfford ? 1 : .38}" ${(!canPair || cantAfford) && !isSel ? 'disabled' : ''}>
+          ${typeof av === 'function' ? av(x.id, f.name, 'sm') : ''}
+          <div style="flex:1;min-width:0"><div class="chd">${esc(x.div)} · OVR ${x.ovr}</div><div class="chn" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</div><div class="mu sm">$${x.cost}k · ${esc(f.record || '')}</div></div>
+        </button>`;
+      }).join('')}</div>`;
+    }
+    return h;
+  }
 
   /* ================= 2) SEJA O JUIZ ================= */
   const judges = (f, order) => { const out = []; const re = /([^\d]+?)\s*(\d{2})\s*-\s*(\d{2})/g; let m; while ((m = re.exec(f.detail || ''))) { const x = +m[2], y = +m[3], n = m[1].replace(/^[\s.,;:]+|[\s.,;:]+$/g, ''); if (n && x >= 20 && x <= 50 && y >= 20 && y <= 50 && Math.abs(x - y) <= 5) out.push({ n, w: order === 'winner_first' || f.res === 'a' ? x : y, l: order === 'winner_first' || f.res === 'a' ? y : x }); } return out; };
@@ -193,16 +389,42 @@
   }
 
   /* ================= tela e rota ================= */
-  const VIEW = { jg: tJg, sc: tSc, cd: tCd, sy: tSy, pp: tPp, of: tOf, cp: tCp };
-  const DATA = { jg: ['decisions'], sc: ['analytics', 'cards', 'styles'], cd: ['excitement'], sy: ['styles'], pp: ['prospects'], of: ['judges'], cp: ['camps'] };
+  const VIEW = { dna: tDna, mm: tMm, jg: tJg, sc: tSc, cd: tCd, sy: tSy, pp: tPp, of: tOf, cp: tCp };
+  const DATA = { dna: ['analytics', 'cards', 'styles'], mm: ['analytics', 'cards', 'excitement'], jg: ['decisions'], sc: ['analytics', 'cards', 'styles'], cd: ['excitement'], sy: ['styles'], pp: ['prospects'], of: ['judges'], cp: ['camps'] };
   async function draw() {
     const el = document.querySelector('#xx'); if (!el) return;
     await need(DATA[X.tab]); if (!document.querySelector('#xx')) return;
     el.innerHTML = `<div class="seg">${TABS().map(([k, l]) => `<button data-xt="${k}" class="${X.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>` + (['sc', 'cd', 'sy', 'pp', 'cp'].includes(X.tab) ? `<div class="xrow"><span class="xbar" data-xk="x:${X.tab}"></span></div>` : '') + VIEW[X.tab]() + `<p class="mu sm" style="margin-top:1rem">${T('Everything here is exploratory and validated on past data: patterns are hypotheses, not proof.', 'Tudo aqui é exploratório e validado em dados passados: padrões são hipóteses, não provas.')}</p>`;
     const m = document.querySelector('#m');
     m.onclick = e => {
-      const t = e.target.closest('[data-xt],[data-xp],[data-xc],[data-xj],[data-xjr],[data-xjn],[data-xsh],[data-xad],[data-xrm],[data-xos],[data-xor],[data-xcs]'); if (!t) return; const d = t.dataset;
-      if (d.xt) { X.tab = d.xt; draw(); } else if (d.xp) { const [k, id] = d.xp.split(':'); X[k] = id; draw(); } else if (d.xc) { X[d.xc] = ''; draw(); }
+      const t = e.target.closest('[data-xt],[data-xp],[data-xc],[data-xj],[data-xjr],[data-xjn],[data-xsh],[data-xad],[data-xrm],[data-xos],[data-xor],[data-xcs],[data-xdm],[data-xdsh],[data-xmm]'); if (!t) return; const d = t.dataset;
+      if (d.xt) { X.tab = d.xt; draw(); }
+      else if (d.xp) { const [k, id] = d.xp.split(':'); if (k === 'dna') dnaGuess(id); else X[k] = id; draw(); }
+      else if (d.xc) { X[d.xc] = ''; draw(); }
+      else if (d.xdm) { dnaInit(d.xdm); draw(); }
+      else if (d.xdsh) {
+        const D = X.dna, txt = `Súmula UFC — DNA Secreto (${D.date}) 🧬 ${D.won ? D.gs.length : 'X'}/6\n` + D.gs.map(g => g === D.target ? '🟩🟩🟩🟩' : '⬛🟨⬛⬛').join('\n');
+        if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => alert(T('Result copied!', 'Resultado copiado!')));
+      }
+      else if (d.xmm) {
+        const M = X.mm, act = d.xmm;
+        if (act === 'reset') mmInit();
+        else if (act === 'sim') mmSim();
+        else if (act.startsWith('rm:')) { M.bouts.splice(+act.slice(3), 1); M.res = null; }
+        else if (act.startsWith('pick:')) {
+          const pid = act.slice(5);
+          if (M.pickA === pid) M.pickA = '';
+          else if (!M.pickA) M.pickA = pid;
+          else {
+            const f1 = M.pool.find(x => x.id === M.pickA), f2 = M.pool.find(x => x.id === pid);
+            if (f1 && f2 && f1.div === f2.div && M.bouts.length < 5) {
+              M.bouts.push({ a: f1.id, b: f2.id, div: f1.div });
+              M.pickA = ''; M.res = null;
+            }
+          }
+        }
+        draw();
+      }
       else if (d.xj) { const [i, v] = d.xj.split(':'); X.jg.sc[+i] = +v; draw(); } else if (d.xjr) { X.jg.rev = true; draw(); } else if (d.xjn) { jNew(); draw(); }
       else if (d.xsh) shareImg(d.xsh); else if (d.xad != null) { X.cd.push({ a: mid(X.ca), b: mid(X.cb), t: d.xad === '1' }); X.ca = X.cb = ''; draw(); }
       else if (d.xos) { X.os = d.xos; draw(); } else if (d.xor) { X.or = d.xor; draw(); } else if (d.xcs) { X.cs = d.xcs; draw(); }
@@ -211,12 +433,12 @@
     m.oninput = e => {
       const q = e.target.closest('[data-xq]');
       if (q) { const k = q.dataset.xq, t = q.value.toLowerCase().trim(), r = document.querySelector('#xs' + k); const cards = (X.d.cards || {}).cards, exf = (X.d.excitement || {}).fighters, an = (X.d.analytics || {}).fighters;
-        const ok = f => k === 'ca' || k === 'cb' ? (exf ? exf[f.id] : true) : k === 'sc' ? (an ? an[f.id] : true) : k === 'sy' ? (X.d.styles ? X.d.styles.fighters[f.id] != null : true) : true;
+        const ok = f => k === 'ca' || k === 'cb' ? (exf ? exf[f.id] : true) : k === 'sc' ? (an ? an[f.id] : true) : k === 'dna' ? (cards && an ? cards[f.id] && an[f.id] && !X.dna.gs.includes(f.id) : true) : k === 'sy' ? (X.d.styles ? X.d.styles.fighters[f.id] != null : true) : true;
         if (r) r.innerHTML = t ? [...S.F.values()].filter(f => ok(f) && (f.name + ' ' + (f.nick || '')).toLowerCase().includes(t)).slice(0, 6).map(f => `<button data-xp="${k}:${f.id}"><span>${esc(f.name)}</span><span class="mu">${esc(f.record || '')}</span></button>`).join('') : ''; return; }
       const pp = e.target.closest('[data-xpp]'); if (pp) { X.pp = Math.max(2, Math.min(6, +pp.value || 2)); draw(); }
     };
   }
-  async function view() { document.querySelector('#m').innerHTML = `<h1>Extras</h1><div id="xx"><p class="mu">${T('Loading…', 'Carregando…')}</p></div>`; await draw(); }
+  async function view() { document.querySelector('#m').innerHTML = `<h1>${T('Games & Extras', 'Games & Extras')}</h1><div id="xx"><p class="mu">${T('Loading…', 'Carregando…')}</p></div>`; await draw(); }
 
   /* ================= MMA MATH: menor cadeia de vitórias (BFS) ================= */
   const XM = { fast: false, a: '', b: '', G: {} };

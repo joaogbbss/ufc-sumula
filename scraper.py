@@ -549,24 +549,39 @@ def enrich_wd_batch(fighters, fights, upids, limit, has_time, delay=0.3):
     return fails
 
 
-ORIGINS = [(re.compile(r"ultimate fighter|\bTUF\b", re.I), "TUF"), (re.compile(r"contender series|\bDWCS\b", re.I), "DWCS"), (re.compile(r"\bWEC\b"), "WEC"),
+ORIGINS = [(re.compile(r"ultimate fighter|\bTUF\b", re.I), "TUF"), (re.compile(r"road to ufc", re.I), "RTU"),
+           (re.compile(r"contender series|\bDWCS\b", re.I), "DWCS"), (re.compile(r"\bWEC\b"), "WEC"),
            (re.compile(r"\bPRIDE\b"), "PRIDE"), (re.compile(r"strikeforce", re.I), "Strikeforce")]
 
 
 def debut_origin(fighters, fights, events):
-    """Origem só quando o NOME do evento de estreia prova. Recalculado a cada execução; quem estreou num evento comum fica sem o campo."""
-    first = {}
+    """Origem quando o nome do evento de estreia OU o título de uma luta de torneio (TUF/Road to UFC) comprova."""
+    first, by_tt = {}, {}
     for f in sorted(fights.values(), key=lambda f: (f["date"], -f["ord"])):
+        tt = f.get("tt") or ""
         for s_ in "ab":
-            first.setdefault(f[s_]["id"], f["ev"])
+            fid = f[s_]["id"]
+            first.setdefault(fid, f["ev"])
+            if fid not in by_tt and tt:
+                for rx, tag in ORIGINS:
+                    if rx.search(tt):
+                        by_tt[fid] = tag
+                        break
     n = 0
     for i, d in fighters.items():
-        d.pop("origin", None); d.pop("origin_src", None)
+        if d.get("origin") == "direct":
+            d.pop("origin", None)
+        d.pop("origin_src", None)
+        if d.get("origin"):
+            continue
         name = (events.get(first.get(i)) or {}).get("name", "")
         for rx, tag in ORIGINS:
             if rx.search(name):
                 d["origin"] = tag; n += 1
                 break
+        else:
+            if i in by_tt:
+                d["origin"] = by_tt[i]; n += 1
     return n
 
 

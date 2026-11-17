@@ -225,23 +225,37 @@ def division_profile(e):
     return cur, main, divs
 
 
-# ---------- 2) DLI: dano e letalidade ----------
+# ---------- 2) DLI: dano, letalidade, resistência de queixo e ameaça no solo ----------
 def run_damage(fights):
-    acc = defaultdict(lambda: {"sl": 0.0, "sa": 0.0, "kd": 0.0, "ka": 0.0, "fs": 0})
-    tot_sl = tot_kd = 0.0
+    acc = defaultdict(lambda: {"sl": 0.0, "sa": 0.0, "kd": 0.0, "ka": 0.0, "fs": 0,
+                               "ha": 0.0, "gs": 0.0, "sb": 0.0, "ct": 0.0, "kol": 0, "last_ko": ""})
+    tot_sl = tot_kd = tot_gs = tot_ct = 0.0
     for f in fights:
         T = f.get("totals")
         if not T or not T.get("a") or not T.get("b"):
             continue
+        G = f.get("sig") or {}
+        is_ko = klass(f.get("method"))[0] == "ko"
         for me, op, i in (("a", "b", f["a"]["id"]), ("b", "a", f["b"]["id"])):
             sl, sa = num(T[me].get("Sig. str.")), num(T[op].get("Sig. str."))
             kd, ka = num(T[me].get("KD")), num(T[op].get("KD"))
+            sb = num(T[me].get("Sub. att"))
+            ct = seconds(T[me].get("Ctrl"))
+            gs = num((G.get(me) or {}).get("Ground"))
+            ha = num((G.get(op) or {}).get("Head"))
             x = acc[i]
             x["sl"] += sl; x["sa"] += sa; x["kd"] += kd; x["ka"] += ka; x["fs"] += 1
+            x["ha"] += ha; x["gs"] += gs; x["sb"] += sb; x["ct"] += ct
+            if is_ko and f.get("res") == op:
+                x["kol"] += 1
+                x["last_ko"] = f["date"]
             tot_sl += sl
             tot_kd += kd
+            tot_gs += gs + 4.0 * sb
+            tot_ct += ct / 60.0
     p0 = tot_kd / tot_sl if tot_sl else 0.0       # knockdowns por golpe significativo, média da UFC
-    return acc, p0
+    g_gt = tot_gs / tot_ct if tot_ct else 2.5     # ações de dano/finalização por minuto de controle no solo
+    return acc, p0, g_gt
 
 
 # ---------- 3) benchmarks por divisão ----------
@@ -861,7 +875,7 @@ def main():
         return 0
     pre_elo = {}
     elo = run_elo(fights, pre_elo)
-    dmg, p0 = run_damage(fights)
+    dmg, p0, g_gt = run_damage(fights)
     bench = run_benchmarks(fights)
     k100_lg = 100 * p0
     fighters = {}
@@ -883,10 +897,16 @@ def main():
             ks = 100 * (kd + p0 * PRIOR_STRIKES) / (sl + PRIOR_STRIKES)
             kas = 100 * (ka + p0 * PRIOR_STRIKES) / (sa + PRIOR_STRIKES)
             ss = (sl + PRIOR_STRIKES) / (kd + p0 * PRIOR_STRIKES) if (kd + p0 * PRIOR_STRIKES) else None
+            ct_m = d["ct"] / 60.0
+            gt = ((d["gs"] + 4.0 * d["sb"]) + 3.0 * g_gt) / (ct_m + 3.0)
+            # Índice de Resistência de Queixo (0-100, média ~65): combina KDs sofridos + KOs sofridos por golpe absorvido
+            vuln = (kas / (k100_lg or 0.27)) * 0.65 + ((d["kol"] + 0.4) / (d["fs"] + 4.0) / 0.10) * 0.35
+            chin = int(round(max(20.0, min(98.0, 100.0 / (1.0 + 0.55 * vuln)))))
             row.update({"fs": d["fs"], "sl": int(sl), "sa": int(sa), "kd": int(kd), "ka": int(ka),
                         "k100": r1(100 * kd / sl, 2) if sl else None, "spk": r1(sl / kd, 0) if kd else None,
                         "ks": round(ks, 3), "ss": r1(ss, 0), "kas": round(kas, 3),
-                        "dli": round(100 * ks / k100_lg) if k100_lg else None})
+                        "dli": round(100 * ks / k100_lg) if k100_lg else None,
+                        "gt": round(gt, 2), "chin": chin})
         fighters[i] = row
     out = {
         "v": 2,
