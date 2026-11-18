@@ -197,6 +197,7 @@ def run_elo(fights, pre_out=None):
                 B["tw"] += 1
         else:
             A["d"] += 1; B["d"] += 1
+        mn_f = fight_minutes(f)
         for X, d, side in ((A, da, "a"), (B, db, "b")):
             X["r"] += d
             X["pk"] = max(X["pk"], X["r"])
@@ -205,9 +206,10 @@ def run_elo(fights, pre_out=None):
             X["divs"][f["div"]] += 1
             # cartel separado por divisão: um lutador pertence a TODAS as divisões
             # em que lutou (ex.: campeão de duas categorias aparece nas duas)
-            g = X["dv"].setdefault(f["div"], {"n": 0, "w": 0, "l": 0, "d": 0, "last": "", "tw": 0})
+            g = X["dv"].setdefault(f["div"], {"n": 0, "w": 0, "l": 0, "d": 0, "last": "", "tw": 0, "min": 0.0})
             g["n"] += 1
             g["last"] = f["date"]
+            g["min"] += mn_f
             if f["res"] == side:
                 g["w"] += 1
                 g["tw"] += 1 if is_title else 0
@@ -227,14 +229,14 @@ def division_profile(e):
 
     - div      : divisão ATUAL = a da luta mais recente em categoria oficial
     - div_main : divisão com mais lutas (usada para comparar estatísticas entre pares)
-    - divs     : [[divisão, lutas, V, D, E, última luta, cinturões]] da mais recente para a mais antiga
+    - divs     : [[divisão, lutas, V, D, E, última luta, cinturões, minutos]] da mais recente para a mais antiga
     """
     items = sorted(e["dv"].items(), key=lambda kv: kv[1]["last"], reverse=True)
     std = [k for k, _ in items if k not in NONSTD]
     cur = std[0] if std else items[0][0]
     main_std = [k for k, _ in e["divs"].most_common() if k not in NONSTD]
     main = main_std[0] if main_std else e["divs"].most_common(1)[0][0]
-    divs = [[k, g["n"], g["w"], g["l"], g["d"], g["last"], g["tw"]] for k, g in items]
+    divs = [[k, g["n"], g["w"], g["l"], g["d"], g["last"], g["tw"], round(g.get("min", 0.0), 1)] for k, g in items]
     return cur, main, divs
 
 
@@ -522,15 +524,72 @@ def run_whr_py(fights):
     return out
 
 
+MONTH_MAP = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+             "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
+
+
+def _parse_dob_year(dob_str):
+    if not dob_str or dob_str == "--":
+        return None
+    s = str(dob_str).strip()
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        try:
+            y, m, d = (int(x) for x in s[:10].split("-"))
+            return y + (m - 1) / 12.0 + d / 365.25
+        except Exception:
+            return None
+    m = re.match(r"([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})", s)
+    if m:
+        mo = MONTH_MAP.get(m.group(1).lower(), 6)
+        da = int(m.group(2))
+        yr = int(m.group(3))
+        return yr + (mo - 1) / 12.0 + da / 365.25
+    return None
+
+
+def phys_decay(dob_str, last_dt, div_str, ref_dt="2026-11-15"):
+    """Curva fisiológica de envelhecimento e inatividade (Age & Layoff Decay).
+    Retorna (age_yrs, inact_months, penalty_pts).
+    """
+    try:
+        ry, rm, rd = (int(x) for x in ref_dt[:10].split("-"))
+        ref_y = ry + (rm - 1) / 12.0 + rd / 365.25
+    except Exception:
+        ref_y = 2026.87
+    by = _parse_dob_year(dob_str)
+    age = round(ref_y - by, 1) if by else None
+    inact_m = round(_days_since(last_dt, ref_dt) / 30.4375, 1) if last_dt else 0.0
+
+    age_0 = 37.0 if div_str in ("Light Heavyweight", "Heavyweight") else 35.0
+    age_pen = 0.0
+    if age is not None and age > age_0:
+        da = age - age_0
+        age_pen = 8.5 * da + 1.85 * (da ** 2)
+
+    lay_pen = 0.0
+    if inact_m > 14.0:
+        if inact_m <= 24.0:
+            lay_pen = 2.5 * (inact_m - 14.0)
+        else:
+            lay_pen = min(220.0, 25.0 + 4.2 * (inact_m - 24.0))
+
+    return age, inact_m, round(min(550.0, age_pen + lay_pen), 1)
+
+
 def run_damage(fights):
     acc = defaultdict(lambda: {"sl": 0.0, "sa": 0.0, "kd": 0.0, "ka": 0.0, "fs": 0,
-                               "ha": 0.0, "gs": 0.0, "sb": 0.0, "ct": 0.0, "kol": 0, "last_ko": ""})
+                               "ha": 0.0, "gs": 0.0, "sb": 0.0, "ct": 0.0, "kol": 0, "last_ko": "",
+                               "leg": 0.0, "mn": 0.0, "t_st": 0.0})
     tot_sl = tot_kd = tot_gs = tot_ct = 0.0
     for f in fights:
         T = f.get("totals")
         if not T or not T.get("a") or not T.get("b"):
             continue
         G = f.get("sig") or {}
+        mn = fight_minutes(f)
+        ca = seconds(T["a"].get("Ctrl")) / 60.0
+        cb = seconds(T["b"].get("Ctrl")) / 60.0
+        t_st = max(0.5, mn - 0.85 * (ca + cb)) if mn else 0.5
         is_ko = klass(f.get("method"))[0] == "ko"
         for me, op, i in (("a", "b", f["a"]["id"]), ("b", "a", f["b"]["id"])):
             sl, sa = num(T[me].get("Sig. str.")), num(T[op].get("Sig. str."))
@@ -538,10 +597,12 @@ def run_damage(fights):
             sb = num(T[me].get("Sub. att"))
             ct = seconds(T[me].get("Ctrl"))
             gs = num((G.get(me) or {}).get("Ground"))
+            leg = num((G.get(me) or {}).get("Leg"))
             ha = num((G.get(op) or {}).get("Head"))
             x = acc[i]
             x["sl"] += sl; x["sa"] += sa; x["kd"] += kd; x["ka"] += ka; x["fs"] += 1
             x["ha"] += ha; x["gs"] += gs; x["sb"] += sb; x["ct"] += ct
+            x["leg"] += leg; x["mn"] += mn; x["t_st"] += t_st
             if is_ko and f.get("res") == op:
                 x["kol"] += 1
                 x["last_ko"] = f["date"]
@@ -1011,7 +1072,7 @@ def run_cards(fights, fighters):
 
             raw[i] = {"tech": tech_ovr, "elo_comp": elo_comp, "pk": elo_pk,
                       "title": title_bonus, "n": f["n"], "attrs": [tro, dfn, lut, sub, peg, car], "d": d,
-                      "divs": [x[0] for x in f.get("divs", []) if x[0] not in NONSTD] or [f["div"]]}
+                      "divs": [x[0] for x in f.get("divs", []) if x[0] not in NONSTD and (x[1] >= 4 or (len(x) > 7 and x[7] >= 30 and x[1] / max(f["n"], 1) >= 0.4) or x[0] == f.get("div_main"))] or [f["div"]]}
 
     return calibrate_ovr(raw)
 
@@ -1190,6 +1251,13 @@ def main():
     if not fights:
         print("analytics: data/fights.json ausente ou vazio; nada a fazer.")
         return 0
+    max_dt = max((f.get("date") or "2026-11-15") for f in fights)
+    fp = DATA / "fighters.json"
+    bio_map = {}
+    if fp.exists():
+        for p in json.loads(fp.read_text("utf-8")):
+            if p.get("id"):
+                bio_map[p["id"]] = p
     pre_elo = {}
     elo = run_elo(fights, pre_elo)
     whr_map = run_whr_py(fights)
@@ -1205,8 +1273,13 @@ def main():
         wins = sum(e["w"])
         top3 = sorted(e["wins_opp"], reverse=True)[:3]
         cur_div, main_div, all_divs = division_profile(e)
-        row = {"n": e["n"], "e": round(e["r"], 1), "pk": round(e["pk"], 1),
-               "whr": whr_cur, "whr_pk": whr_pk, "whr_sd": whr_sd,
+        bio = bio_map.get(i, {})
+        age_y, inact_m, phys_pen = phys_decay(bio.get("DOB"), e["last"], main_div, max_dt)
+        whr_eff = round(whr_cur - phys_pen, 1)
+        e_eff = round(e["r"] - phys_pen * 0.85, 1)
+        row = {"n": e["n"], "e": round(e["r"], 1), "e_eff": e_eff, "pk": round(e["pk"], 1),
+               "whr": whr_cur, "whr_eff": whr_eff, "whr_pk": whr_pk, "whr_sd": whr_sd,
+               "age": age_y, "inact_m": inact_m, "phys_pen": phys_pen,
                "opp": r1(sum(e["opp"]) / len(e["opp"])) if e["opp"] else None,
                "qw": r1(sum(top3) / len(top3)) if top3 else None,
                "w": e["w"], "l": e["l"], "d": e["d"],
@@ -1223,17 +1296,20 @@ def main():
             ks = 100 * (kd + p0 * PRIOR_STRIKES) / (sl + PRIOR_STRIKES)
             kas = 100 * (ka + p0 * PRIOR_STRIKES) / (sa + PRIOR_STRIKES)
             ss = (sl + PRIOR_STRIKES) / (kd + p0 * PRIOR_STRIKES) if (kd + p0 * PRIOR_STRIKES) else None
-            ct_m = d["ct"] / 60.0
-            gt = ((d["gs"] + 4.0 * d["sb"]) + 3.0 * g_gt) / (ct_m + 3.0)
+            ct_m = max(d["ct"] / 60.0, d["gs"] / 6.5)
+            gt = min(12.0, ((d["gs"] + 4.0 * d["sb"]) + 3.0 * g_gt) / (ct_m + 3.0))
+            leg_m = (d["leg"] + 1.5) / (d["t_st"] + 5.0)
+            sub15 = 15.0 * (d["sb"] + 0.8) / (d["mn"] + 15.0)
             # Índice de Resistência de Queixo (0-100, média ~65): combina KDs sofridos + KOs sofridos por golpe absorvido + recência pós-KO
-            ko_rec_pen = 0.35 * math.exp(-_days_since(d["last_ko"]) / 210.0) if d.get("last_ko") else 0.0
+            ko_rec_pen = 0.35 * math.exp(-_days_since(d["last_ko"], max_dt) / 210.0) if d.get("last_ko") else 0.0
             vuln = (kas / (k100_lg or 0.27)) * 0.60 + ((d["kol"] + 0.4) / (d["fs"] + 4.0) / 0.10) * 0.35 + ko_rec_pen
             chin = int(round(max(20.0, min(98.0, 100.0 / (1.0 + 0.55 * vuln)))))
             row.update({"fs": d["fs"], "sl": int(sl), "sa": int(sa), "kd": int(kd), "ka": int(ka),
                         "k100": r1(100 * kd / sl, 2) if sl else None, "spk": r1(sl / kd, 0) if kd else None,
                         "ks": round(ks, 3), "ss": r1(ss, 0), "kas": round(kas, 3),
                         "dli": round(100 * ks / k100_lg) if k100_lg else None,
-                        "gt": round(gt, 2), "chin": chin})
+                        "gt": round(gt, 2), "chin": chin,
+                        "leg_m": round(leg_m, 2), "leg_tot": int(d["leg"]), "sub15": round(sub15, 2)})
             if d.get("last_ko"):
                 row["last_ko"] = d["last_ko"]
         fighters[i] = row

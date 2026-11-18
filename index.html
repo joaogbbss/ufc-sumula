@@ -154,6 +154,23 @@ nav .more.on{color:var(--gd);box-shadow:inset 0 3px var(--gd)}
 .spd{position:absolute;width:24px;height:24px;transform:translate(-50%,-50%);padding:0;background:transparent;clip-path:none;border-radius:50%}.spd::after{content:'';position:absolute;inset:8px;border-radius:50%;background:var(--gd)}.spd.on::after{inset:5px;background:#fff}
 
 .bn{font:700 .7rem Archivo,sans-serif;color:var(--gd);white-space:nowrap}
+.idl-wrap{display:grid;grid-template-columns:1fr;gap:1.1rem;align-items:start}
+@media(min-width:760px){.idl-wrap{grid-template-columns:390px 1fr}}
+.idl-stage{position:relative;padding:1rem;background:radial-gradient(circle at 50% 42%,rgba(245,197,24,.13),rgba(108,140,255,.05) 55%,transparent 78%),var(--s1);overflow:hidden}
+.idl-svg{width:100%;max-width:370px;height:auto;display:block;margin:0 auto;user-select:none;-webkit-tap-highlight-color:transparent}
+.idl-z{cursor:pointer;transition:all .22s ease}
+.idl-z .z-body{fill:rgba(255,255,255,.05);stroke:rgba(238,241,246,.28);stroke-width:1.6;transition:all .22s ease}
+.idl-z .z-node{fill:var(--s2);stroke:var(--gd);stroke-width:2;transition:all .22s ease}
+.idl-z .z-lbl{fill:var(--mu);font:800 11px var(--d);letter-spacing:.08em;text-transform:uppercase;transition:fill .2s ease}
+.idl-z .z-sub{fill:var(--tx);font:700 10.5px Archivo,sans-serif;transition:fill .2s ease}
+.idl-z .z-line{stroke:rgba(245,197,24,.35);stroke-width:1.2;stroke-dasharray:3 3;transition:all .22s ease}
+.idl-z:hover .z-body,.idl-z.on .z-body{fill:rgba(245,197,24,.28);stroke:var(--gd);stroke-width:2.6;filter:drop-shadow(0 0 10px rgba(245,197,24,.55))}
+.idl-z:hover .z-node,.idl-z.on .z-node{fill:var(--gd);stroke:#fff;r:7;filter:drop-shadow(0 0 8px var(--gd))}
+.idl-z:hover .z-lbl,.idl-z.on .z-lbl{fill:var(--gd)}
+.idl-z:hover .z-line,.idl-z.on .z-line{stroke:var(--gd);stroke-width:2;stroke-dasharray:none}
+.idl-sum{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.65rem;margin-top:.8rem}
+.idl-sc{padding:.75rem .95rem;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;margin-bottom:0}
+.idl-sc:hover,.idl-sc.on{box-shadow:inset 0 0 0 2px var(--gd);background:color-mix(in srgb,var(--gd) 10%,var(--s1))}
 </style>
 </head>
 <body>
@@ -339,8 +356,8 @@ function whr(L, P) {
     const t = Date.parse(f.date) / YR, w = f.res === 'draw' ? .5 : dom(f);
     const sa = f.res === 'a' ? w : f.res === 'b' ? 1 - w : .5;
     const ti = isTitle(f), m = ti ? 1 + P.title : 1, ip = /interim/i.test(f.tt || '');
-    const na = {t, r:0, gs:[], f:f.id, id:ia, dt:f.date, ti, ip};
-    const nb = {t, r:0, gs:[], f:f.id, id:ib, dt:f.date, ti, ip};
+    const na = {t, r:0, gs:[], f:f.id, id:ia, dt:f.date, ti, ip, dv:f.div};
+    const nb = {t, r:0, gs:[], f:f.id, id:ib, dt:f.date, ti, ip, dv:f.div};
     na.gs.push({o:nb, s:sa, m}); nb.gs.push({o:na, s:1 - sa, m});
     for (const [id, n] of [[ia, na], [ib, nb]]) {
       if (!N.has(id)) N.set(id, []);
@@ -380,13 +397,16 @@ function whr(L, P) {
   const ref = rs.length ? rs[Math.floor(.85 * (rs.length - 1))] : 0;
   const rows = [...N].map(([id, a]) => {
     let w = 0, l = 0, d = 0, pk = a[0], v = 0;
+    const dhs = new Map();
     for (const x of a) {
       const g = x.gs[0], s = g.s, pf = 1 / (1 + Math.exp(g.o.r - ref));
       s > .5 ? w++ : s < .5 ? l++ : d++;
       if (x.r > pk.r) pk = x;
-      v += (s > .5 ? s * (1 - pf) : s < .5 ? -pf : .5 - pf) * (x.ti ? (x.ip ? 1 + P.tw / 2 : 1 + P.tw) : 1);
+      const dvPt = (s > .5 ? s * (1 - pf) : s < .5 ? -pf : .5 - pf) * (x.ti ? (x.ip ? 1 + P.tw / 2 : 1 + P.tw) : 1);
+      v += dvPt;
+      if (x.dv) dhs.set(x.dv, (dhs.get(x.dv) || 0) + 10 * dvPt);
     }
-    return {id, n:a.length, w, l, d, last:a.at(-1).dt, cur:1500 + U * a.at(-1).r, pk:1500 + U * pk.r, pkd:pk.dt, hs:10 * v, pn:pk, ln:a.at(-1), ...(cnt.get(id) || {cq:0, df:0, iv:0})};
+    return {id, n:a.length, w, l, d, last:a.at(-1).dt, cur:1500 + U * a.at(-1).r, pk:1500 + U * pk.r, pkd:pk.dt, hs:10 * v, dhs, pn:pk, ln:a.at(-1), ...(cnt.get(id) || {cq:0, df:0, iv:0})};
   });
   return {rows, N, tag, rg, RM: new Map(rows.map(x => [x.id, x]))};
 }
@@ -400,19 +420,19 @@ function getE(d) {
   return S.cache.get(k);
 }
 
-/* Divisões de cada lutador: cartel, última luta e cinturões POR categoria.
-   A força (WHR) é sempre a da carreira inteira; a divisão só decide quem aparece em cada lista. */
+/* Divisões de cada lutador: cartel, última luta, minutos e cinturões POR categoria. */
 const NONSTD = new Set(['Catch Weight', 'Open Weight', 'Outros']);
 function dm() {
   if (S.dmc && S.dmc.n === S.fg.length) return S.dmc.m;
   const m = new Map();
   for (const f of S.fg) {
     if (f.res === 'nc') continue;
+    const mn = mins(f) || 0;
     for (const s of ['a', 'b']) {
       const id = mid(f[s].id);
       if (!m.has(id)) m.set(id, new Map());
-      const g = m.get(id), x = g.get(f.div) || {n:0, w:0, l:0, d:0, last:'', tw:0};
-      g.set(f.div, x); x.n++;
+      const g = m.get(id), x = g.get(f.div) || {n:0, w:0, l:0, d:0, last:'', tw:0, min:0};
+      g.set(f.div, x); x.n++; x.min += mn;
       if (f.date > x.last) x.last = f.date;
       if (f.res === s) { x.w++; if (isTitle(f) && !/interim/i.test(f.tt || '')) x.tw++; } else if (f.res === 'draw') x.d++; else x.l++;
     }
@@ -430,6 +450,82 @@ function divOf(id, main) {
     if (k > key) { key = k; best = d; }
   }
   return best || [...g.keys()][0];
+}
+
+/* Regra estrita de elegibilidade por divisão (fim do Division Leakage):
+   - Histórico (hist=true): mínimo de 4 lutas na divisão D (ou >=30 min E >=50% da carreira em D).
+   - Atual (hist=false): lutou na divisão D nos últimos 18 meses (e é sua divisão atual) OU está ranqueado oficialmente nela. */
+function isDivElig(id, dv, hist, totN) {
+  if (!dv || dv === 'ALL') return true;
+  const g = dm().get(id)?.get(dv);
+  if (hist) {
+    if (!g) return false;
+    const nTot = totN || S.an?.fighters?.[id]?.n || [...(dm().get(id)?.values() || [])].reduce((s, y) => s + y.n, 0) || 1;
+    return g.n >= 4 || (g.min >= 30 && g.n / nTot >= 0.5);
+  }
+  const cut18 = new Date(Date.now() - 1.5 * YR).toISOString().slice(0, 10);
+  const rkF = S.urk?.fighters?.[id];
+  const offInDiv = rkF && rkF.cur_div === dv && rkF.cur_rank != null;
+  if (offInDiv) return true;
+  if (!g || g.last < cut18) return false;
+  if (rkF && rkF.cur_div && rkF.cur_div !== dv && rkF.cur_rank != null) return false;
+  return divOf(id, false) === dv || g.last >= cut18;
+}
+
+/* Pontuação histórica ponderada especificamente pela campanha dentro da divisão D */
+function divHs(x, dv) {
+  if (!dv || dv === 'ALL') return x.hs;
+  const g = dm().get(x.id)?.get(dv);
+  if (!g) return -999;
+  const sh = g.n / Math.max(x.n, 1);
+  const rawD = x.dhs && x.dhs.has(dv) ? x.dhs.get(dv) : x.hs * sh;
+  return rawD * (0.55 + 0.45 * sh);
+}
+
+/* Curva fisiológica de envelhecimento (após 35/37 anos) e inatividade (>14/24 meses) */
+function physDecay(id) {
+  const an = S.an?.fighters?.[id];
+  if (an && an.phys_pen != null) return {age: an.age, inactM: an.inact_m, pen: an.phys_pen};
+  const p = S.F.get(id), dv = divOf(id, true);
+  const last = an?.last || S.fg.filter(f => f.res !== 'nc' && (mid(f.a.id) === id || mid(f.b.id) === id)).map(f => f.date).sort().at(-1) || '';
+  const dobT = p?.DOB ? Date.parse(p.DOB) : NaN;
+  const age = !isNaN(dobT) ? (Date.now() - dobT) / YR : null;
+  const inactM = last ? Math.max(0, (Date.now() - Date.parse(last)) / (YR / 12)) : 0;
+  const age0 = (dv === 'Light Heavyweight' || dv === 'Heavyweight') ? 37 : 35;
+  let agePen = 0;
+  if (age != null && age > age0) {
+    const da = age - age0;
+    agePen = 8.5 * da + 1.85 * da * da;
+  }
+  let layPen = 0;
+  if (inactM > 14) {
+    layPen = inactM <= 24 ? 2.5 * (inactM - 14) : Math.min(220, 25 + 4.2 * (inactM - 24));
+  }
+  return {age: age != null ? +age.toFixed(1) : null, inactM: +inactM.toFixed(1), pen: +Math.min(550, agePen + layPen).toFixed(1)};
+}
+
+/* Peso oficial de competição (lbs) e Prior Físico de Massa Corporal entre categorias */
+const DIV_LBS = {
+  "Women's Strawweight": 115, "Strawweight": 115,
+  "Women's Flyweight": 125, "Flyweight": 125,
+  "Women's Bantamweight": 135, "Bantamweight": 135,
+  "Women's Featherweight": 145, "Featherweight": 145,
+  "Lightweight": 155, "Welterweight": 170,
+  "Middleweight": 185, "Light Heavyweight": 205, "Heavyweight": 255
+};
+function lbsOf(id) {
+  const d = divOf(id, false) || divOf(id, true), p = S.F.get(id);
+  const wBio = p?.Weight ? parseFloat(p.Weight) : NaN;
+  if (d === 'Heavyweight' && !isNaN(wBio) && wBio >= 206 && wBio <= 300) return wBio;
+  if (DIV_LBS[d]) return DIV_LBS[d];
+  if (!isNaN(wBio) && wBio >= 105 && wBio <= 300) return wBio;
+  return 170;
+}
+function massDelta(ia, ib) {
+  const wA = lbsOf(ia), wB = lbsOf(ib), diffLbs = wA - wB;
+  if (Math.abs(diffLbs) < 3) return {wA, wB, diffLbs: 0, diffKg: 0, pts: 0, mu: 0};
+  const pts = 520 * Math.log(wA / wB) + 2.4 * diffLbs;
+  return {wA, wB, diffLbs: Math.round(diffLbs), diffKg: +(diffLbs * 0.453592).toFixed(1), pts: Math.round(pts), mu: pts / U};
 }
 function holdoutAll(P) {
   const k = 'ho|' + JSON.stringify(P);
@@ -700,9 +796,11 @@ function probs(ia, ib) {
   if (!R || R.none) return null;
   const E = getE('ALL'), a = rt(ia, E, 'cur'), b = rt(ib, E, 'cur'), st = pre().st, A = st.get(ia), B = st.get(ib);
   if (!a || !b || !A || !B) return null;
+  const md = massDelta(ia, ib), pdA = physDecay(ia), pdB = physDecay(ib), physNet = (pdB.pen - pdA.pen) + md.pts;
   const t = new Date().toISOString().slice(0, 10), fa = feat(A, ia, t), fb = feat(B, ib, t);
   const x = fa.map((v, i) => v == null || fb[i] == null ? 0 : v - fb[i]), s2 = a.v + b.v;
-  const pW = sg((a.mu - b.mu) / Math.sqrt(1 + Math.PI * s2 / 8)), pS = predLR(R.mF, {x}), pE = predLR(R.mE, {x});
+  x[0] += physNet * 0.85;
+  const pW = sg((a.mu - b.mu + md.mu) / Math.sqrt(1 + Math.PI * s2 / 8)), pS = sg(Math.log(predLR(R.mF, {x}) / (1 - predLR(R.mF, {x}) + 1e-9)) + md.mu * 0.55), pE = predLR(R.mE, {x});
   return {pE, pW, pS, pB: (pW + pS) / 2, best: R.best};
 }
 const pbest = o => ({Elo:o.pE, WHR:o.pW, Stats:o.pS, Blend:o.pB})[o.best];
@@ -873,13 +971,13 @@ function p4p(hist) {
   for (const x of getE('ALL').rows) {
     if (x.n < P.min || (!hist && cut && x.last < cut)) continue;
     const d = divOf(x.id, hist);              /* atual: onde luta hoje; histórico: onde fez a carreira */
-    if (!STD.includes(d)) continue;
+    if (!STD.includes(d) || !isDivElig(x.id, d, hist, x.n)) continue;
     if (!pools.has(d)) pools.set(d, []);
     pools.get(d).push(x);
   }
   for (const [d, rs] of pools) {
     if (rs.length < 8) continue;
-    const v = x => hist ? x.hs : x.cur, mu = rs.reduce((a, x) => a + v(x), 0) / rs.length;
+    const v = x => hist ? x.hs : (x.cur - physDecay(x.id).pen), mu = rs.reduce((a, x) => a + v(x), 0) / rs.length;
     const sd = Math.sqrt(rs.reduce((a, x) => a + (v(x) - mu) ** 2, 0) / rs.length) || 1;
     for (const x of rs) out.push({...x, v: (v(x) - mu) / sd, div: d});
   }
@@ -1694,9 +1792,10 @@ function vRank() {
       $('#tn8').innerHTML = '';
       return;
     }
-    /* na divisão: quem lutou nela (visão Atual: dentro da janela de atividade, NAQUELA divisão) */
-    const inDiv = x => { if (dv === 'ALL') return true; const g = DM.get(x.id)?.get(dv); return !!g && (hist || !cut || g.last >= cut); };
-    const r = (p4 ? p4p(hist) : E.rows.filter(x => x.n >= P.min && (hist || !cut || x.last >= cut) && inDiv(x)).map(x => ({...x, v: hist ? x.hs : x.cur}))).sort((a, b) => b.v - a.v).slice(0, 150);
+    /* na divisão: elegibilidade estrita (All-Time: >=4 lutas ou >=30m e >=50% da carreira em D; Atual: 18m em D ou ranqueado oficialmente em D) */
+    const inDiv = x => isDivElig(x.id, dv, hist, x.n);
+    const valOf = x => hist ? (dv === 'ALL' ? x.hs : divHs(x, dv)) : (x.cur - physDecay(x.id).pen);
+    const r = (p4 ? p4p(hist) : E.rows.filter(x => x.n >= P.min && (hist || !cut || x.last >= cut) && inDiv(x)).map(x => ({...x, v: valOf(x)}))).sort((a, b) => b.v - a.v).slice(0, 150);
     /* linha extra: cartel na divisão escolhida, outras divisões e selo de provisório */
     const dline = x => {
       const g = DM.get(x.id); if (!g) return '';
@@ -1886,8 +1985,9 @@ function vFighter(id) {
 /* ---------- Fight simulator ---------- */
 function rt(id, E, mode) {
   const x = E.RM.get(id); if (!x) return null;
-  if (mode === 'peak') return {mu: x.pn.r, v: x.pn.vr, x};
-  return {mu: x.ln.r, v: x.ln.vr + (S.P.vol / U) ** 2 * Math.max(0, Date.now() / YR - x.ln.t), x};
+  if (mode === 'peak') return {mu: x.pn.r, v: x.pn.vr, x, pd: {age: null, inactM: 0, pen: 0}};
+  const pd = physDecay(id);
+  return {mu: x.ln.r - pd.pen / U, v: x.ln.vr + (S.P.vol / U) ** 2 * Math.max(0, Date.now() / YR - x.ln.t), x, pd};
 }
 const sg = z => 1 / (1 + Math.exp(-z)), pc = x => (x * 100).toFixed(1) + '%', f1 = x => x.toFixed(2);
 const sr = (l, a, b, x, y) => `<div class="sr"><span style="color:var(--gd)">${a}</span><span class="lb">${l}</span><span style="color:var(--cb)">${b}</span>${x != null ? `<div class="bar"><i style="--w:${x / ((x + y) || 1) * 100}%;--c:var(--gd)"></i><i style="--w:${y / ((x + y) || 1) * 100}%;--c:var(--cb)"></i></div>` : ''}</div>`;
@@ -1934,7 +2034,9 @@ function simOut(q) {
   if (!ra || !rb) return `<p class="empty">${T('At least one fighter has no rating in this scope. Try "General".', 'Pelo menos um lutador não tem nota neste escopo. Tente "Geral".')}</p>`;
   const G = league(), oa = agg(q.a, q.m), ob = agg(q.b, q.m), xa = rates(oa, G), xb = rates(ob, G), el = r => Math.round(1500 + U * r.mu), sd = r => Math.round(U * Math.sqrt(r.v));
   const env = q.env || 'std', nRds = +(q.rds || 3), anA = S.an?.fighters?.[q.a] || {}, anB = S.an?.fighters?.[q.b] || {};
-  const stA = anA.stam || 1, stB = anB.stam || 1;
+  const pdA = ra.pd || {age: null, inactM: 0, pen: 0}, pdB = rb.pd || {age: null, inactM: 0, pen: 0}, md = massDelta(q.a, q.b);
+  const physModA = q.m === 'cur' ? Math.max(0.68, 1 - pdA.pen / 950) : 1, physModB = q.m === 'cur' ? Math.max(0.68, 1 - pdB.pen / 950) : 1;
+  const stA = (anA.stam || 1) * (q.m === 'cur' ? Math.max(0.75, 1 - pdA.pen / 1200) : 1), stB = (anB.stam || 1) * (q.m === 'cur' ? Math.max(0.75, 1 - pdB.pen / 1200) : 1);
   let envAdj = 0, envNote = '';
   if (xa && xb && env === 'apex') {
     const grA = (xa.td / 3) + xa.ctl * 2 + xa.fin, grB = (xb.td / 3) + xb.ctl * 2 + xb.fin;
@@ -1946,12 +2048,26 @@ function simOut(q) {
     envNote = T('High altitude (>1,500m): favors late-round cardio retention.', 'Altitude elevada (>1.500m): favorece retenção de cardio nos rounds finais.');
   }
   const rdsAdj = nRds === 5 ? Math.max(-.14, Math.min(.14, (stA - stB) * .35)) : 0;
-  const s2 = ra.v + rb.v, dm0 = (ra.mu - rb.mu) + envAdj, dm = dm0 + rdsAdj, p3 = sg(dm0 / Math.sqrt(1 + Math.PI * s2 / 8)), p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
+  const s2 = ra.v + rb.v, dm0 = (ra.mu - rb.mu) + md.mu + envAdj, dm = dm0 + rdsAdj, p3 = sg(dm0 / Math.sqrt(1 + Math.PI * s2 / 8)), p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
   const da = mainDiv(q.a), db = mainDiv(q.b), age = d => { const t = Date.parse(d); return t ? ((Date.now() - t) / YR).toFixed(1) : '-'; };
+  const physAlert = [];
+  if (md.diffLbs !== 0) {
+    const hv = md.diffLbs > 0 ? A.name : B.name, dl = Math.abs(md.diffLbs), dk = Math.abs(md.diffKg), dp = Math.abs(md.pts);
+    physAlert.push(`⚖️ <b>${T('Cross-Division Mass Prior', 'Prior Físico de Massa Corporal')}:</b> ${esc(hv)} ${T(`holds a +${dl} lbs (+${dk} kg) frame & kinetic power advantage (${md.wA} vs ${md.wB} lbs → +${dp} WHR pts)`, `tem vantagem física de +${dl} lbs (+${dk} kg) de massa de competição (${md.wA} vs ${md.wB} lbs → +${dp} pts WHR)`)}`);
+  }
+  if (q.m === 'cur' && (pdA.pen >= 20 || pdB.pen >= 20)) {
+    const parts = [];
+    if (pdA.pen >= 20) parts.push(`${esc(A.name)} (${pdA.age ? pdA.age + T(' yrs', ' anos') : ''}${pdA.inactM >= 14 ? `, ${Math.round(pdA.inactM)}m ${T('inactive', 'inativo')}` : ''}: −${Math.round(pdA.pen)} pts)`);
+    if (pdB.pen >= 20) parts.push(`${esc(B.name)} (${pdB.age ? pdB.age + T(' yrs', ' anos') : ''}${pdB.inactM >= 14 ? `, ${Math.round(pdB.inactM)}m ${T('inactive', 'inativo')}` : ''}: −${Math.round(pdB.pen)} pts)`);
+    physAlert.push(`⏳ <b>${T('Physiological Age & Layoff Curve', 'Curva Fisiológica de Idade & Inatividade')}:</b> ${parts.join(' · ')}`);
+  }
+  const physBanner = physAlert.length ? `<div class="card" style="padding:.65rem 1rem;border-left:3px solid var(--cb);margin-bottom:.5rem;font-size:.9rem">${physAlert.join('<br>')}</div>` : '';
   let quick = '';
   if (xa && xb) {
     const fav = p >= .5 ? A.name : B.name, fp = Math.max(p, 1 - p), fx = p >= .5 ? xa : xb, ux = p >= .5 ? xb : xa;
     const edges = [];
+    if (md.diffLbs !== 0 && ((p >= .5 && md.diffLbs > 0) || (p < .5 && md.diffLbs < 0))) edges.push(T(`+${Math.abs(md.diffLbs)} lbs (+${Math.abs(md.diffKg)} kg) weight-class advantage`, `+${Math.abs(md.diffLbs)} lbs (+${Math.abs(md.diffKg)} kg) de vantagem de categoria de peso`));
+    if (q.m === 'cur' && Math.abs(pdA.pen - pdB.pen) >= 45) edges.push(T('youth & recent octagon activity', 'juventude e atividade recente no octógono'));
     if (Math.abs(fx.sl - ux.sl) >= .8) edges.push(fx.sl > ux.sl ? T('higher striking volume', 'maior volume de golpes') : T('absorbing fewer exchanges', 'ritmo mais cadenciado'));
     if (fx.td - ux.td >= .8) edges.push(T('stronger wrestling/takedown pressure', 'maior pressão de quedas'));
     if (fx.tddef - ux.tddef >= .12) edges.push(T('superior takedown defense', 'defesa de quedas superior'));
@@ -1964,10 +2080,10 @@ function simOut(q) {
     const tone = fp >= .7 ? T('Clear favorite', 'Favorito claro') : fp >= .58 ? T('Moderate favorite', 'Favorito moderado') : T('Coin-flip / very close matchup', 'Confronto muito equilibrado');
     quick = `<div class="card" style="padding:.75rem 1rem;border-left:3px solid var(--gd)"><b>${T('Quick read', 'Leitura rápida')}:</b> ${tone} — <b>${esc(fav)}</b> (${pc(fp)}).${edges.length ? ' ' + T('Key factors:', 'Fatores-chave:') + ' ' + edges.slice(0, 3).join('; ') + '.' : ''}${envNote ? ` <span class="tag">${envNote}</span>` : ''}</div>`;
   }
-  let h = `<h2>${T('Win probability', 'Probabilidade de vitória')}</h2>${quick}<div class="card" style="padding:1rem 1.1rem"><div class="pb"><i style="flex:${p};background:var(--gd)">${pc(p)}</i><i style="flex:${1 - p};background:var(--cb)">${pc(1 - p)}</i></div>
+  let h = `<h2>${T('Win probability', 'Probabilidade de vitória')}</h2>${physBanner}${quick}<div class="card" style="padding:1rem 1.1rem"><div class="pb"><i style="flex:${p};background:var(--gd)">${pc(p)}</i><i style="flex:${1 - p};background:var(--cb)">${pc(1 - p)}</i></div>
   <div class="sr"><span style="color:var(--gd)">${esc(A.name)}</span><span></span><span style="color:var(--cb)">${esc(B.name)}</span></div>
-  <p class="mu sm">${T('90% interval for A', 'Intervalo de 90% para A')}: ${pc(lo)} – ${pc(hi)}. ${T('Ratings', 'Notas')}: ${el(ra)} ± ${sd(ra)} ${T('vs', 'vs')} ${el(rb)} ± ${sd(rb)} (${q.m === 'peak' ? T('career peak', 'pico da carreira') : T('current form, with uncertainty growing while inactive', 'momento atual, com incerteza crescendo na inatividade')}).${da !== db ? ` ${T('Different main divisions: the rating comparison is indirect.', 'Divisões principais diferentes: a comparação de notas é indireta.')}` : ''}</p></div>
-  <h2>${T('Tale of the tape', 'Comparativo')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Record', 'Cartel'), esc(A.record), esc(B.record))}${sr(T('Height', 'Altura'), esc(A.Height || '-'), esc(B.Height || '-'))}${sr(T('Reach', 'Envergadura'), esc(A.Reach || '-'), esc(B.Reach || '-'))}${sr(T('Stance', 'Base'), esc(A.STANCE || '-'), esc(B.STANCE || '-'))}${sr(T('Age', 'Idade'), age(A.DOB), age(B.DOB))}${tapeExtra(A, B)}${sr(T('Main division', 'Divisão principal'), esc(da), esc(db))}${sr(T('Fights used', 'Lutas usadas'), oa.n, ob.n)}</div>`;
+  <p class="mu sm">${T('90% interval for A', 'Intervalo de 90% para A')}: ${pc(lo)} – ${pc(hi)}. ${T('Effective Ratings', 'Notas Efetivas')}: ${el(ra)} ± ${sd(ra)} ${T('vs', 'vs')} ${el(rb)} ± ${sd(rb)}${md.pts ? ` (${T('Mass Prior', 'Prior de Massa')}: ${md.pts > 0 ? '+' : ''}${md.pts} pts)` : ''} (${q.m === 'peak' ? T('career peak', 'pico da carreira') : T('current form, adjusted for physiological age & inactivity', 'momento atual, ajustado por idade fisiológica e inatividade')}).</p></div>
+  <h2>${T('Tale of the tape', 'Comparativo')}</h2><div class="card" style="padding:.8rem 1.1rem">${sr(T('Record', 'Cartel'), esc(A.record), esc(B.record))}${sr(T('Competition Weight', 'Peso de Competição'), `${md.wA} lbs (${(md.wA * 0.453592).toFixed(1)} kg)`, `${md.wB} lbs (${(md.wB * 0.453592).toFixed(1)} kg)`, md.wA, md.wB)}${sr(T('Height', 'Altura'), esc(A.Height || '-'), esc(B.Height || '-'))}${sr(T('Reach', 'Envergadura'), esc(A.Reach || '-'), esc(B.Reach || '-'))}${sr(T('Stance', 'Base'), esc(A.STANCE || '-'), esc(B.STANCE || '-'))}${sr(T('Age', 'Idade'), age(A.DOB), age(B.DOB))}${tapeExtra(A, B)}${sr(T('Main division', 'Divisão principal'), esc(da), esc(db))}${sr(T('Fights used', 'Lutas usadas'), oa.n, ob.n)}</div>`;
   S.simLast = {A, B, p, lo, hi, m: q.m};
   h += `<div class="acts" style="margin-top:.6rem"><button id="shr">${T('Share card', 'Cartão para compartilhar')}</button><a class="btn" href="#/xray/${q.a}/${q.b}">${T('Open in X-Ray', 'Abrir no Raio-X')}</a></div>`;
   h += models(q, p); h += h2hHtml(q);
@@ -1986,9 +2102,9 @@ function simOut(q) {
   ${sr(T('Chin durability index (0–100)', 'Índice de resistência de queixo (0–100)'), cha, chb, cha, chb)}${sr(T('Finish rate in wins', 'Taxa de finalização nas vitórias'), pc(xa.fin), pc(xb.fin), xa.fin, xb.fin)}</div>`;
   h += sigHtml(oa, ob, A, B);
   h += roundsSimHtml(q.a, q.b) + wearSimHtml(q.a, q.b);
-  const gk = 15 * Math.max(G.kd, 1) / G.min;
-  const pj = (x, y) => ({sl: 15 * x.sl * (y.ab / x.gs), td: x.td * (y.tdab / x.gt15), kd: x.kd * (y.kda / gk), ctl: Math.min(.95, x.ctl * (y.cta / x.gc))});
-  const ja = pj(xa, xb), jb = pj(xb, xa);
+  const gk = 15 * Math.max(G.kd, 1) / G.min, mRatioA = Math.pow(md.wA / md.wB, 0.75) * physModA, mRatioB = Math.pow(md.wB / md.wA, 0.75) * physModB;
+  const pj = (x, y, mr) => ({sl: 15 * x.sl * (y.ab / x.gs) * Math.sqrt(mr), td: x.td * (y.tdab / x.gt15) * mr, kd: x.kd * (y.kda / gk) * mr, ctl: Math.min(.95, x.ctl * (y.cta / x.gc) * mr)});
+  const ja = pj(xa, xb, mRatioA), jb = pj(xb, xa, mRatioB);
   h += `<h2>${T('Projected matchup (per 15 minutes)', 'Projeção do confronto (a cada 15 minutos)')}</h2><div class="card" style="padding:.8rem 1.1rem">
   ${sr(T('Sig. strikes landed', 'Golpes sig. acertados'), f1(ja.sl), f1(jb.sl), ja.sl, jb.sl)}${sr(T('Takedowns', 'Quedas'), f1(ja.td), f1(jb.td), ja.td, jb.td)}${sr(T('Knockdowns', 'Knockdowns'), f1(ja.kd), f1(jb.kd), ja.kd, jb.kd)}${sr(T('Control time share', 'Fração de controle'), pc(ja.ctl), pc(jb.ctl), ja.ctl, jb.ctl)}</div>`;
   const ma = meth(oa, ob, G), mb = meth(ob, oa, G), nm = {KO:'KO/TKO', SUB:T('Submission', 'Finalização'), DEC:T('Decision', 'Decisão'), OTH:T('Other', 'Outro')};
@@ -2062,9 +2178,11 @@ function models(q, p) {
   if (q.m !== 'cur') return `<p class="mu sm">${T('The stats model is available in "Current form" mode.', 'O modelo de estatísticas está disponível no modo "Momento atual".')}</p>`;
   const R = lab(); if (!R || R.none) return '';
   const st = pre().st, a = st.get(q.a), b = st.get(q.b); if (!a || !b) return '';
+  const md = massDelta(q.a, q.b), pdA = physDecay(q.a), pdB = physDecay(q.b), physNet = (pdB.pen - pdA.pen) + md.pts;
   const today = new Date().toISOString().slice(0, 10), fa = feat(a, q.a, today), fb = feat(b, q.b, today);
   const xx = fa.map((v, i) => v == null || fb[i] == null ? 0 : v - fb[i]);
-  const ps = predLR(R.mF, {x:xx}), pe = predLR(R.mE, {x:xx}), bl = (p + ps) / 2, m = k => R.M.find(x => x.n === k).ll.toFixed(3);
+  xx[0] += physNet * 0.85;
+  const ps0 = predLR(R.mF, {x:xx}), ps = sg(Math.log(ps0 / (1 - ps0 + 1e-9)) + md.mu * 0.55), pe = predLR(R.mE, {x:xx}), bl = (p + ps) / 2, m = k => R.M.find(x => x.n === k).ll.toFixed(3);
   const row = (n, k, v) => `<div class="sr"><span style="color:var(--gd)">${pc(v)}</span><span class="lb">${n}${R.best === k ? ' ★' : ''}</span><span style="color:var(--cb)">${pc(1 - v)}</span></div>`;
   return `<h2>${T('Models compared', 'Modelos comparados')}</h2><div class="card" style="padding:.8rem 1.1rem">${row('Elo', 'Elo', pe)}${row('WHR', 'WHR', p)}${row(T('Stats model', 'Modelo de estatísticas'), 'Stats', ps)}${row(T('Blend', 'Combinado'), 'Blend', bl)}<p class="mu sm">${T('★ = lowest blind-test log-loss', '★ = menor log-loss no teste cego')} (Elo ${m('Elo')}, WHR ${m('WHR')}, ${T('stats', 'estatísticas')} ${m('Stats')}, ${T('blend', 'combinado')} ${m('Blend')}). ${T('Details in the Lab tab.', 'Detalhes na aba Lab.')}</p></div>`;
 }
@@ -2318,7 +2436,7 @@ window.XEXP = (function () {
 
 /* ---------- gaveta "Mais", busca global (/ ou Ctrl+K), voltar ao topo ---------- */
 const NRM = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-const ICONS = {xray: '🔬', studio: '🎛️', lab: '🧪', sherdog: '📤', extras: '✨'};
+const ICONS = {ideal: '🧬', xray: '🔬', studio: '🎛️', lab: '🧪', sherdog: '📤', extras: '✨'};
 function closeAll() { ['sh', 'gsm'].forEach(i => { const e = document.getElementById(i); if (e) e.classList.remove('open'); }); }
 function openSheet() {
   const g = document.getElementById('shg'), k = (location.hash.split('/')[1] || 'events');
@@ -2365,6 +2483,324 @@ function uiInit() {
   XEXP.start();
 }
 
+/* ======== ABA PRINCIPAL: LUTADOR IDEAL (ARQUÉTIPO ANATÔMICO INTERATIVO) ======== */
+const ID_STATE = {era: 'all', div: 'ALL', zone: 'fist'};
+const ID_ZONES = () => [
+  {
+    k: 'aura', icon: '👑',
+    nm: T('Aura / Brain (Clutch & Dominance)', 'Aura / Cérebro (Clutch & Dominância)'),
+    short: T('Aura & IQ', 'Aura & QI'),
+    desc: T('Peak WHR dominance, championship reign equity and career résumé score against elite opposition.', 'Pico de dominância WHR, vitórias em disputas de cinturão e campanha histórica contra a elite.'),
+    minOk: (f, dv, minN) => f.n >= minN,
+    score: (id, f, rm, dv, isHist) => {
+      const tw = dv === 'ALL' ? (f.tw || 0) : (dm().get(id)?.get(dv)?.tw || 0);
+      if (isHist) return (dv === 'ALL' ? (rm?.hs || 0) : divHs(rm, dv)) * 1.45 + 0.26 * ((f.whr_pk || f.pk || 1500) - 1500) + 12 * tw;
+      return ((f.whr_eff ?? f.whr ?? 1500) - 1500) + 18 * tw + 0.2 * ((f.qw || 1500) - 1500);
+    },
+    fmt: (id, f, rm, dv, isHist) => {
+      const tw = dv === 'ALL' ? (f.tw || 0) : (dm().get(id)?.get(dv)?.tw || 0);
+      return isHist ? `WHR ${T('Peak', 'Pico')} ${Math.round(f.whr_pk || f.pk)} · ${tw} 🏆 · ${T('Score', 'Campanha')} ${Math.round(dv === 'ALL' ? (rm?.hs || 0) : divHs(rm, dv))}` : `WHR ${T('Current', 'Atual')} ${Math.round(f.whr_eff ?? f.whr)} · ${tw} 🏆 · ${T('Peak', 'Pico')} ${Math.round(f.whr_pk || f.pk)}`;
+    },
+    badge: (id, f, rm, dv, isHist) => isHist ? `${Math.round(f.whr_pk || f.pk)} PK` : `${Math.round(f.whr_eff ?? f.whr)} WHR`
+  },
+  {
+    k: 'chin', icon: '🗿',
+    nm: T('Head / Chin (Chin & Defensive IQ)', 'Cabeça / Queixo (Queixo & QI Defensivo)'),
+    short: T('Chin & Def.', 'Queixo & Def.'),
+    desc: T('Knockout/knockdown durability index (0–100) combined with OPA™ opponent-adjusted striking defense against elite opposition.', 'Índice de resistência de queixo (0–100) combinado à defesa de golpes significativos ajustada pelo ataque dos rivais (OPA™) contra a elite.'),
+    minOk: (f, dv, minN) => f.n >= Math.max(minN, dv === 'ALL' ? 8 : 4) && (f.sa || 0) >= (dv === 'ALL' ? 280 : 100),
+    score: (id, f, rm, dv, isHist) => (f.chin || 65) * 1.15 + 11 * (f.opa_d || 0) + 0.082 * (((isHist ? f.whr_pk : f.whr_eff) || 1500) - 1500) + 0.06 * ((f.opp || 1500) - 1500) + ((f.ka || 0) === 0 ? 8 : 0) + Math.min(10, (f.sa || 0) / 80),
+    fmt: (id, f) => `${T('Chin', 'Queixo')} ${f.chin || 65}/100 · OPA™ Def ${f.opa_d >= 0 ? '+' : ''}${f.opa_d || 0}/m · ${f.ka || 0} KD / ${f.sa || 0} sig.`,
+    badge: (id, f) => `${f.chin || 65}/100`
+  },
+  {
+    k: 'fist', icon: '🥊',
+    nm: T('Fists / Arms (Striking & KO Power)', 'Punhos / Braços (Trocação & Poder de KO)'),
+    short: T('Fists & Power', 'Punhos & KO'),
+    desc: T('OPA™ clean-standing striking efficiency adjusted for rival defense, combined with knockdown lethality (DLI), KOs and strength of schedule.', 'Eficiência de trocação em pé limpo ajustada pela defesa dos rivais (OPA™), combinada à letalidade de knockdown (DLI), KOs no UFC e nível de oposição.'),
+    minOk: (f, dv, minN) => f.n >= minN && (f.sl || 0) >= (dv === 'ALL' ? 200 : 80) && (f.w?.[0] || 0) >= (dv === 'ALL' ? 4 : 1),
+    score: (id, f, rm, dv, isHist) => 13.5 * (f.opa_s || 0) + 0.30 * (f.dli || 100) + 3.2 * (f.w?.[0] || 0) + 1.35 * (f.kd || 0) + 0.075 * (((isHist ? f.whr_pk : f.whr_eff) || 1500) - 1500) + 0.06 * ((f.opp || 1500) - 1500),
+    fmt: (id, f) => `${f.w?.[0] || 0} KOs (${f.kd || 0} KDs) · DLI ${f.dli || 100} · OPA™ Str ${f.opa_s >= 0 ? '+' : ''}${f.opa_s || 0}/m`,
+    badge: (id, f) => `${f.w?.[0] || 0} KOs · DLI ${f.dli || 100}`
+  },
+  {
+    k: 'lung', icon: '🫁',
+    nm: T('Lungs / Heart (State-Free Cardio & Pace)', 'Pulmão / Coração (Cardio & Ritmo)'),
+    short: T('Lungs & Pace', 'Pulmão & Cardio'),
+    desc: T('Championship-round output retention free of ground-control state bias (R3–R5 vs R1), clean standing pace and distance wins.', 'Retenção de ritmo nos rounds finais livre de viés de estado no solo (R3–R5 vs R1), volume em pé limpo por minuto e vitórias em lutas longas.'),
+    minOk: (f, dv, minN) => f.n >= Math.max(minN, dv === 'ALL' ? 8 : 4) && (f.w?.[2] || 0) >= (dv === 'ALL' ? 4 : 1) && (f.raw_s || 0) >= 2.5,
+    score: (id, f, rm, dv, isHist) => 75 * (f.stam || 1) + 8.5 * (f.raw_s || 0) + 2.6 * (f.w?.[2] || 0) + 0.075 * (((isHist ? f.whr_pk : f.whr_eff) || 1500) - 1500) + 0.05 * ((f.opp || 1500) - 1500),
+    fmt: (id, f) => `${T('Cardio R3–R5', 'Cardio R3–R5')}: ${Math.round((f.stam || 1) * 100)}% · ${T('Clean pace', 'Ritmo limpo')} ${f.raw_s || 0}/m · ${f.w?.[2] || 0} DEC`,
+    badge: (id, f) => `${Math.round((f.stam || 1) * 100)}% R3+`
+  },
+  {
+    k: 'core', icon: '🤼',
+    nm: T('Core / Hips (Wrestling & Positional Control)', 'Tronco / Quadril (Wrestling & Controle)'),
+    short: T('Core & Wrestling', 'Tronco & Quedas'),
+    desc: T('OPA™ takedown and positional control pressure per 15 minutes adjusted for rival takedown defense and opposition strength.', 'Pressão de quedas e controle posicional por 15 minutos ajustada pela defesa de quedas e força dos adversários enfrentados (OPA™).'),
+    minOk: (f, dv, minN) => f.n >= Math.max(minN, dv === 'ALL' ? 7 : 4) && (f.opa_g || 0) > 0,
+    score: (id, f, rm, dv, isHist) => 14.5 * (f.opa_g || 0) + 5.5 * (f.opa_td || 0) + 0.085 * (((isHist ? f.whr_pk : f.whr_eff) || 1500) - 1500) + 0.065 * ((f.opp || 1500) - 1500) + 1.1 * Math.min(18, f.n),
+    fmt: (id, f) => `OPA™ Wrestling ${f.opa_g >= 0 ? '+' : ''}${f.opa_g || 0}/15m · ${T('Grappling Def.', 'Def. Solo')} ${f.opa_td >= 0 ? '+' : ''}${f.opa_td || 0}`,
+    badge: (id, f) => `+${f.opa_g || 0}/15m`
+  },
+  {
+    k: 'joint', icon: '🕸️',
+    nm: T('Joints / Grip (Submission Threat & BJJ)', 'Articulações / Pegada (Finalização & Jiu-Jitsu)'),
+    short: T('Joints & Subs', 'Pegada & Subs'),
+    desc: T('UFC submission finishes combined with productive ground threat per minute and submission attempts per 15 min.', 'Vitórias por finalização no UFC combinadas à ameaça produtiva por minuto de solo e tentativas de finalização a cada 15 min.'),
+    minOk: (f, dv, minN) => f.n >= minN && (f.w?.[1] || 0) >= (dv === 'ALL' ? 3 : 1),
+    score: (id, f, rm, dv, isHist) => 6.4 * (f.w?.[1] || 0) + 4.8 * Math.min(10, f.gt || 0) + 4.2 * (f.sub15 || 0) + 0.055 * (((isHist ? f.whr_pk : f.whr_eff) || 1500) - 1500) + 0.04 * ((f.opp || 1500) - 1500),
+    fmt: (id, f) => `${f.w?.[1] || 0} ${T('UFC Submissions', 'Finalizações no UFC')} · ${T('Ground threat', 'Ameaça no solo')} ${f.gt || 0}/m (${f.sub15 || 0} sub/15m)`,
+    badge: (id, f) => `${f.w?.[1] || 0} SUBs`
+  },
+  {
+    k: 'leg', icon: '🦵',
+    nm: T('Legs / Shins (Kicking Game & Low Kicks)', 'Pernas / Canelas (Jogo de Chutes & Low Kicks)'),
+    short: T('Legs & Kicks', 'Pernas & Chutes'),
+    desc: T('Significant leg kicks landed per clean standing minute (Bayesian-shrunk), total landed kicks and opposition strength.', 'Chutes significativos conectados por minuto em pé limpo (com encolhimento bayesiano), volume acumulado e nível de oposição.'),
+    minOk: (f, dv, minN) => f.n >= minN && (f.leg_tot || 0) >= (dv === 'ALL' ? 85 : 22),
+    score: (id, f, rm, dv, isHist) => 36 * (f.leg_m || 0) + 0.16 * Math.min(450, f.leg_tot || 0) + 0.072 * (((isHist ? f.whr_pk : f.whr_eff) || 1500) - 1500) + 0.055 * ((f.opp || 1500) - 1500),
+    fmt: (id, f) => `${(f.leg_m || 0).toFixed(2)} ${T('sig. leg kicks / standing min', 'chutes sig. / min em pé')} · ${f.leg_tot || 0} ${T('total landed', 'conectados')}`,
+    badge: (id, f) => `${(f.leg_m || 0).toFixed(2)}/min`
+  }
+];
+
+function computeIdeal(era, dv) {
+  const isHist = era === 'all', E = getE('ALL'), anF = S.an?.fighters || {};
+  const cut18 = new Date(Date.now() - 1.5 * YR).toISOString().slice(0, 10);
+  const minN = dv === "Women's Featherweight" ? 3 : (dv === 'ALL' ? 5 : 4);
+  const pool = [];
+  for (const [id, f] of Object.entries(anF)) {
+    if (!isDivElig(id, dv, isHist, f.n)) continue;
+    if (!isHist) {
+      const offRanked = S.urk?.fighters?.[id]?.cur_rank != null;
+      if (f.last < cut18 && !offRanked) continue;
+      if ((f.phys_pen || 0) > 85) continue;
+    }
+    const rm = E.RM.get(id);
+    if (!rm) continue;
+    pool.push({id, f, rm});
+  }
+  const out = {};
+  for (const z of ID_ZONES()) {
+    const cands = pool.filter(x => z.minOk(x.f, dv, minN)).map(x => ({
+      ...x,
+      sc: z.score(x.id, x.f, x.rm, dv, isHist),
+      metric: z.fmt(x.id, x.f, x.rm, dv, isHist),
+      badge: z.badge(x.id, x.f, x.rm, dv, isHist)
+    })).sort((a, b) => b.sc - a.sc).slice(0, 5);
+    out[z.k] = {z, top: cands};
+  }
+  return out;
+}
+
+function vIdeal() {
+  const divs = STD;
+  M(`<h1>🧬 ${T('Ideal Fighter — Anatomical Archetype', 'Lutador Ideal — Arquétipo Anatômico')}<span class="xbar" data-xk="ideal"></span></h1>
+  <p class="mu sm" style="margin-top:-.8rem;margin-bottom:1rem">${T('Interactive biomechanical & statistical blueprint: click or hover any of the 7 anatomical zones on the fighter silhouette to inspect the #1 statistical reference and the Top 5 in UFC history or among active fighters.', 'Blueprint biomecânico e estatístico interativo: clique ou passe o mouse sobre qualquer uma das 7 zonas anatômicas da silhueta para inspecionar a referência máxima (#1) e o Top 5 de Todos os Tempos ou da Era Atual.')}</p>
+  <div class="ctl">
+    <label>${T('Era / Roster', 'Era / Plantel')}<select id="id-era"><option value="all">${T('All-Time (UFC History)', 'Todos os Tempos (All-Time)')}</option><option value="cur">${T('Current Era (Active Roster)', 'Era Atual (Ativos)')}</option></select></label>
+    <label>${T('Division', 'Divisão')}<select id="id-div"><option value="ALL">${T('General (Pound-for-Pound)', 'Geral (Peso-por-Peso)')}</option>${divs.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select></label>
+  </div>
+  <div class="seg" id="id-tabs"></div>
+  <div class="idl-wrap"><div class="card idl-stage" id="id-svg-box"></div><div id="id-panel"></div></div>
+  <h2>🧩 ${T('Complete 7-Zone Anatomical Blueprint', 'DNA Completo do Lutador Perfeito (As 7 Partes #1)')}</h2>
+  <div class="idl-sum" id="id-sum"></div>`);
+
+  $('#id-era').value = ID_STATE.era;
+  $('#id-div').value = ID_STATE.div;
+
+  const render = () => {
+    const res = computeIdeal(ID_STATE.era, ID_STATE.div), zones = ID_ZONES();
+    if (!res[ID_STATE.zone]) ID_STATE.zone = 'fist';
+    const curZ = res[ID_STATE.zone], w1 = id => { const h = res[id]?.top?.[0]; return h ? lastName(S.F.get(h.id)?.name || '') : '—'; };
+    const b1 = id => res[id]?.top?.[0]?.badge || '';
+
+    $('#id-tabs').innerHTML = zones.map(z => `<button type="button" data-idz="${z.k}" class="${ID_STATE.zone === z.k ? 'on' : ''}">${z.icon} ${z.short}</button>`).join('');
+
+    const zCls = k => `idl-z${ID_STATE.zone === k ? ' on' : ''}`;
+    $('#id-svg-box').innerHTML = `<svg class="idl-svg" viewBox="0 0 420 550" role="img" aria-label="Anatomical Fighter Blueprint">
+      <defs>
+        <radialGradient id="auraGrad" cx="50%" cy="17%" r="22%">
+          <stop offset="0%" stop-color="#f5c518" stop-opacity="0.45"/>
+          <stop offset="65%" stop-color="#6c8cff" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#090a0d" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="torsoGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#2a2e38" stop-opacity="0.55"/>
+          <stop offset="100%" stop-color="#13151a" stop-opacity="0.85"/>
+        </linearGradient>
+      </defs>
+      <!-- HUD Octagon & Radar Grid -->
+      <polygon points="145,14 275,14 395,134 395,416 275,536 145,536 25,416 25,134" fill="none" stroke="rgba(245,197,24,0.14)" stroke-width="1.2" stroke-dasharray="6 4"/>
+      <circle cx="210" cy="260" r="185" fill="none" stroke="rgba(108,140,255,0.10)" stroke-width="1"/>
+      <line x1="210" y1="12" x2="210" y2="538" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+      <line x1="25" y1="260" x2="395" y2="260" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+      <circle cx="210" cy="92" r="76" fill="url(#auraGrad)"/>
+
+      <!-- Base Fighter Silhouette Shadow -->
+      <path d="M188,68 C188,48 232,48 232,68 C232,85 226,98 223,108 L242,118 L278,132 L306,184 L315,244 L292,250 L276,195 L260,168 L256,225 L262,285 L278,378 L286,472 L294,504 L262,508 L252,468 L238,382 L218,302 L202,302 L182,382 L168,468 L158,508 L126,504 L134,472 L142,378 L158,285 L164,225 L160,168 L144,195 L128,250 L105,244 L114,184 L142,132 L178,118 L197,108 C194,98 188,85 188,68 Z" fill="url(#torsoGrad)" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+
+      <!-- 1. AURA / CÉREBRO (Halo & Crown) -->
+      <g class="${zCls('aura')}" data-idz="aura">
+        <path class="z-body" d="M156,64 A56,52 0 1,1 264,64 A44,38 0 1,0 156,64 Z"/>
+        <ellipse class="z-body" cx="210" cy="62" rx="18" ry="11"/>
+        <line class="z-line" x1="242" y1="42" x2="310" y2="30"/>
+        <circle class="z-node" cx="210" cy="44" r="5.5"/>
+        <text class="z-lbl" x="314" y="26">👑 AURA / IQ</text>
+        <text class="z-sub" x="314" y="40">${esc(w1('aura'))} · ${esc(b1('aura'))}</text>
+      </g>
+
+      <!-- 2. CABEÇA / QUEIXO (Jaw & Cranium) -->
+      <g class="${zCls('chin')}" data-idz="chin">
+        <path class="z-body" d="M190,72 C190,56 230,56 230,72 C230,90 223,106 210,110 C197,106 190,90 190,72 Z"/>
+        <line class="z-line" x1="190" y1="90" x2="108" y2="74"/>
+        <circle class="z-node" cx="210" cy="96" r="5.5"/>
+        <text class="z-lbl" x="104" y="70" text-anchor="end">🗿 ${T('CHIN & DEF', 'QUEIXO & DEF')}</text>
+        <text class="z-sub" x="104" y="84" text-anchor="end">${esc(w1('chin'))} · ${esc(b1('chin'))}</text>
+      </g>
+
+      <!-- 3. PULMÃO / CORAÇÃO (Chest / Cardiopulmonary) -->
+      <g class="${zCls('lung')}" data-idz="lung">
+        <path class="z-body" d="M172,130 L206,126 L206,192 L168,184 Z M214,126 L248,130 L252,184 L214,192 Z"/>
+        <line class="z-line" x1="248" y1="154" x2="312" y2="122"/>
+        <circle class="z-node" cx="210" cy="158" r="5.5"/>
+        <text class="z-lbl" x="316" y="118">🫁 ${T('CARDIO', 'PULMÃO')}</text>
+        <text class="z-sub" x="316" y="132">${esc(w1('lung'))} · ${esc(b1('lung'))}</text>
+      </g>
+
+      <!-- 4. PUNHOS / BRAÇOS (Shoulders, Biceps & Gloves) -->
+      <g class="${zCls('fist')}" data-idz="fist">
+        <path class="z-body" d="M168,124 L138,136 L112,184 L104,242 L130,248 L146,194 L164,166 Z M252,124 L282,136 L308,184 L316,242 L290,248 L274,194 L256,166 Z"/>
+        <line class="z-line" x1="112" y1="184" x2="96" y2="152"/>
+        <circle class="z-node" cx="116" cy="222" r="5.5"/>
+        <circle class="z-node" cx="304" cy="222" r="5.5"/>
+        <text class="z-lbl" x="92" y="146" text-anchor="end">🥊 ${T('FISTS & KO', 'PUNHOS & KO')}</text>
+        <text class="z-sub" x="92" y="160" text-anchor="end">${esc(w1('fist'))} · ${esc(b1('fist'))}</text>
+      </g>
+
+      <!-- 5. TRONCO / QUADRIL (Core, Abs & Hips — Wrestling) -->
+      <g class="${zCls('core')}" data-idz="core">
+        <path class="z-body" d="M166,196 L254,196 L262,286 L222,304 L198,304 L158,286 Z"/>
+        <line class="z-line" x1="258" y1="242" x2="312" y2="226"/>
+        <circle class="z-node" cx="210" cy="244" r="5.5"/>
+        <text class="z-lbl" x="316" y="222">🤼 WRESTLING</text>
+        <text class="z-sub" x="316" y="236">${esc(w1('core'))} · ${esc(b1('core'))}</text>
+      </g>
+
+      <!-- 6. ARTICULAÇÕES / PEGADA (Wrists, Forearms & Grappling Hooks) -->
+      <g class="${zCls('joint')}" data-idz="joint">
+        <path class="z-body" d="M100,236 L134,242 L130,276 L96,268 Z M286,242 L320,236 L324,268 L290,276 Z"/>
+        <line class="z-line" x1="100" y1="258" x2="96" y2="294"/>
+        <circle class="z-node" cx="114" cy="256" r="5.5"/>
+        <circle class="z-node" cx="306" cy="256" r="5.5"/>
+        <text class="z-lbl" x="92" y="290" text-anchor="end">🕸️ ${T('JOINTS & SUB', 'PEGADA & SUB')}</text>
+        <text class="z-sub" x="92" y="304" text-anchor="end">${esc(w1('joint'))} · ${esc(b1('joint'))}</text>
+      </g>
+
+      <!-- 7. PERNAS / CHUTES (Quads, Calves & Shins) -->
+      <g class="${zCls('leg')}" data-idz="leg">
+        <path class="z-body" d="M158,292 L200,304 L182,390 L168,488 L130,488 L142,384 Z M220,304 L262,292 L278,384 L290,488 L252,488 L238,390 Z"/>
+        <line class="z-line" x1="274" y1="392" x2="314" y2="378"/>
+        <circle class="z-node" cx="164" cy="395" r="5.5"/>
+        <circle class="z-node" cx="256" cy="395" r="5.5"/>
+        <text class="z-lbl" x="318" y="374">🦵 ${T('LEGS & KICKS', 'CHUTES')}</text>
+        <text class="z-sub" x="318" y="388">${esc(w1('leg'))} · ${esc(b1('leg'))}</text>
+      </g>
+    </svg>
+    <p class="mu sm" style="text-align:center;margin:.4rem 0 0">${T('Tap or hover any body part to inspect its #1 holder and Top 5.', 'Toque ou passe o mouse em qualquer região do corpo para inspecionar o #1 e o Top 5.')}</p>`;
+
+    // Painel lateral de detalhes da zona selecionada
+    if (!curZ || !curZ.top.length) {
+      $('#id-panel').innerHTML = `<div class="card" style="padding:1.2rem"><p class="empty">${T('Not enough qualified fighters in this division/era.', 'Sem lutadores qualificados suficientes nesta divisão/era.')}</p></div>`;
+    } else {
+      const h1 = curZ.top[0], p1 = S.F.get(h1.id) || {}, dv1 = ID_STATE.div === 'ALL' ? divOf(h1.id, ID_STATE.era === 'all') : ID_STATE.div;
+      const hiSc = curZ.top[0].sc, loSc = curZ.top.at(-1).sc;
+      $('#id-panel').innerHTML = `<div class="card" style="padding:1.1rem 1.2rem;border-top:3px solid var(--gd)">
+        <div class="mu sm" style="text-transform:uppercase;letter-spacing:.08em;color:var(--gd);font-weight:800">${curZ.z.icon} ${curZ.z.nm}</div>
+        <p class="mu sm" style="margin:.25rem 0 .8rem">${curZ.z.desc}</p>
+        <div class="hero" style="margin:.4rem 0 .9rem">
+          ${av(h1.id, p1.name, 'big')}
+          <div style="min-width:0;flex:1">
+            <span class="tag">#1 ${ID_STATE.era === 'all' ? 'ALL-TIME' : T('CURRENT', 'ATUAL')} · ${esc(dv1)}</span>
+            <h2 style="margin:.3rem 0 .15rem;font-size:2rem;color:var(--tx)"><a href="#/fighter/${h1.id}">${esc(p1.name || h1.id)}</a></h2>
+            <div class="mu sm">${esc(p1.nick ? '“' + p1.nick + '” · ' : '')}${esc(p1.record || '')}${p1.country ? ' • 🌍 ' + esc(p1.country) : ''}</div>
+            <div style="margin-top:.45rem;font-weight:700;color:var(--gd);font-size:.95rem">${h1.metric}</div>
+          </div>
+        </div>
+        <div class="acts" style="margin-bottom:.9rem">
+          <a class="btn" href="#/fighter/${h1.id}">👤 ${T('Open Profile', 'Abrir Ficha')}</a>
+          <a class="btn" href="#/sim/${h1.id}">⚔️ ${T('Simulate Fight', 'Simular Luta')}</a>
+          <a class="btn" href="#/studio/${h1.id}">🃏 ${T('View Card', 'Ver Card')}</a>
+        </div>
+        <div style="border-top:1px solid var(--ln);padding-top:.7rem">
+          <b class="sm" style="text-transform:uppercase;letter-spacing:.06em;color:var(--mu)">${T('Top 5 Leaderboard — ', 'Top 5 Especialistas — ')}${curZ.z.short}</b>
+          ${curZ.top.map((x, idx) => {
+            const pf = S.F.get(x.id) || {}, dvf = ID_STATE.div === 'ALL' ? divOf(x.id, ID_STATE.era === 'all') : ID_STATE.div;
+            const pct = hiSc === loSc ? 100 : Math.max(12, ((x.sc - loSc) / (hiSc - loSc)) * 100);
+            return `<a class="card rk" href="#/fighter/${x.id}" style="margin:.45rem 0 0;padding:.55rem .85rem"><span class="ring sm" style="${idx === 0 ? '--rc:var(--gd)' : ''}"><span>${idx + 1}</span></span><span class="nm">${esc(pf.name || x.id)} <span class="mu sm">(${esc(dvf)}${pf.country ? ' · ' + esc(pf.country) : ''})</span><small>${x.metric}</small><i class="mb"><b style="width:${pct}%"></b></i></span><span class="rt" style="font-size:1.35rem">${esc(x.badge)}</span></a>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+
+    // Resumo completo das 7 zonas (#1 de cada parte do corpo)
+    $('#id-sum').innerHTML = zones.map(z => {
+      const top1 = res[z.k]?.top?.[0];
+      if (!top1) return '';
+      const pf = S.F.get(top1.id) || {}, dvf = ID_STATE.div === 'ALL' ? divOf(top1.id, ID_STATE.era === 'all') : ID_STATE.div;
+      return `<div class="card idl-sc${ID_STATE.zone === z.k ? ' on' : ''}" data-idz="${z.k}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
+          <span style="font:800 .85rem var(--d);letter-spacing:.07em;text-transform:uppercase;color:var(--gd)">${z.icon} ${z.short}</span>
+          <span class="tag">${esc(top1.badge)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.65rem">
+          ${av(top1.id, pf.name, 'sm')}
+          <div style="min-width:0;flex:1">
+            <div style="font:800 1.15rem/1.1 var(--d);text-transform:uppercase">${esc(pf.name || top1.id)}</div>
+            <div class="mu sm" style="font-size:.76rem">${esc(dvf)}${pf.country ? ' · ' + esc(pf.country) : ''}</div>
+            <div class="mu sm" style="font-size:.75rem;color:var(--tx);margin-top:.15rem">${top1.metric}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    XEXP.reg('ideal', () => ({
+      kind: 'table',
+      title: T('Ideal Fighter Blueprint', 'Arquétipo do Lutador Ideal') + ` (${ID_STATE.era === 'all' ? 'All-Time' : T('Current Era', 'Era Atual')} · ${ID_STATE.div === 'ALL' ? 'P4P' : ID_STATE.div})`,
+      file: 'lutador-ideal-' + ID_STATE.era + '-' + ID_STATE.div.toLowerCase(),
+      sub: T('The 7 statistical #1 body-zone holders in the UFC', 'Os 7 detentores #1 por zona anatômica no UFC'),
+      cols: [T('Body Zone', 'Zona Anatômica'), T('#1 Fighter', 'Lutador #1'), T('Division', 'Divisão'), T('Key Metric', 'Métrica Principal')],
+      rows: zones.map(z => {
+        const t1 = res[z.k]?.top?.[0], pf = t1 ? S.F.get(t1.id) : null;
+        return [z.short, pf ? pf.name : '—', t1 ? divOf(t1.id, ID_STATE.era === 'all') : '—', t1 ? t1.metric : '—'];
+      })
+    }));
+  };
+
+  $('#id-era').onchange = e => { ID_STATE.era = e.target.value; render(); };
+  $('#id-div').onchange = e => { ID_STATE.div = e.target.value; render(); };
+  $('#m').onclick = e => {
+    const zEl = e.target.closest('[data-idz]');
+    if (zEl) {
+      ID_STATE.zone = zEl.dataset.idz;
+      render();
+    }
+  };
+  const svgBox = $('#id-svg-box');
+  if (svgBox) {
+    svgBox.addEventListener('pointerover', e => {
+      if (e.pointerType !== 'mouse') return;
+      const zEl = e.target.closest('[data-idz]');
+      if (zEl && zEl.dataset.idz !== ID_STATE.zone) {
+        ID_STATE.zone = zEl.dataset.idz;
+        render();
+      }
+    });
+  }
+  render();
+}
+
 function route() {
   const [, p, id, fid] = location.hash.split('/'), k = p || 'home';
   document.documentElement.lang = S.pt ? 'pt-BR' : 'en';
@@ -2375,17 +2811,18 @@ function route() {
     ['ranking', 'Rankings'],
     ['fighters', T('Fighters', 'Lutadores')],
     ['sim', T('Simulator', 'Simulador')],
+    ['ideal', T('Ideal Fighter', 'Lutador Ideal')],
     ['lab', 'Lab'],
     ...(window.XT ? window.XT() : [])
   ], cur = k === 'event' ? 'events' : k === 'fighter' ? 'fighters' : k;
-  S.nav = {more: NAVS.slice(5)};
-  $('#nv').innerHTML = NAVS.map(([x, l], i) => `<a href="#/${x}" data-p="${x}"${i >= 5 ? ' class="mo"' : ''}>${l}</a>`).join('') + `<button type="button" class="more${S.nav.more.some(([x]) => x === cur) ? ' on' : ''}" id="mo" aria-haspopup="dialog">${T('More', 'Mais')} ☰</button>`;
+  S.nav = {more: NAVS.slice(6)};
+  $('#nv').innerHTML = NAVS.map(([x, l], i) => `<a href="#/${x}" data-p="${x}"${i >= 6 ? ' class="mo"' : ''}>${l}</a>`).join('') + `<button type="button" class="more${S.nav.more.some(([x]) => x === cur) ? ' on' : ''}" id="mo" aria-haspopup="dialog">${T('More', 'Mais')} ☰</button>`;
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.p === cur));
   closeAll();
   $('#ft').textContent = (S.meta.updated ? T('Data updated ', 'Base atualizada em ') + new Date(S.meta.updated).toLocaleString(S.pt ? 'pt-BR' : 'en-US') + '. ' : '') + T('Source: ufcstats.com', 'Fonte: ufcstats.com');
   const run = () => {
     $('#m').onclick = null; $('#m').oninput = null; scrollTo(0, 0);
-    ({home:vHome, events:vEvents, event:vEvent, ranking:vRank, fighters:vFighters, fighter:vFighter, sim:vSim, lab:vLab, ...(window.XV || {})}[k] || vHome)(decodeURIComponent(id || ''), fid && decodeURIComponent(fid));
+    ({home:vHome, events:vEvents, event:vEvent, ranking:vRank, fighters:vFighters, fighter:vFighter, sim:vSim, ideal:vIdeal, lab:vLab, ...(window.XV || {})}[k] || vHome)(decodeURIComponent(id || ''), fid && decodeURIComponent(fid));
   };
   document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches ? document.startViewTransition(run) : run();
 }
@@ -2401,7 +2838,7 @@ function route() {
     if (j) X.d = j; else X.err = true;
   }
   function mu(a, b) {
-    const A = fr(a), B = fr(b), sh = f => BASE + (f.e - BASE) * f.n / (f.n + 3), ea = sh(A), eb = sh(B), p = 1 / (1 + 10 ** ((eb - ea) / 400)), L = X.d.league;
+    const A = fr(a), B = fr(b), md = massDelta(a, b), sh = f => BASE + ((f.e_eff ?? f.e) - BASE) * f.n / (f.n + 3), ea = sh(A) + md.pts * 0.42, eb = sh(B) - md.pts * 0.42, p = 1 / (1 + 10 ** ((eb - ea) / 400)), L = X.d.league;
     const dv = A.div === B.div ? A.div : ((A.divs || []).map(d => d[0]).find(d => (B.divs || []).some(e => e[0] === d) && !['Catch Weight', 'Open Weight', 'Outros'].includes(d)) || 'ALL'), bm = X.d.divisions[dv] || X.d.divisions.ALL;
     const mp = (at, df) => {
       const k = 5, sw = sum(at.w), sl = sum(df.l), lg = L.k100 || 1;
@@ -2454,9 +2891,9 @@ function route() {
   <label>${T('Minimum fights', 'Mínimo de lutas')}<input data-xf="min" type="number" min="1" value="${X.min}"></label>
   <label>${T('Active in the last N years (0 = all)', 'Ativo nos últimos N anos (0 = todos)')}<input data-xf="act" type="number" min="0" value="${X.act}"></label></div><div id="xl"></div>`;
   function fillRank() {
-    const cut = X.act ? new Date(Date.now() - X.act * YRMS).toISOString().slice(0, 10) : '', dl = X.rk === 'dli';
-    const r = Object.entries(X.d.fighters).filter(([i, f]) => { const g = X.div === 'ALL' ? null : (f.divs || []).find(d => d[0] === X.div); return (X.div === 'ALL' || g || (!f.divs && f.div === X.div)) && f.n >= X.min && (!cut || (g ? g[5] : f.last) >= cut); }).filter(([i, f]) => (!dl || ((f.sl || 0) >= X.msig && f.dli != null))).sort((x, y) => dl ? y[1].dli - x[1].dli : y[1].e - x[1].e).slice(0, 60);
-    $('#xl').innerHTML = r.length ? r.map(([id, f], i) => `<a class="card rk" href="#/fighter/${id}"><span class="ring"><span>${i + 1}</span></span><span class="nm">${S.me.fav[id] ? '★ ' : ''}${esc(nm(id))}<small>${dl ? `${f.kd} KD / ${f.sl} sig` : `${sum(f.w)}-${sum(f.l)}-${f.d}, ${T('avg rival', 'rival médio')} ${Math.round(f.opp || 0)}`}</small></span><span class="rt">${dl ? f.dli : Math.round(f.e)}<small>${dl ? f2(f.ks) + ' KD/100' : T('peak', 'máx') + ' ' + Math.round(f.pk)}</small></span></a>`).join('') : `<p class="empty">${T('No fighter matches these filters.', 'Nenhum lutador com esses filtros.')}</p>`;
+    const cut = X.act ? new Date(Date.now() - X.act * YRMS).toISOString().slice(0, 10) : '', dl = X.rk === 'dli', isHist = X.act === 0;
+    const r = Object.entries(X.d.fighters).filter(([i, f]) => isDivElig(i, X.div, isHist, f.n) && f.n >= X.min && (!cut || f.last >= cut)).filter(([i, f]) => (!dl || ((f.sl || 0) >= X.msig && f.dli != null))).sort((x, y) => dl ? y[1].dli - x[1].dli : (isHist ? y[1].e - x[1].e : (y[1].e_eff ?? y[1].e) - (x[1].e_eff ?? x[1].e))).slice(0, 60);
+    $('#xl').innerHTML = r.length ? r.map(([id, f], i) => `<a class="card rk" href="#/fighter/${id}"><span class="ring"><span>${i + 1}</span></span><span class="nm">${S.me.fav[id] ? '★ ' : ''}${esc(nm(id))}<small>${dl ? `${f.kd} KD / ${f.sl} sig` : `${sum(f.w)}-${sum(f.l)}-${f.d}, ${T('avg rival', 'rival médio')} ${Math.round(f.opp || 0)}`}</small></span><span class="rt">${dl ? f.dli : Math.round(isHist ? f.e : (f.e_eff ?? f.e))}<small>${dl ? f2(f.ks) + ' KD/100' : T('peak', 'máx') + ' ' + Math.round(f.pk)}</small></span></a>`).join('') : `<p class="empty">${T('No fighter matches these filters.', 'Nenhum lutador com esses filtros.')}</p>`;
   }
   function tDiv() {
     const D = X.d.divisions, ks = dvs(), C = ['var(--gd)', 'var(--cb)', 'var(--mu)', 'var(--ln)'], KN = ['KO/TKO', T('Sub', 'Final.'), T('Dec', 'Dec.'), T('Other', 'Outro')];
