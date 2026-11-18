@@ -918,15 +918,21 @@ def main():
                             up_ids.add(uid)
         dep_map = {d["id"]: d["kind"] for d in ros["departures"] if d.get("id")}
         susp_ids = {s["id"] for s in ros["suspended"] if s.get("id")}
-        ranked_live_ids = {fid for fid, lv in live_fighters.items() if lv.get("rank") is not None}
 
         n_act = n_ret = n_rel = n_susp = 0
         for p in fighters:
             fid = p.get("id")
-            if fid in susp_ids:
+            if fid in dep_map and fid not in act_map:
+                p["roster"] = dep_map[fid]
+                p.pop("roster_div", None)
+                if dep_map[fid] == "retired":
+                    n_ret += 1
+                else:
+                    n_rel += 1
+            elif fid in susp_ids:
                 p["roster"] = "suspended"
                 n_susp += 1
-            elif fid in act_map or fid in ranked_live_ids or fid in up_ids:
+            elif fid in act_map or fid in up_ids:
                 p["roster"] = "active"
                 n_act += 1
                 am = act_map.get(fid)
@@ -934,14 +940,9 @@ def main():
                     p["roster_div"] = am["div"]
                     if am.get("dob") and p.get("DOB") in ("--", "", None):
                         p["DOB"] = am["dob"]
-            elif fid in dep_map:
-                p["roster"] = dep_map[fid]
-                if dep_map[fid] == "retired":
-                    n_ret += 1
-                else:
-                    n_rel += 1
             else:
                 p["roster"] = "former"
+                p.pop("roster_div", None)
 
         roster_obj = {
             "v": 1,

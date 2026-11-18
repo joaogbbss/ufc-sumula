@@ -1,4 +1,4 @@
-const CACHE = 'sumula-ufc-v2';
+const CACHE = 'sumula-ufc-v3';
 const SHELL = [
   './',
   './index.html',

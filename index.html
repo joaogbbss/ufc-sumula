@@ -267,10 +267,10 @@ async function fetchJson(n) {
 }
 
 async function init() {
-  const [ev, fg, fi, ov, meta, up, ph] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos'].map(fetchJson));
+  const [ev, fg, fi, ov, meta, up, ph, ros] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos', 'roster'].map(fetchJson));
     S.pu = (ph && ph.photos) || null; S.rej = ph && ph.rej ? new Set(ph.rej) : null;   // fotos verificadas pelo photos.py
+    S.ros = ros || null;
     fetchJson('decisions').then(j => { S.dd = j; }).catch(() => { S.dd = null; });
-    fetchJson('roster').then(j => { S.ros = j; }).catch(() => { S.ros = null; });
     fetchJson('ufc_rankings').then(j => { S.urk = j; }).catch(() => { S.urk = null; });
     fetchJson('analytics').then(j => { S.an = j; }).catch(() => { S.an = null; });
   if (ov) S.ov = {merges:{}, div:{}, exclude:[], ...ov};
@@ -278,6 +278,20 @@ async function init() {
   S.meta = meta || {};
   S.up = (up && up.events) || [];
   (fi || []).forEach(f => S.F.set(f.id, f));
+  // Hidrata status de Roster diretamente de data/roster.json (prioridade máxima: dispensas/aposentadorias > suspensos > plantel ativo > ex-UFC)
+  if (S.ros && S.ros.by_div) {
+    const actMap = new Map(), depMap = new Map(), suspSet = new Set(), upSet = new Set();
+    for (const [dv, info] of Object.entries(S.ros.by_div)) for (const id of (info.ids || [])) actMap.set(mid(id), dv);
+    for (const d of (S.ros.departures || [])) if (d.id) depMap.set(mid(d.id), d.kind || 'released');
+    for (const s of (S.ros.suspended || [])) if (s.id) suspSet.add(mid(s.id));
+    for (const e of S.up) for (const f of (e.fights || [])) { if (f.a?.id) upSet.add(mid(f.a.id)); if (f.b?.id) upSet.add(mid(f.b.id)); }
+    for (const [id, f] of S.F) {
+      if (depMap.has(id) && !actMap.has(id)) { f.roster = depMap.get(id); delete f.roster_div; }
+      else if (suspSet.has(id)) { f.roster = 'suspended'; }
+      else if (actMap.has(id) || upSet.has(id)) { f.roster = 'active'; if (actMap.has(id)) f.roster_div = actMap.get(id); }
+      else { f.roster = 'former'; delete f.roster_div; }
+    }
+  }
   S.fg = (fg || []).filter(f => !S.ov.exclude.includes(f.id)).map(f => ({...f, div: S.ov.div[f.id] || f.div}));
   $('#lg').onclick = () => {
     S.pt = !S.pt;
@@ -862,11 +876,11 @@ function picksSpec(e) {
 function isOnRoster(id) {
   const p = S.F.get(mid(id));
   if (p && p.roster) return p.roster === 'active';
-  return S.urk?.fighters?.[mid(id)]?.cur_rank != null;
+  return !S.ros && S.urk?.fighters?.[mid(id)]?.cur_rank != null;
 }
 function rosterBadge(id, compact = false) {
   const p = S.F.get(mid(id));
-  const st = p?.roster || (S.urk?.fighters?.[mid(id)]?.cur_rank != null ? 'active' : '');
+  const st = p?.roster || (!S.ros && S.urk?.fighters?.[mid(id)]?.cur_rank != null ? 'active' : '');
   if (!st) return '';
   if (st === 'active') return `<span class="tag" style="background:var(--win);color:#000">${compact ? '🟢 Roster' : '🟢 ' + T('UFC Roster', 'No Roster UFC')}</span>`;
   if (st === 'suspended') return `<span class="tag" style="background:#f59e0b;color:#000">⚠️ ${T('Suspended', 'Suspenso')}</span>`;
