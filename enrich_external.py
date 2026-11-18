@@ -71,10 +71,107 @@ NAME_ALIAS = {
 }
 
 
+_TRANS = str.maketrans({"ł": "l", "Ł": "L", "ø": "o", "Ø": "O", "đ": "d", "Đ": "D", "ß": "ss", "æ": "ae", "Æ": "AE", "œ": "oe", "Œ": "OE"})
+
+
 def norm(s):
-    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode().lower()
+    s = str(s or "").translate(_TRANS)
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     s = re.sub(r"[^a-z0-9]+", " ", s).strip()
     return NAME_ALIAS.get(s, s)
+
+
+def _dob_iso(dob_str):
+    s = str(dob_str or "").strip()
+    if not s or s == "--":
+        return None
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return s
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            return datetime.strptime(s, fmt).date().isoformat()
+        except Exception:
+            pass
+    return None
+
+
+def build_fighter_matcher(fighters, by_name):
+    """Matcher determinístico em 3 camadas:
+    1) nome normalizado exato (inclui ł->l);
+    2) nome compacto / ordem invertida (coreanos/chineses: Park Jun-yong == JunYong Park, Rong Zhu == Rongzhu);
+    3) DOB exato + token em comum OU apelido exato + sobrenome (Beatriz/Bia Mesquita, Abusupiyan/Abus Magomedov, Cameron/Cam Rowston).
+    """
+    by_compact = {}
+    by_sorted = {}
+    by_dob = defaultdict(list)
+    by_nick = defaultdict(list)
+    by_last = defaultdict(list)
+    for p in (fighters or []):
+        fid = p.get("id")
+        if not fid:
+            continue
+        nk = norm(p.get("name"))
+        toks = nk.split()
+        if nk:
+            by_compact.setdefault(nk.replace(" ", ""), fid)
+            if len(toks) >= 2:
+                by_sorted.setdefault("".join(sorted(toks)), fid)
+                by_compact.setdefault(toks[-1] + "".join(toks[:-1]), fid)
+                by_compact.setdefault("".join(toks[1:]) + toks[0], fid)
+                by_last[toks[-1]].append((fid, toks[0], nk))
+        diso = _dob_iso(p.get("DOB"))
+        if diso:
+            by_dob[diso].append((fid, set(toks), nk.replace(" ", "")))
+        nn = norm(p.get("nick"))
+        if nn and len(nn) >= 4:
+            by_nick[nn].append((fid, set(toks)))
+
+    def match(nm_raw, dob=None, nick=None):
+        nk = norm(nm_raw)
+        if not nk:
+            return None
+        if nk in by_name:
+            return by_name[nk]
+        comp = nk.replace(" ", "")
+        if comp in by_compact:
+            return by_compact[comp]
+        toks = nk.split()
+        if len(toks) >= 2:
+            st = "".join(sorted(toks))
+            if st in by_sorted:
+                return by_sorted[st]
+            rev1 = toks[-1] + "".join(toks[:-1])
+            rev2 = "".join(toks[1:]) + toks[0]
+            if rev1 in by_compact:
+                return by_compact[rev1]
+            if rev2 in by_compact:
+                return by_compact[rev2]
+            # Primeiro + último ou penúltimo + último (ex: Jose Mauro Delano -> Jose Delano; Carlos Diego Ferreira -> Diego Ferreira)
+            if len(toks) >= 3:
+                for cand in (f"{toks[0]} {toks[-1]}", f"{toks[-2]} {toks[-1]}"):
+                    if cand in by_name:
+                        return by_name[cand]
+        tset = {t for t in toks if len(t) >= 3}
+        if dob and dob in by_dob:
+            cands = by_dob[dob]
+            for fid, ft, fc in cands:
+                if (tset & ft) or (toks and toks[-1][:4] in fc) or (toks and toks[0][:3] in fc):
+                    return fid
+        if nick:
+            nn = norm(nick)
+            if nn in by_nick:
+                for fid, ft in by_nick[nn]:
+                    if tset & ft:
+                        return fid
+        # Sobrenome igual + 2-3 primeiras letras do primeiro nome (Cameron/Cam Rowston, Thomas/Tommy Gantt)
+        if len(toks) >= 2 and toks[-1] in by_last:
+            cands = by_last[toks[-1]]
+            hits = [fid for fid, fn, _ in cands if fn[:2] == toks[0][:2] or (fn.startswith("tom") and toks[0].startswith("thom"))]
+            if len(hits) == 1:
+                return hits[0]
+        return None
+
+    return match
 
 
 def inches_to_ft(val):
@@ -298,7 +395,7 @@ def _extract_wiki_date(cell):
     return c[:20]
 
 
-def parse_live_wiki_roster(by_name):
+def parse_live_wiki_roster(by_name, fighters=None):
     """Lê List_of_current_UFC_fighters via MediaWiki API:
     retorna plantel ativo por divisão, contratações recentes, dispensas/aposentadorias e suspensos.
     """
@@ -306,6 +403,7 @@ def parse_live_wiki_roster(by_name):
     if not wt:
         return None
     wt = re.sub(r"<!--.*?-->", "", wt, flags=re.S)
+    matcher = build_fighter_matcher(fighters, by_name)
     ROSTER_DIVS = {
         "heavyweights": "Heavyweight",
         "light heavyweights": "Light Heavyweight",
@@ -348,8 +446,9 @@ def parse_live_wiki_roster(by_name):
                 nm_raw = _extract_wiki_name(cols[1])
                 if not nm_raw or nm_raw.lower() in ("name", "fighter"):
                     continue
-                fid = by_name.get(norm(nm_raw))
                 dob = _extract_wiki_dob(cols[2])
+                nick_raw = clean_wiki(cols[4]) if len(cols) > 4 else ""
+                fid = matcher(nm_raw, dob=dob, nick=nick_raw)
                 status_txt = clean_wiki(cols[5]) if len(cols) > 5 else ""
                 div_list.append({"name": nm_raw, "id": fid, "iso": iso, "dob": dob, "status": status_txt[:110]})
                 if fid:
@@ -368,7 +467,8 @@ def parse_live_wiki_roster(by_name):
                 nm_raw = _extract_wiki_name(cols[2])
                 if not nm_raw:
                     continue
-                fid = by_name.get(norm(nm_raw))
+                nick_raw = clean_wiki(cols[3]) if len(cols) > 3 else ""
+                fid = matcher(nm_raw, nick=nick_raw)
                 reason = clean_wiki(cols[4])
                 dv = clean_wiki(cols[5])
                 kind = "retired" if "retir" in reason.lower() else "released"
@@ -901,7 +1001,7 @@ def main():
     # 5. Roster Oficial Atual do UFC (Wikipedia Live List_of_current_UFC_fighters) -> data/roster.json
     # ---------------------------------------------------------
     print("Baixando Roster Oficial Atual do UFC (Wikipedia List_of_current_UFC_fighters)...")
-    ros = parse_live_wiki_roster(by_name)
+    ros = parse_live_wiki_roster(by_name, fighters)
     if ros:
         act_map = ros["active_map"]
         # Também inclui campeões/ranqueados ao vivo e agendados em upcoming.json como ativos no roster
