@@ -1245,6 +1245,181 @@ def run_validation(fights, pre_elo):
     }
 
 
+# ---------- 8) Matriz Estilo vs Estilo, Tendências de Árbitros, Viés de Casa e Risco de Corte ----------
+def _classify_style(f):
+    if not f or f.get("n", 0) < 3:
+        return None
+    wins = sum(f.get("w") or [0])
+    opa_g = f.get("opa_g") or 0.0
+    opa_s = f.get("opa_s") or 0.0
+    opa_d = f.get("opa_d") or 0.0
+    raw_s = f.get("raw_s") or 0.0
+    dli = f.get("dli") or 100
+    sub15 = f.get("sub15") or 0.0
+    leg_m = f.get("leg_m") or 0.0
+    ko_w = (f.get("w") or [0, 0, 0, 0])[0]
+    sub_w = (f.get("w") or [0, 0, 0, 0])[1]
+    if opa_g >= 1.10:
+        return "wrestler"
+    if (sub15 >= 1.25 and sub_w >= 2) or (wins >= 3 and sub_w / max(wins, 1) >= 0.45):
+        return "sub"
+    if dli >= 140 or (ko_w >= 3 and ko_w / max(wins, 1) >= 0.65):
+        return "power"
+    if opa_s >= 0.65 or raw_s >= 5.1:
+        return "pressure"
+    if opa_d >= 0.55 or leg_m >= 1.25:
+        return "sniper"
+    return "hybrid"
+
+
+def run_styles_refs_home(fights, fighters, bio_map):
+    # 1) Sequência atual (streak: +N vitórias seguidas, -N derrotas seguidas)
+    streaks = defaultdict(int)
+    for f in fights:
+        res = f.get("res")
+        if res not in ("a", "b"):
+            continue
+        ia, ib = f["a"]["id"], f["b"]["id"]
+        w_id, l_id = (ia, ib) if res == "a" else (ib, ia)
+        streaks[w_id] = streaks[w_id] + 1 if streaks[w_id] > 0 else 1
+        streaks[l_id] = streaks[l_id] - 1 if streaks[l_id] < 0 else -1
+
+    # 2) Classifica estilos e Cut Risk (0-100)
+    for fid, row in fighters.items():
+        st = streaks.get(fid, 0)
+        row["strk"] = st
+        sty = _classify_style(row)
+        if sty:
+            row["sty"] = sty
+        # Cut Risk Score (relevante para lutadores ativos no roster fora do Top 15)
+        cr = 10.0
+        if st < 0:
+            cr += min(55.0, abs(st) * 19.0)
+        elif st >= 2:
+            cr -= min(10.0, st * 3.5)
+        age = row.get("age")
+        if age and age >= 34:
+            cr += min(22.0, (age - 33.0) * 3.2)
+        if (row.get("fin") or 0.5) < 0.35 and st < 0:
+            cr += 8.0
+        if (row.get("whr_eff") or 1500) < 1480:
+            cr += 10.0
+        if (row.get("tw") or 0) > 0:
+            cr -= 25.0
+        row["cut_risk"] = int(round(max(2.0, min(98.0, cr))))
+
+    # 3) Matriz Empírica Estilo vs Estilo
+    sm_acc = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+    for f in fights:
+        if f.get("res") not in ("a", "b"):
+            continue
+        sa = (fighters.get(f["a"]["id"]) or {}).get("sty")
+        sb = (fighters.get(f["b"]["id"]) or {}).get("sty")
+        if not sa or not sb or sa == sb:
+            continue
+        sm_acc[sa][sb][1] += 1
+        sm_acc[sb][sa][1] += 1
+        if f["res"] == "a":
+            sm_acc[sa][sb][0] += 1
+        else:
+            sm_acc[sb][sa][0] += 1
+    style_matrix = {
+        s1: {s2: [v[0], v[1], round(v[0] / v[1], 4)] for s2, v in d2.items() if v[1] >= 15}
+        for s1, d2 in sm_acc.items()
+    }
+
+    # 4) Tendências de Árbitros (Early vs Late Stoppage)
+    ref_acc = defaultdict(lambda: [0, 0, 0, 0, 0])  # [n, ko, r1_ko, sub, dec]
+    tot_n = tot_ko = 0
+    for f in fights:
+        if f.get("res") not in ("a", "b", "draw"):
+            continue
+        kind, _ = klass(f.get("method"))
+        tot_n += 1
+        if kind == "ko":
+            tot_ko += 1
+        rf = (f.get("ref") or "").strip()
+        if not rf or rf == "--":
+            continue
+        x = ref_acc[rf]
+        x[0] += 1
+        if kind == "ko":
+            x[1] += 1
+            if str(f.get("round")) == "1":
+                x[2] += 1
+        elif kind == "sub":
+            x[3] += 1
+        elif kind == "dec":
+            x[4] += 1
+    lg_ko = tot_ko / max(tot_n, 1)
+    referees = []
+    for rf, x in ref_acc.items():
+        if x[0] < 30:
+            continue
+        ko_p = x[1] / x[0]
+        referees.append({
+            "name": rf,
+            "n": x[0],
+            "ko": round(ko_p, 4),
+            "r1_ko": round(x[2] / x[0], 4),
+            "sub": round(x[3] / x[0], 4),
+            "dec": round(x[4] / x[0], 4),
+            "stop_idx": int(round(100.0 * ko_p / max(lg_ko, 0.01))),
+        })
+    referees.sort(key=lambda r: -r["n"])
+
+    # 5) Viés de Casa em Decisões (Home-Country Judging Bias)
+    ev_loc = {}
+    ev_p = DATA / "events.json"
+    if ev_p.exists():
+        for ev in json.loads(ev_p.read_text("utf-8")):
+            loc = (ev.get("location") or "").split(",")[-1].strip().lower()
+            if loc:
+                ev_loc[ev["id"]] = loc
+
+    def _norm_ctry(c):
+        c = (c or "").strip().lower()
+        if c in ("usa", "united states", "united states of america", "us"):
+            return "usa"
+        if c in ("uk", "united kingdom", "england", "scotland", "wales", "northern ireland"):
+            return "uk"
+        return c
+
+    hb = {"all": [0, 0], "split": [0, 0], "by_country": defaultdict(lambda: [0, 0])}
+    for f in fights:
+        if f.get("res") not in ("a", "b"):
+            continue
+        kind, sub = klass(f.get("method"))
+        if kind != "dec":
+            continue
+        ec = _norm_ctry(ev_loc.get(f.get("ev"), ""))
+        if not ec:
+            continue
+        ca = _norm_ctry((bio_map.get(f["a"]["id"]) or {}).get("country", ""))
+        cb = _norm_ctry((bio_map.get(f["b"]["id"]) or {}).get("country", ""))
+        if (ca == ec) == (cb == ec):
+            continue  # ambos em casa ou ambos visitantes
+        home_side = "a" if ca == ec else "b"
+        won_home = 1 if f["res"] == home_side else 0
+        hb["all"][0] += won_home
+        hb["all"][1] += 1
+        hb["by_country"][ec][0] += won_home
+        hb["by_country"][ec][1] += 1
+        if sub == "split":
+            hb["split"][0] += won_home
+            hb["split"][1] += 1
+
+    home_bias = {
+        "all": [hb["all"][0], hb["all"][1], round(hb["all"][0] / max(hb["all"][1], 1), 4)],
+        "split": [hb["split"][0], hb["split"][1], round(hb["split"][0] / max(hb["split"][1], 1), 4)],
+        "by_country": sorted(
+            [[k.upper(), v[0], v[1], round(v[0] / v[1], 4)] for k, v in hb["by_country"].items() if v[1] >= 25],
+            key=lambda x: -x[2]
+        )[:12],
+    }
+    return style_matrix, referees[:45], home_bias
+
+
 # ---------- montagem ----------
 def main():
     fights = load_fights()
@@ -1313,6 +1488,7 @@ def main():
             if d.get("last_ko"):
                 row["last_ko"] = d["last_ko"]
         fighters[i] = row
+    style_matrix, referees, home_bias = run_styles_refs_home(fights, fighters, bio_map)
     out = {
         "v": 3,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -1320,6 +1496,9 @@ def main():
                    "ko": KO_MULT, "sub": SUB_MULT, "dec": DEC_MULT},
         "league": {"k100": round(k100_lg, 3), "spk": round(1 / p0, 1) if p0 else None,
                    "hazards": haz_summary, "weight_jumps": wj_summary},
+        "style_matrix": style_matrix,
+        "referees": referees,
+        "home_bias": home_bias,
         "divisions": bench,
         "fighters": fighters,
     }

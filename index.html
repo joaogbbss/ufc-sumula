@@ -270,7 +270,7 @@ async function init() {
   const [ev, fg, fi, ov, meta, up, ph] = await Promise.all(['events', 'fights', 'fighters', 'overrides', 'meta', 'upcoming', 'photos'].map(fetchJson));
     S.pu = (ph && ph.photos) || null; S.rej = ph && ph.rej ? new Set(ph.rej) : null;   // fotos verificadas pelo photos.py
     fetchJson('decisions').then(j => { S.dd = j; }).catch(() => { S.dd = null; });
-    fetchJson('market').then(j => { S.mkt = j; }).catch(() => { S.mkt = null; });
+    fetchJson('roster').then(j => { S.ros = j; }).catch(() => { S.ros = null; });
     fetchJson('ufc_rankings').then(j => { S.urk = j; }).catch(() => { S.urk = null; });
     fetchJson('analytics').then(j => { S.an = j; }).catch(() => { S.an = null; });
   if (ov) S.ov = {merges:{}, div:{}, exclude:[], ...ov};
@@ -858,8 +858,50 @@ function picksSpec(e) {
     sub: `${fmt(e.date)}${e.location ? ' · ' + e.location : ''} · ${n}/${e.fights.length} ${T('picks', 'palpites')} · ${T('model probabilities refer to the first-named fighter', 'probabilidades dos modelos são do primeiro lutador citado')}`,
     cols: [T('Fight', 'Luta'), T('My pick', 'Meu palpite'), 'Elo', 'WHR', T('Stats', 'Estat.'), T('Blend', 'Combinado')], rows};
 }
+/* Status oficial de Roster UFC + Arquétipo Tático + Banger Index™ */
+function isOnRoster(id) {
+  const p = S.F.get(mid(id));
+  if (p && p.roster) return p.roster === 'active';
+  return S.urk?.fighters?.[mid(id)]?.cur_rank != null;
+}
+function rosterBadge(id, compact = false) {
+  const p = S.F.get(mid(id));
+  const st = p?.roster || (S.urk?.fighters?.[mid(id)]?.cur_rank != null ? 'active' : '');
+  if (!st) return '';
+  if (st === 'active') return `<span class="tag" style="background:var(--win);color:#000">${compact ? '🟢 Roster' : '🟢 ' + T('UFC Roster', 'No Roster UFC')}</span>`;
+  if (st === 'suspended') return `<span class="tag" style="background:#f59e0b;color:#000">⚠️ ${T('Suspended', 'Suspenso')}</span>`;
+  if (st === 'retired') return `<span class="tag" style="background:var(--s2);color:var(--mu)">🏆 ${T('Retired', 'Aposentado')}</span>`;
+  if (st === 'released') return `<span class="tag" style="background:var(--loss);color:#fff">🔴 ${T('Released', 'Dispensado')}</span>`;
+  return compact ? `<span class="mu sm">⚫ ${T('Ex-UFC', 'Ex-UFC')}</span>` : `<span class="tag" style="background:var(--s2);color:var(--mu)">⚫ ${T('Former UFC', 'Fora do Roster / Ex-UFC')}</span>`;
+}
+const STY_MAP = {
+  wrestler: ['🤼 Chain Wrestler', '🤼 Chain Wrestler'],
+  sub: ['🕸️ Submission Hunter', '🕸️ Caçador de Finalizações'],
+  power: ['💥 KO Power Puncher', '💥 Nocauteador (Power)'],
+  pressure: ['🔥 Pressure Striker', '🔥 Striker de Pressão'],
+  sniper: ['🎯 Out-Fighter / Sniper', '🎯 Sniper / Distância'],
+  hybrid: ['⚔️ Complete / Hybrid', '⚔️ Completo / Híbrido']
+};
+const styLabel = k => (k && STY_MAP[k]) ? STY_MAP[k][S.pt ? 1 : 0] : '';
+
+function bangerScore(ia, ib, ev) {
+  const anA = S.an?.fighters?.[ia], anB = S.an?.fighters?.[ib];
+  if (!anA || !anB) return null;
+  const pace = ((anA.raw_s || 3.5) + (anB.raw_s || 3.5)) / 2;
+  const dli = ((anA.dli || 100) + (anB.dli || 100)) / 2;
+  const fin = ((anA.fin ?? 0.5) + (anB.fin ?? 0.5)) / 2;
+  const exp = Math.max(0, 1.5 - ((anA.opa_d || 0) + (anB.opa_d || 0)) / 2);
+  const apex = /las vegas/i.test(ev?.location || '') && /fight night/i.test(ev?.name || '') ? 4 : 0;
+  return Math.max(25, Math.min(99, Math.round(18 + pace * 6.8 + (dli - 70) * 0.22 + fin * 22 + exp * 5 + apex)));
+}
+
 function upAlerts(e, f, ia, ib) {
   const out = [], evT = Date.parse(e.date), loc = (e.location || '').toLowerCase();
+  const bs = bangerScore(ia, ib, e);
+  if (bs != null) {
+    const bg = bs >= 80 ? 'var(--loss);color:#fff' : bs >= 68 ? 'var(--gd);color:#000' : 'var(--s2);color:var(--tx)';
+    out.push(`<span class="tag" style="background:${bg}">🔥 Banger ${bs}/100</span>`);
+  }
   if (/salt lake|mexico city|cidade do mexico|denver|bogot/i.test(loc)) out.push(`<span class="tag" style="background:var(--cb);color:#fff">🏔️ ${T('High Altitude', 'Altitude Elevada')}</span>`);
   for (const [id, nm_] of [[ia, lastName(f.a.name)], [ib, lastName(f.b.name)]]) {
     const fs = S.fg.filter(x => x.res !== 'nc' && (mid(x.a.id) === id || mid(x.b.id) === id)).sort((a, b) => a.date < b.date ? -1 : 1);
@@ -1792,8 +1834,8 @@ function vRank() {
       $('#tn8').innerHTML = '';
       return;
     }
-    /* na divisão: elegibilidade estrita (All-Time: >=4 lutas ou >=30m e >=50% da carreira em D; Atual: 18m em D ou ranqueado oficialmente em D) */
-    const inDiv = x => isDivElig(x.id, dv, hist, x.n);
+    /* na divisão: elegibilidade estrita (All-Time: >=4 lutas ou >=30m e >=50% da carreira em D; Atual: no Roster UFC + 18m em D ou ranqueado oficialmente em D) */
+    const inDiv = x => isDivElig(x.id, dv, hist, x.n) && (hist || !S.ros || isOnRoster(x.id));
     const valOf = x => hist ? (dv === 'ALL' ? x.hs : divHs(x, dv)) : (x.cur - physDecay(x.id).pen);
     const r = (p4 ? p4p(hist) : E.rows.filter(x => x.n >= P.min && (hist || !cut || x.last >= cut) && inDiv(x)).map(x => ({...x, v: valOf(x)}))).sort((a, b) => b.v - a.v).slice(0, 150);
     /* linha extra: cartel na divisão escolhida, outras divisões e selo de provisório */
@@ -1834,16 +1876,48 @@ function vRank() {
 }
 
 function vFighters() {
-  M(`<h1>${T('Fighters', 'Lutadores')}</h1><input id="q" type="search" placeholder="${T('Search by name or nickname', 'Buscar por nome ou apelido')}" aria-label="search"><div id="l" style="margin-top:1rem"></div>
+  const stF = S.fRos || 'all', dvF = S.fDiv || 'ALL';
+  const nAct = [...S.F.values()].filter(f => f.roster === 'active').length;
+  const nOut = [...S.F.values()].filter(f => f.roster && f.roster !== 'active').length;
+  M(`<h1>${T('Fighters', 'Lutadores')}</h1>
+  <div class="seg" id="f-ros">
+    <button type="button" data-fr="all" class="${stF === 'all' ? 'on' : ''}">${T('All', 'Todos')} (${S.F.size})</button>
+    <button type="button" data-fr="active" class="${stF === 'active' ? 'on' : ''}">🟢 ${T('Active UFC Roster', 'No Roster Atual')} (${nAct})</button>
+    <button type="button" data-fr="former" class="${stF === 'former' ? 'on' : ''}">⚫ ${T('Former / Outside Roster', 'Fora do Roster / Ex-UFC')} (${nOut})</button>
+  </div>
+  <div class="ctl" style="margin-bottom:.6rem">
+    <label>${T('Search by name, nickname or gym', 'Buscar por nome, apelido ou academia')}<input id="q" type="search" placeholder="${T('Search by name or nickname…', 'Buscar por nome ou apelido…')}" aria-label="search"></label>
+    <label>${T('Division', 'Divisão')}<select id="f-div"><option value="ALL">${T('All divisions', 'Todas as divisões')}</option>${STD.map(d => `<option value="${esc(d)}"${d === dvF ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
+  </div>
+  <div id="l" style="margin-top:.6rem"></div>
   <h2>${T('My data', 'Meus dados')}</h2><p class="mu sm">${T('Photos, notes and favorites live only in this browser. Export a backup so you never lose them.', 'Fotos, anotações e favoritos ficam só neste navegador. Exporte um backup para não perdê-los.')}</p>
   <div class="acts"><button id="ex">${T('Export backup', 'Exportar backup')}</button><label class="btn">${T('Import backup', 'Importar backup')}<input type="file" accept="application/json" id="im" hidden></label></div>`);
-  const row = f => `<a class="card rk" href="#/fighter/${f.id}">${av(f.id, f.name)}<span class="nm">${S.me.fav[f.id] ? '★ ' : ''}${esc(f.name)}<small>${esc(f.nick)}${f.team ? ` • ${esc(f.team)}` : ''}</small></span><span class="mu">${esc(f.record)}</span></a>`;
-  const draw = () => {
-    const q = $('#q').value.toLowerCase().trim();
-    const r = q ? [...S.F.values()].filter(f => (f.name + ' ' + f.nick + ' ' + (f.team || '')).toLowerCase().includes(q)).slice(0, 80) : [...S.F.values()].filter(f => S.me.fav[f.id]);
-    $('#l').innerHTML = r.length ? r.map(row).join('') : `<p class="empty">${q ? T('No fighter found.', 'Nenhum lutador encontrado.') : T('Type a name to search. Your favorites (★) show up here.', 'Digite um nome para buscar. Seus favoritos (★) aparecem aqui.')}</p>`;
+  const row = f => {
+    const an = S.an?.fighters?.[f.id];
+    const dv = f.roster_div || an?.div || '';
+    return `<a class="card rk" href="#/fighter/${f.id}">${av(f.id, f.name)}<span class="nm">${S.me.fav[f.id] ? '★ ' : ''}${esc(f.name)} ${rosterBadge(f.id, true)}<small>${esc(f.nick)}${dv ? ` · ${esc(dv)}` : ''}${f.team ? ` • ${esc(f.team)}` : ''}${an?.sty ? ` · ${styLabel(an.sty)}` : ''}</small></span><span class="rt" style="font-size:1.3rem">${esc(f.record)}<small>${an?.whr_eff ? 'WHR ' + Math.round(an.whr_eff) : ''}</small></span></a>`;
   };
-  $('#q').oninput = draw; draw();
+  const draw = () => {
+    const q = $('#q').value.toLowerCase().trim(), rf = S.fRos || 'all', df = $('#f-div').value;
+    let pool = [...S.F.values()];
+    if (rf === 'active') pool = pool.filter(f => f.roster === 'active');
+    else if (rf === 'former') pool = pool.filter(f => f.roster !== 'active');
+    if (df !== 'ALL') pool = pool.filter(f => (f.roster_div || S.an?.fighters?.[f.id]?.div) === df);
+    let r;
+    if (q) r = pool.filter(f => (f.name + ' ' + f.nick + ' ' + (f.team || '') + ' ' + (f.country || '')).toLowerCase().includes(q)).slice(0, 100);
+    else if (rf !== 'all' || df !== 'ALL') r = pool.sort((a, b) => ((S.an?.fighters?.[b.id]?.whr_eff || 0) - (S.an?.fighters?.[a.id]?.whr_eff || 0))).slice(0, 100);
+    else r = pool.filter(f => S.me.fav[f.id]);
+    $('#l').innerHTML = r.length ? r.map(row).join('') : `<p class="empty">${q || rf !== 'all' || df !== 'ALL' ? T('No fighter found.', 'Nenhum lutador encontrado.') : T('Type a name, pick "Active UFC Roster" above, or favorite fighters (★).', 'Digite um nome, selecione "No Roster Atual" acima ou favorite lutadores (★).')}</p>`;
+  };
+  $('#q').oninput = draw;
+  $('#f-div').onchange = e => { S.fDiv = e.target.value; draw(); };
+  $('#f-ros').onclick = e => {
+    const b = e.target.closest('[data-fr]'); if (!b) return;
+    S.fRos = b.dataset.fr;
+    document.querySelectorAll('#f-ros button').forEach(x => x.classList.toggle('on', x.dataset.fr === S.fRos));
+    draw();
+  };
+  draw();
   $('#ex').onclick = () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(S.me)], {type:'application/json'}));
@@ -1918,10 +1992,8 @@ function vFighter(id) {
     if (n) {
       const q = n.gs[0].o, pc = 1 / (1 + Math.exp(q.r - n.r)), m = f.title ? 1 + S.P.title : 1;
       const dl = r === 'W' ? 40 * m * dom(f) * (1 - pc) : r === 'L' ? -40 * m * pc : 40 * m * (.5 - pc);
-      const mf = S.mkt?.fights?.[f.id], myOdd = mf ? (a ? mf[0] : mf[1]) : null, myRk = mf ? (a ? mf[3] : mf[4]) : null, opRk = mf ? (a ? mf[4] : mf[3]) : null;
-      const oddStr = myOdd != null ? `, Odd <b>${fmtOdd(myOdd)}</b>` : '', rkStr = (myRk != null || opRk != null) ? `, Rk ${myRk != null ? (myRk === 0 ? 'C' : '#' + myRk) : 'NR'} vs ${opRk != null ? (opRk === 0 ? 'C' : '#' + opRk) : 'NR'}` : '';
       ex = `<span style="text-align:right"><b class="${dl >= 0 ? 'up' : 'dn'}">${dl >= 0 ? '+' : ''}${dl.toFixed(1)}</b><br><span class="mu sm">${T('rating', 'nota')} ${el(n.r)}</span></span>`;
-      sub = `, ${T('win chance', 'chance')} ${Math.round(pc * 100)}%${oddStr}${rkStr}, ${T('opponent then', 'rival na época')} ${el(q.r)}, ${T('opponent peak', 'pico do rival')} ${Math.round(E.RM.get(q.id).pk)}`;
+      sub = `, ${T('win chance', 'chance')} ${Math.round(pc * 100)}%, ${T('opponent then', 'rival na época')} ${el(q.r)}, ${T('opponent peak', 'pico do rival')} ${Math.round(E.RM.get(q.id).pk)}`;
     }
     return `<div class="h"><a class="mu" href="${lk}" style="text-decoration:underline">${fmt(f.date)}</a><span><b class="${r === 'W' ? 'up' : r === 'L' ? 'dn' : ''}">${S.pt ? {W:'V', L:'D', D:'E', NC:'SR'}[r] : r}</b> <a href="#/fighter/${mid(o.id)}"><b>${esc(name(o))}</b></a>${bonusIcon(id, f.id)}<br><span class="mu sm">${esc(f.method)} ${f.round ? 'R' + esc(f.round) : ''}, ${esc(f.div)}${isTitle(f) ? ', ' + (TG(E.tag.get(f.id), r === 'W') || T('title fight', 'cinturão')) : ''}${sub}</span><br><a class="sm" style="color:var(--gd)" href="${lk}">${T('View fight and stats', 'Ver luta e estatísticas')}</a></span>${ex}</div>`;
   }).join('');
@@ -1936,8 +2008,9 @@ function vFighter(id) {
   const sos = wl.length ? wl.reduce((a, x) => a + x.q, 0) / wl.length : null;
   const li = (x, c) => `<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/event/${x.f.ev}/${x.f.id}" style="color:${c}"><b>${esc(name(x.o))}</b></a><span class="mu">${fmt(x.f.date)}</span><span>${el(x.q)}</span></div>`;
   const resume = wl.length ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Résumé highlights', 'Destaques da campanha')}</b>${bw.length ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Best wins (opponent rating then)', 'Melhores vitórias (nota do rival na época)')}</p>${bw.map(x => li(x, 'var(--win)')).join('')}` : ''}${wr ? `<p class="mu sm" style="margin:.5rem 0 0">${T('Worst loss', 'Pior derrota')}</p>${li(wr, 'var(--loss)')}` : ''}${sos != null ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Strength of schedule: average opponent rating', 'Força do calendário: nota média dos rivais')} <b style="color:var(--tx)">${el(sos)}</b></p>` : ''}</div>` : '';
-  const crk = S.urk?.fighters?.[id], mktF = S.mkt?.fighters?.[id], anF = S.an?.fighters?.[id];
+  const crk = S.urk?.fighters?.[id], anF = S.an?.fighters?.[id];
   const opaHtml = anF && anF.opa_s != null ? `<div class="xg" style="margin-top:.4rem;border-top:1px solid var(--ln);padding-top:.4rem">
+    ${anF.sty ? `<span>${T('Tactical Archetype', 'Arquétipo Tático')}: <b>${styLabel(anF.sty)}</b></span>` : ''}
     <span>OPA™ ${T('Striking vs Rival Def.', 'Trocação Ajustada')}: <b class="${anF.opa_s >= 0 ? 'up' : 'dn'}">${anF.opa_s >= 0 ? '+' : ''}${anF.opa_s}/min</b> <span class="mu sm">(${T('raw', 'bruto')} ${anF.raw_s || 0}/m)</span></span>
     <span>OPA™ ${T('Defense vs Rival Str.', 'Defesa Ajustada')}: <b class="${anF.opa_d >= 0 ? 'up' : 'dn'}">${anF.opa_d >= 0 ? '+' : ''}${anF.opa_d}/min</b></span>
     <span>OPA™ ${T('Wrestling Pressure', 'Pressão de Quedas')}: <b class="${anF.opa_g >= 0 ? 'up' : 'dn'}">${anF.opa_g >= 0 ? '+' : ''}${anF.opa_g}/15m</b></span>
@@ -1945,14 +2018,13 @@ function vFighter(id) {
     ${anF.chin ? `<span>${T('Chin Index', 'Índice de Queixo')}: <b>${anF.chin}/100</b></span>` : ''}
     ${anF.wt_mv ? `<span>${anF.wt_mv[0] > 0 ? '⬆️ ' + T('Moved up', 'Subiu') : '⬇️ ' + T('Moved down', 'Desceu')}: <b>${esc(anF.wt_mv[1])} → ${esc(anF.wt_mv[2])}</b></span>` : ''}
   </div>` : '';
-  const rkCard = (crk || mktF || opaHtml) ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Advanced Metrics (OPA™), Official Ranking & Betting Résumé', 'Métricas Ajustadas (OPA™), Ranking Oficial & Casas de Aposta')}</b>
+  const rkCard = (crk || opaHtml) ? `<div class="card" style="padding:.8rem 1.1rem"><b>${T('Advanced Metrics (OPA™) & Official UFC Ranking', 'Métricas Ajustadas (OPA™) & Ranking Oficial UFC')}</b>
     ${opaHtml}
     ${crk ? `<div class="xg" style="margin-top:.4rem;border-top:1px solid var(--ln);padding-top:.4rem">${crk.cur_rank != null ? `<span>${T('Current Official Rank', 'Ranking Oficial Atual')}: <b>${crk.cur_rank === 0 ? '👑 ' + T('Champion', 'Campeão') : '#' + crk.cur_rank} (${esc(crk.cur_div)})</b></span>` : ''}${crk.p4p ? `<span>P4P: <b>#${crk.p4p}</b></span>` : ''}${crk.peak != null ? `<span>${T('Career Peak Rank', 'Melhor Posição Oficial')}: <b>${crk.peak === 0 ? T('Champion', 'Campeão') : '#' + crk.peak} (${esc(crk.peak_div)})</b></span>` : ''}<span>${T('Weeks in Top 15', 'Semanas no Top 15')}: <b>${crk.w15 || 0}</b></span>${crk.w5 ? `<span>${T('Weeks in Top 5', 'Semanas no Top 5')}: <b>${crk.w5}</b></span>` : ''}${crk.wp4p ? `<span>${T('Weeks in P4P', 'Semanas no P4P')}: <b>${crk.wp4p}</b></span>` : ''}${crk.next ? `<span>📅 ${T('Next / Status', 'Próxima / Status')}: <b>${esc(crk.next)}</b></span>` : ''}</div>` : ''}
-    ${mktF ? `<div class="xg" style="margin-top:.4rem;border-top:1px solid var(--ln);padding-top:.4rem"><span>${T('Fights with Vegas Odds', 'Lutas com Odds em Vegas')}: <b>${mktF[1]}-${mktF[0] - mktF[1]}</b></span><span>${T('As Favorite', 'Como Favorito')}: <b>${mktF[3]}-${mktF[2] - mktF[3]}</b></span><span>${T('As Underdog', 'Como Azarão')}: <b>${mktF[5]}-${mktF[4] - mktF[5]}</b></span><span>${T('Career Betting ROI (1u flat)', 'ROI nas Casas de Aposta (1u)')}: <b class="${mktF[6] >= 0 ? 'up' : 'dn'}">${mktF[6] >= 0 ? '+' : ''}${mktF[6]}u</b></span></div>` : ''}
   </div>` : '';
   const bonusCard = rkCard + bonusLine(id) + techCard(id);
   M(`<a class="mu" href="#/fighters">${T('Search fighters', 'Buscar lutadores')}</a>
-  <div class="hero">${av(id, p.name, 'big')}<div><h1>${S.me.fav[id] ? '★ ' : ''}${esc(p.name)}</h1><span class="mu">${esc(p.nick)} ${esc(p.record)}${p.country ? ` • ${esc(p.country)}` : ''}${p.team ? ` (${esc(p.team)})` : ''}</span></div></div>
+  <div class="hero">${av(id, p.name, 'big')}<div><h1>${S.me.fav[id] ? '★ ' : ''}${esc(p.name)}</h1><div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.2rem 0 .3rem">${rosterBadge(id)}${anF?.sty ? `<span class="tag" style="background:var(--s2);color:var(--tx)">${styLabel(anF.sty)}</span>` : ''}${p.roster_div ? `<span class="mu sm">📌 ${esc(p.roster_div)}</span>` : ''}</div><span class="mu">${esc(p.nick)} ${esc(p.record)}${p.country ? ` • ${esc(p.country)}` : ''}${p.team ? ` (${esc(p.team)})` : ''}</span></div></div>
   <div class="acts"><button id="fv">${S.me.fav[id] ? T('★ Favorite', '★ Favorito') : T('☆ Add to favorites', '☆ Favoritar')}</button><label class="btn">${T('Photo', 'Foto')}<input type="file" accept="image/*" id="ph" hidden></label>${S.me.ph[id] ? `<button id="rp">${T('Remove photo', 'Remover foto')}</button>` : ''}<a class="btn" href="#/sim/${id}">${T('Simulate a fight', 'Simular luta')}</a><a class="btn" href="#/xray/${id}">${T('X-Ray', 'Raio-X')}</a>${extLinks(p)}<span class="xbar" data-xk="fighter"></span></div>
   <div class="seg jmp" id="fj">${me ? jchip('sc-rate', '📊 ' + T('Rating & evolution', 'Nota & Evolução')) : ''}${resume || bonusCard ? jchip('sc-hi', '🏆 ' + T('Highlights', 'Destaques')) : ''}${jchip('sc-an', '🧬 ' + T('Tactical analysis', 'Análise Tática'))}${jchip('sc-notes', '📝 ' + T('Notes & profile', 'Notas & Ficha'))}${jchip('sc-hist', '🥊 ' + T('History', 'Histórico'))}</div>
   <label class="ctl" style="display:grid"><span class="mu sm">${T('Rating scope', 'Escopo da nota')}</span><select id="ps">${opts.map(o => `<option value="${esc(o)}"${o === d ? ' selected' : ''}>${o === 'ALL' ? T('General (all fights)', 'Geral (todas as lutas)') : esc(o)}</option>`).join('')}</select></label>
@@ -2048,7 +2120,9 @@ function simOut(q) {
     envNote = T('High altitude (>1,500m): favors late-round cardio retention.', 'Altitude elevada (>1.500m): favorece retenção de cardio nos rounds finais.');
   }
   const rdsAdj = nRds === 5 ? Math.max(-.14, Math.min(.14, (stA - stB) * .35)) : 0;
-  const s2 = ra.v + rb.v, dm0 = (ra.mu - rb.mu) + md.mu + envAdj, dm = dm0 + rdsAdj, p3 = sg(dm0 / Math.sqrt(1 + Math.PI * s2 / 8)), p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
+  const styEdgeRec = (anA.sty && anB.sty && anA.sty !== anB.sty) ? S.an?.style_matrix?.[anA.sty]?.[anB.sty] : null;
+  const styAdj = (styEdgeRec && styEdgeRec[1] >= 40) ? Math.max(-.09, Math.min(.09, (styEdgeRec[2] - 0.5) * 0.65)) : 0;
+  const s2 = ra.v + rb.v, dm0 = (ra.mu - rb.mu) + md.mu + envAdj + styAdj, dm = dm0 + rdsAdj, p3 = sg(dm0 / Math.sqrt(1 + Math.PI * s2 / 8)), p = sg(dm / Math.sqrt(1 + Math.PI * s2 / 8)), lo = sg(dm - 1.645 * Math.sqrt(s2)), hi = sg(dm + 1.645 * Math.sqrt(s2));
   const da = mainDiv(q.a), db = mainDiv(q.b), age = d => { const t = Date.parse(d); return t ? ((Date.now() - t) / YR).toFixed(1) : '-'; };
   const physAlert = [];
   if (md.diffLbs !== 0) {
@@ -2060,6 +2134,9 @@ function simOut(q) {
     if (pdA.pen >= 20) parts.push(`${esc(A.name)} (${pdA.age ? pdA.age + T(' yrs', ' anos') : ''}${pdA.inactM >= 14 ? `, ${Math.round(pdA.inactM)}m ${T('inactive', 'inativo')}` : ''}: −${Math.round(pdA.pen)} pts)`);
     if (pdB.pen >= 20) parts.push(`${esc(B.name)} (${pdB.age ? pdB.age + T(' yrs', ' anos') : ''}${pdB.inactM >= 14 ? `, ${Math.round(pdB.inactM)}m ${T('inactive', 'inativo')}` : ''}: −${Math.round(pdB.pen)} pts)`);
     physAlert.push(`⏳ <b>${T('Physiological Age & Layoff Curve', 'Curva Fisiológica de Idade & Inatividade')}:</b> ${parts.join(' · ')}`);
+  }
+  if (styEdgeRec && styEdgeRec[1] >= 40) {
+    physAlert.push(`🧬 <b>${T('Style Matchup Matrix', 'Matriz Estilo vs. Estilo')}:</b> ${styLabel(anA.sty)} vs ${styLabel(anB.sty)} — ${T('Historical UFC edge', 'Histórico real no UFC')}: <b>${pc(styEdgeRec[2])}</b> (${styEdgeRec[0]}/${styEdgeRec[1]} ${T('fights', 'lutas')})`);
   }
   const physBanner = physAlert.length ? `<div class="card" style="padding:.65rem 1rem;border-left:3px solid var(--cb);margin-bottom:.5rem;font-size:.9rem">${physAlert.join('<br>')}</div>` : '';
   let quick = '';
@@ -2128,8 +2205,35 @@ function simOut(q) {
   h += `<h2>${T(`How it ends & Survival Curve (${nRds} Rounds)`, `Como termina & Curva de Sobrevivência (${nRds} Rounds)`)}</h2><div class="card" style="padding:.8rem 1.1rem">${['KO', 'SUB', 'DEC'].map(k => sr(nm[k], pc(mA_adj[k]), pc(mB_adj[k]), mA_adj[k], mB_adj[k])).join('')}
   <div style="margin-top:.7rem;border-top:1px solid var(--ln);padding-top:.55rem"><b>⏱️ ${T('Round-by-Round Finish Hazard (KO/Sub)', 'Risco de Nocaute/Finalização Round a Round')}</b>
   ${rdProbs.map(([r, pa, pb]) => sr(`Round ${r}`, pc(pa), pc(pb), pa, pb)).join('')}</div>
-  <p class="mu sm">${T('Goes to the judges', 'Vai para os juízes (Decisão)')}: <b>${pc(surv)}</b>.${nRds === 5 ? ` ${T(`5-Round Championship shift vs 3 Rounds: ${esc(A.name)} ${pc(p3)} → ${pc(p)}.`, `Efeito 5 Rounds vs 3 Rounds: ${esc(A.name)} ${pc(p3)} → ${pc(p)}.`)}` : ''}</p></div>
-  <details class="card"><summary>${T('Method', 'Método')}</summary><p>${T('Win probability comes from the rating model (WHR) with uncertainty and stamina adjustment for 5-round fights. Round-by-round finish probabilities follow a discrete-time survival hazard model.', 'A probabilidade vem do modelo de notas (WHR) com incerteza e ajuste de retenção de cardio para 5 rounds. As chances round a round seguem um modelo de sobrevivência em tempo discreto.')}</p></details>`;
+  <p class="mu sm">${T('Goes to the judges', 'Vai para os juízes (Decisão)')}: <b>${pc(surv)}</b>.${nRds === 5 ? ` ${T(`5-Round Championship shift vs 3 Rounds: ${esc(A.name)} ${pc(p3)} → ${pc(p)}.`, `Efeito 5 Rounds vs 3 Rounds: ${esc(A.name)} ${pc(p3)} → ${pc(p)}.`)}` : ''}</p></div>`;
+  // Simulação Monte Carlo (10.000 lutas round a round com transição de fadiga e placar dos juízes)
+  const mcCounts = new Map(), N_MC = 10000;
+  for (let i = 0; i < N_MC; i++) {
+    let fin = null, rW_A = 0, rW_B = 0;
+    for (let r = 0; r < nRds; r++) {
+      const stModA = r >= 2 ? Math.pow(stA, r - 1) : 1.0, stModB = r >= 2 ? Math.pow(stB, r - 1) : 1.0;
+      const hA = Math.min(.38, baseHz[r] * envMult * (fA0 / .52) * p * stModA);
+      const hB = Math.min(.38, baseHz[r] * envMult * (fB0 / .52) * (1 - p) * stModB);
+      const u = Math.random();
+      if (u < hA) { fin = `${lastName(A.name)} ${Math.random() < koShA ? 'KO/TKO' : T('Sub', 'Fin.')} R${r + 1}`; break; }
+      if (u < hA + hB) { fin = `${lastName(B.name)} ${Math.random() < koShB ? 'KO/TKO' : T('Sub', 'Fin.')} R${r + 1}`; break; }
+      const pRdA = Math.max(.08, Math.min(.92, p + (r >= 2 ? (stA - stB) * .12 : 0)));
+      if (Math.random() < pRdA) rW_A++; else rW_B++;
+    }
+    if (!fin) {
+      const sc = rW_A > rW_B ? `${nRds * 10 - rW_B}-${nRds * 10 - rW_A}` : `${nRds * 10 - rW_A}-${nRds * 10 - rW_B}`;
+      const wNm = rW_A > rW_B ? lastName(A.name) : lastName(B.name);
+      fin = `${wNm} ${T('Dec', 'Dec.')} (${sc})`;
+    }
+    mcCounts.set(fin, (mcCounts.get(fin) || 0) + 1);
+  }
+  const topMc = [...mcCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  h += `<h2>🎲 ${T('Monte Carlo Simulation (10,000 Fights — Most Likely Exact Outcomes)', 'Simulação Monte Carlo (10.000 Lutas — Desfechos Exatos Mais Prováveis)')}</h2>
+  <div class="card" style="padding:.8rem 1.1rem">${topMc.map(([lbl, cnt]) => {
+    const pr = cnt / N_MC, isA = lbl.startsWith(lastName(A.name));
+    return `<div class="sr" style="grid-template-columns:1fr 1fr auto;align-items:center"><b>${esc(lbl)}</b><i class="mb" style="margin:0"><b style="width:${Math.min(100, pr * 220)}%;background:${isA ? 'var(--gd)' : 'var(--cb)'}"></b></i><b style="color:${isA ? 'var(--gd)' : 'var(--cb)'}">${pc(pr)}</b></div>`;
+  }).join('')}<p class="mu sm" style="margin:.4rem 0 0">${T('10,000 simulated bouts modeling round-by-round finish hazards, stamina retention and 10-point must judge scorecards.', '10.000 lutas simuladas modelando risco de interrupção round a round, retenção de cardio e placares 10-9 dos juízes.')}</p></div>
+  <details class="card"><summary>${T('Method', 'Método')}</summary><p>${T('Win probability comes from the rating model (WHR) with uncertainty, physiological age/inactivity curve, cross-division mass prior, style matchup matrix and stamina adjustment for 5-round fights.', 'A probabilidade vem do modelo de notas (WHR) com incerteza, curva fisiológica de idade/inatividade, prior físico de massa corporal, matriz estilo vs. estilo e ajuste de cardio para 5 rounds.')}</p></details>`;
   return h;
 }
 
@@ -2452,7 +2556,7 @@ function gsFind(q) {
 function gsRender(q) {
   const r = gsFind(q), el = document.getElementById('gsr');
   if (!NRM(q).trim()) { el.innerHTML = `<p class="mu sm">${T('Type a fighter or event name. Shortcut: / or Ctrl+K.', 'Digite o nome de um lutador ou evento. Atalho: / ou Ctrl+K.')}</p>`; return; }
-  el.innerHTML = (r.f.length ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Fighters', 'Lutadores')}</p>` + r.f.map(f => `<div class="card gsr">${av(f.id, f.name, 'sm')}<span class="nm">${esc(f.name)}<small>${esc(f.nick || '')} ${esc(f.record || '')}</small></span><span class="gsb"><a href="#/fighter/${f.id}">${T('Profile', 'Ficha')}</a><a href="#/sim/${f.id}">${T('Simulate', 'Simular')}</a><a href="#/studio" data-gcard="${f.id}">Card</a></span></div>`).join('') : '')
+  el.innerHTML = (r.f.length ? `<p class="mu sm" style="margin:.6rem 0 0">${T('Fighters', 'Lutadores')}</p>` + r.f.map(f => `<div class="card gsr">${av(f.id, f.name, 'sm')}<span class="nm">${esc(f.name)} ${rosterBadge(f.id, true)}<small>${esc(f.nick || '')} ${esc(f.record || '')}</small></span><span class="gsb"><a href="#/fighter/${f.id}">${T('Profile', 'Ficha')}</a><a href="#/sim/${f.id}">${T('Simulate', 'Simular')}</a><a href="#/studio" data-gcard="${f.id}">Card</a></span></div>`).join('') : '')
     + (r.e.length ? `<p class="mu sm" style="margin:.8rem 0 0">${T('Events', 'Eventos')}</p>` + r.e.map(e => `<a class="card gsr" href="${e.fut ? '#/events' : '#/event/' + e.id}"${e.fut ? ` data-gup="${esc(e.id)}"` : ''}><span>${e.fut ? '🗓️' : '📅'}</span><span class="nm">${esc(e.name)}<small>${fmt(e.date)}${e.location ? ', ' + esc(e.location) : ''} · ${e.fut ? T('upcoming', 'próximo') : T('past', 'passado')}</small></span></a>`).join('') : '')
     || `<p class="empty">${T('Nothing found.', 'Nada encontrado.')}</p>`;
 }
@@ -2573,6 +2677,7 @@ function computeIdeal(era, dv) {
   for (const [id, f] of Object.entries(anF)) {
     if (!isDivElig(id, dv, isHist, f.n)) continue;
     if (!isHist) {
+      if (S.ros && !isOnRoster(id)) continue;
       const offRanked = S.urk?.fighters?.[id]?.cur_rank != null;
       if (f.last < cut18 && !offRanked) continue;
       if ((f.phys_pen || 0) > 85) continue;

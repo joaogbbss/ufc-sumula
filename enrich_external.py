@@ -256,6 +256,167 @@ def parse_live_wiki_rankings(by_name):
     return released, divisions, fighter_live
 
 
+def _extract_wiki_name(cell):
+    m = re.search(r"\{\{sortname\|([^|}]+)\|([^|}]+)(?:\|([^|}]+))?", cell, re.I)
+    if m:
+        return f"{m.group(1).strip()} {m.group(2).strip()}"
+    m2 = re.search(r"\[\[(?:[^|\]]*\|)?([^\]]+)\]\]", cell)
+    if m2:
+        return m2.group(1).strip()
+    return clean_wiki(cell)
+
+
+def _extract_wiki_iso(cell):
+    m = re.search(r"(?:flag\|icon\||flagicon\|)([A-Z]{2,3})", cell)
+    return m.group(1) if m else ""
+
+
+def _extract_wiki_dob(cell):
+    m = re.search(r"\{\{age nts\|(\d{4})\|(\d{1,2})\|(\d{1,2})", cell, re.I)
+    if m:
+        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    return None
+
+
+def _extract_wiki_date(cell):
+    m = re.search(r"\{\{dts\|(\d{4})\|([A-Za-z]+|\d{1,2})\|(\d{1,2})", cell, re.I)
+    if m:
+        yr, mo, da = int(m.group(1)), m.group(2), int(m.group(3))
+        if mo.isdigit():
+            return f"{yr:04d}-{int(mo):02d}-{da:02d}"
+        try:
+            dt = datetime.strptime(f"{mo[:3]} {da} {yr}", "%b %d %Y").date()
+            return dt.isoformat()
+        except Exception:
+            pass
+    c = clean_wiki(cell)
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(c, fmt).date().isoformat()
+        except Exception:
+            pass
+    return c[:20]
+
+
+def parse_live_wiki_roster(by_name):
+    """Lê List_of_current_UFC_fighters via MediaWiki API:
+    retorna plantel ativo por divisão, contratações recentes, dispensas/aposentadorias e suspensos.
+    """
+    wt = fetch_wiki_wikitext("List_of_current_UFC_fighters")
+    if not wt:
+        return None
+    wt = re.sub(r"<!--.*?-->", "", wt, flags=re.S)
+    ROSTER_DIVS = {
+        "heavyweights": "Heavyweight",
+        "light heavyweights": "Light Heavyweight",
+        "middleweights": "Middleweight",
+        "welterweights": "Welterweight",
+        "lightweights": "Lightweight",
+        "featherweights": "Featherweight",
+        "bantamweights": "Bantamweight",
+        "flyweights": "Flyweight",
+        "women's bantamweights": "Women's Bantamweight",
+        "women's flyweights": "Women's Flyweight",
+        "women's strawweights": "Women's Strawweight",
+    }
+    parts = re.split(r"^={2,4}\s*([^=\n]+?)\s*={2,4}\s*$", wt, flags=re.M)
+    active_by_div = {}
+    active_map = {}  # fid -> {div, iso, dob, status}
+    departures = []
+    signings = []
+    suspended = []
+
+    for i in range(1, len(parts) - 1, 2):
+        hdr = parts[i].strip()
+        hl = hdr.lower()
+        body = parts[i + 1]
+
+        # 1) Divisões ativas
+        matched_div = None
+        for prefix, dname in ROSTER_DIVS.items():
+            if hl.startswith(prefix):
+                matched_div = dname
+                break
+        if matched_div:
+            rows = body.split("\n|-")
+            div_list = []
+            for row in rows[1:]:
+                cols = [c.strip() for c in re.split(r"\n\|", "\n" + row.strip())[1:]]
+                if len(cols) < 5:
+                    continue
+                iso = _extract_wiki_iso(cols[0])
+                nm_raw = _extract_wiki_name(cols[1])
+                if not nm_raw or nm_raw.lower() in ("name", "fighter"):
+                    continue
+                fid = by_name.get(norm(nm_raw))
+                dob = _extract_wiki_dob(cols[2])
+                status_txt = clean_wiki(cols[5]) if len(cols) > 5 else ""
+                div_list.append({"name": nm_raw, "id": fid, "iso": iso, "dob": dob, "status": status_txt[:110]})
+                if fid:
+                    active_map[fid] = {"div": matched_div, "iso": iso, "dob": dob, "status": status_txt[:110]}
+            active_by_div[matched_div] = div_list
+            continue
+
+        # 2) Dispensas e aposentadorias recentes
+        if "recent releases and retirements" in hl:
+            for row in body.split("\n|-")[1:]:
+                cols = [c.strip() for c in re.split(r"\n\|", "\n" + row.strip())[1:]]
+                if len(cols) < 6:
+                    continue
+                dt = _extract_wiki_date(cols[0])
+                iso = _extract_wiki_iso(cols[1])
+                nm_raw = _extract_wiki_name(cols[2])
+                if not nm_raw:
+                    continue
+                fid = by_name.get(norm(nm_raw))
+                reason = clean_wiki(cols[4])
+                dv = clean_wiki(cols[5])
+                kind = "retired" if "retir" in reason.lower() else "released"
+                departures.append({"date": dt, "iso": iso, "name": nm_raw, "id": fid, "reason": reason[:60], "kind": kind, "div": dv})
+            continue
+
+        # 3) Contratações recentes (ainda sem estreia ou retorno)
+        if "recent signings" in hl:
+            for row in body.split("\n|-")[1:]:
+                cols = [c.strip() for c in re.split(r"\n\|", "\n" + row.strip())[1:]]
+                if len(cols) < 5:
+                    continue
+                dt = _extract_wiki_date(cols[0])
+                iso = _extract_wiki_iso(cols[1])
+                nm_raw = _extract_wiki_name(cols[2])
+                if not nm_raw:
+                    continue
+                fid = by_name.get(norm(nm_raw))
+                dv = clean_wiki(cols[4])
+                info = clean_wiki(cols[5]) if len(cols) > 5 else ""
+                rec = clean_wiki(cols[7]) if len(cols) > 7 else ""
+                signings.append({"date": dt, "iso": iso, "name": nm_raw, "id": fid, "div": dv, "info": info[:100], "rec": rec[:25]})
+            continue
+
+        # 4) Lutadores suspensos
+        if "suspended fighters" in hl:
+            for row in body.split("\n|-")[1:]:
+                cols = [c.strip() for c in re.split(r"\n\|", "\n" + row.strip())[1:]]
+                if len(cols) < 5:
+                    continue
+                iso = _extract_wiki_iso(cols[0])
+                nm_raw = _extract_wiki_name(cols[1])
+                if not nm_raw or "iso" in nm_raw.lower():
+                    continue
+                fid = by_name.get(norm(nm_raw))
+                dv = clean_wiki(cols[3]) if len(cols) > 3 else ""
+                info = clean_wiki(cols[4]) if len(cols) > 4 else ""
+                suspended.append({"iso": iso, "name": nm_raw, "id": fid, "div": dv, "info": info[:110]})
+
+    return {
+        "active_by_div": active_by_div,
+        "active_map": active_map,
+        "departures": departures,
+        "signings": signings,
+        "suspended": suspended,
+    }
+
+
 def main():
     fighters = json.loads((DATA / "fighters.json").read_text(encoding="utf-8"))
     fights = json.loads((DATA / "fights.json").read_text(encoding="utf-8"))
@@ -735,6 +896,72 @@ def main():
     }
     (DATA / "ufc_rankings.json").write_text(json.dumps(rankings_obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"ufc_rankings.json gerado: {len(live_divs)} divisões ao vivo (release {released}), {len(career_out)} lutadores com histórico ({len(weeks_all)} semanas).")
+
+    # ---------------------------------------------------------
+    # 5. Roster Oficial Atual do UFC (Wikipedia Live List_of_current_UFC_fighters) -> data/roster.json
+    # ---------------------------------------------------------
+    print("Baixando Roster Oficial Atual do UFC (Wikipedia List_of_current_UFC_fighters)...")
+    ros = parse_live_wiki_roster(by_name)
+    if ros:
+        act_map = ros["active_map"]
+        # Também inclui campeões/ranqueados ao vivo e agendados em upcoming.json como ativos no roster
+        up_ids = set()
+        up_p = DATA / "upcoming.json"
+        if up_p.exists():
+            up_raw = json.loads(up_p.read_text(encoding="utf-8"))
+            up_evs = up_raw.get("events", []) if isinstance(up_raw, dict) else (up_raw if isinstance(up_raw, list) else [])
+            for ev in up_evs:
+                for f_u in (ev.get("fights", []) if isinstance(ev, dict) else []):
+                    for sd in ("a", "b"):
+                        uid = (f_u.get(sd) or {}).get("id")
+                        if uid:
+                            up_ids.add(uid)
+        dep_map = {d["id"]: d["kind"] for d in ros["departures"] if d.get("id")}
+        susp_ids = {s["id"] for s in ros["suspended"] if s.get("id")}
+        ranked_live_ids = {fid for fid, lv in live_fighters.items() if lv.get("rank") is not None}
+
+        n_act = n_ret = n_rel = n_susp = 0
+        for p in fighters:
+            fid = p.get("id")
+            if fid in susp_ids:
+                p["roster"] = "suspended"
+                n_susp += 1
+            elif fid in act_map or fid in ranked_live_ids or fid in up_ids:
+                p["roster"] = "active"
+                n_act += 1
+                am = act_map.get(fid)
+                if am:
+                    p["roster_div"] = am["div"]
+                    if am.get("dob") and p.get("DOB") in ("--", "", None):
+                        p["DOB"] = am["dob"]
+            elif fid in dep_map:
+                p["roster"] = dep_map[fid]
+                if dep_map[fid] == "retired":
+                    n_ret += 1
+                else:
+                    n_rel += 1
+            else:
+                p["roster"] = "former"
+
+        roster_obj = {
+            "v": 1,
+            "updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "total_wiki": sum(len(v) for v in ros["active_by_div"].values()),
+            "total_matched": n_act,
+            "by_div": {
+                dv: {
+                    "n": len(items),
+                    "ids": [x["id"] for x in items if x.get("id")],
+                    "unmatched": [x["name"] for x in items if not x.get("id")][:25],
+                }
+                for dv, items in ros["active_by_div"].items()
+            },
+            "departures": ros["departures"][:60],
+            "signings": ros["signings"][:60],
+            "suspended": ros["suspended"][:30],
+        }
+        (DATA / "roster.json").write_text(json.dumps(roster_obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        print(f"roster.json gerado: {roster_obj['total_wiki']} lutadores no roster oficial ({n_act} casados em fighters.json), {len(ros['departures'])} saídas recentes, {len(ros['signings'])} contratações, {n_susp} suspensos.")
 
     # Salvar fighters.json enriquecido
     (DATA / "fighters.json").write_text(json.dumps(fighters, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
