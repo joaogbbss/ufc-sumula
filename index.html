@@ -94,10 +94,10 @@ h1::after{
   background:linear-gradient(90deg,var(--gd) 0%,var(--ln2) 55%,transparent 100%);
 }
 h2{
-  position:relative;font:700 1.12rem var(--d);letter-spacing:.1em;text-transform:uppercase;
-  margin:1.75rem 0 .7rem;color:var(--gd);display:flex;align-items:center;gap:.55rem;
+  position:relative;font:700 1.08rem var(--d);letter-spacing:.1em;text-transform:uppercase;
+  margin:1.75rem 0 .7rem;padding-bottom:.32rem;color:var(--gd);
+  border-bottom:1px solid var(--ln);display:flex;align-items:center;gap:.55rem;
 }
-h2::before{content:"◆";font-size:.6rem;color:var(--gd);opacity:.85}
 .mu{color:var(--mu)}.sm{font-size:.82rem}
 
 /* ---- Inputs & Tactile KCD Buttons ---- */
@@ -519,10 +519,16 @@ function whr(L, P) {
     }
   }
   applyProm(null);
-  for (const v of (S.ov.title_vacancies || [])) {
+  // Aplica cada vacância APENAS ao reinado mais recente daquela divisão imediatamente anterior à data da vacância (nunca sobrescreve reinados antigos de décadas anteriores)
+  const vacs = (S.ov.title_vacancies || []).slice().sort((a, b) => a.after < b.after ? -1 : 1);
+  for (const v of vacs) {
+    let best = null;
     for (const r of rg) {
-      if (r.div === v.div && r.last <= v.after && (!r.end || r.end === r.last)) r.end = v.end;
+      if (r.div === v.div && r.last <= v.after && (!r.end || r.end === r.last)) {
+        if (!best || r.last > best.last) best = r;
+      }
     }
+    if (best && (Date.parse(v.end) - Date.parse(best.last)) <= 920 * 864e5) best.end = v.end;
   }
   for (const f of L) {
     const ia = mid(f.a.id), ib = mid(f.b.id);
@@ -3481,10 +3487,190 @@ function route() {
     return h;
   }
 
-  /* ================= 3) MÁQUINA DO TEMPO ("E SE?") ================= */
+  /* ================= 3) MÁQUINA DO TEMPO ("E SE?" — REALIDADE ALTERNATIVA + INVERSÃO HISTÓRICA) ================= */
+  function altPoolAt(E, dv, dtStr, selfId) {
+    const tMs = Date.parse(dtStr), winLo = tMs - 1.5 * YR, winHi = tMs + 1.2 * YR;
+    const cands = [];
+    for (const [id, nodes] of E.N) {
+      if (id === selfId) continue;
+      let best = null, bestDiff = Infinity;
+      for (const n of nodes) {
+        if (n.dv !== dv) continue;
+        const nt = Date.parse(n.dt);
+        if (nt < winLo || nt > winHi) continue;
+        const df = Math.abs(nt - tMs);
+        if (df < bestDiff) { bestDiff = df; best = n; }
+      }
+      if (best) cands.push({id, r: best.r, dt: best.dt});
+    }
+    // Se a data ultrapassar a data atual da base, usa o plantel ativo atual da divisão
+    if (cands.length < 6) {
+      const seen = new Set(cands.map(c => c.id));
+      for (const x of E.rows) {
+        if (x.id === selfId || seen.has(x.id)) continue;
+        if (!isDivElig(x.id, dv, false, x.n)) continue;
+        if (S.ros && !isOnRoster(x.id)) continue;
+        const pd = physDecay(x.id);
+        cands.push({id: x.id, r: x.ln.r - pd.pen / U, dt: x.last});
+      }
+    }
+    return cands.sort((a, b) => b.r - a.r);
+  }
+
+  function champAt(E, dv, dtStr) {
+    for (let i = E.rg.length - 1; i >= 0; i--) {
+      const r = E.rg[i];
+      if (r.div === dv && r.start <= dtStr && (!r.end || r.end >= dtStr)) return r.id;
+    }
+    return null;
+  }
+
+  function agePenAt(id, dv, dtStr) {
+    const p = S.F.get(id);
+    if (!p || !p.DOB) return 0;
+    const dob = Date.parse(p.DOB);
+    if (isNaN(dob)) return 0;
+    const age = (Date.parse(dtStr) - dob) / YR;
+    const age0 = (dv === 'Light Heavyweight' || dv === 'Heavyweight') ? 37 : 35;
+    if (age <= age0) return 0;
+    const da = age - age0;
+    return Math.min(480, 8.5 * da + 1.85 * da * da);
+  }
+
+  function runAltTimeline(id, dv, nFights) {
+    const E = getE('ALL'), rm = E.RM.get(id), p = S.F.get(id), an = S.an?.fighters?.[id] || {};
+    if (!rm || !p) return null;
+    const startDt = rm.last || '2025-01-01';
+    const startMs = Date.parse(startDt);
+    const wasChamp = champAt(E, dv, startDt) === id;
+    const finR = an.fin ?? 0.52, koSh = (an.w && (an.w[0] + an.w[1]) > 0) ? an.w[0] / (an.w[0] + an.w[1]) : 0.58;
+    const baseR = rm.ln.r;
+
+    // Pré-calcula o pool de rivais reais de cada janela temporal (a cada ~8 meses)
+    const steps = [];
+    for (let k = 1; k <= nFights; k++) {
+      const dt = new Date(startMs + k * 245 * 864e5).toISOString().slice(0, 10);
+      const pool = altPoolAt(E, dv, dt, id);
+      const realChamp = champAt(E, dv, dt);
+      const agePen = agePenAt(id, dv, dt);
+      steps.push({k, dt, pool, realChamp, agePen});
+    }
+
+    const pickOpp = (step, isChamp, streak, fought) => {
+      const pool = step.pool;
+      if (!pool.length) return null;
+      if (!isChamp && streak >= 1 && step.realChamp && step.realChamp !== id && !fought.has(step.realChamp)) {
+        const chObj = pool.find(x => x.id === step.realChamp);
+        if (chObj) return {...chObj, role: 'title'};
+      }
+      const tier = isChamp ? pool.slice(0, 5) : streak >= 1 ? pool.slice(0, 6) : pool.slice(3, 12);
+      const avail = tier.filter(x => !fought.has(x.id));
+      const pickFrom = avail.length ? avail : (pool.filter(x => !fought.has(x.id)).slice(0, 5));
+      const chosen = pickFrom.length ? pickFrom[Math.floor(Math.random() * Math.min(3, pickFrom.length))] : pool[0];
+      const role = isChamp ? 'def' : (chosen.id === step.realChamp ? 'title' : 'cont');
+      return {...chosen, role};
+    };
+
+    const simOne = (recordChronicle) => {
+      let curR = baseR, isChamp = wasChamp, streak = rm.w > 0 ? 1 : 0;
+      let wins = 0, losses = 0, defs = 0, wonBelt = wasChamp;
+      const fought = new Set(), log = [];
+      for (const st of steps) {
+        const opp = pickOpp(st, isChamp, streak, fought);
+        if (!opp) break;
+        fought.add(opp.id);
+        const effR = curR - st.agePen / U;
+        const pWin = 1 / (1 + Math.exp(-(effR - opp.r) / 1.15));
+        const won = Math.random() < pWin;
+        const mth = Math.random() < finR ? (Math.random() < koSh ? 'KO/TKO' : T('Submission', 'Finalização')) : T('Decision', 'Decisão');
+        const rd = mth === T('Decision', 'Decisão') ? ((isChamp || opp.role === 'title') ? 5 : 3) : (1 + Math.floor(Math.random() * 3));
+        const roleBefore = isChamp ? 'def' : (opp.role === 'title' ? 'title' : 'cont');
+        if (won) {
+          wins++; streak = streak > 0 ? streak + 1 : 1;
+          curR += 0.22 * (1 - pWin);
+          if (isChamp) defs++;
+          else if (opp.role === 'title') { isChamp = true; wonBelt = true; }
+        } else {
+          losses++; streak = streak < 0 ? streak - 1 : -1;
+          curR -= 0.26 * pWin;
+          if (isChamp) isChamp = false;
+        }
+        if (recordChronicle) {
+          log.push({dt: st.dt, oppId: opp.id, oppR: Math.round(1500 + U * opp.r), myR: Math.round(1500 + U * effR), pWin, won, mth, rd, role: roleBefore});
+        }
+      }
+      return {wins, losses, defs, wonBelt, endedChamp: isChamp, unbeaten: losses === 0, log};
+    };
+
+    // 1.000 Universos Paralelos (Monte Carlo)
+    const N_U = 1000;
+    let sumW = 0, sumL = 0, sumDef = 0, cntChamp = 0, cntEndChamp = 0, cntUnb = 0;
+    const oppThreat = new Map();
+    for (let u = 0; u < N_U; u++) {
+      const r = simOne(u === 0);
+      sumW += r.wins; sumL += r.losses; sumDef += r.defs;
+      if (r.wonBelt) cntChamp++;
+      if (r.endedChamp) cntEndChamp++;
+      if (r.unbeaten) cntUnb++;
+      if (u === 0) var sampleChronicle = r.log;
+    }
+    // Identifica os 3 rivais mais perigosos da divisão nessa janela
+    for (const st of steps) {
+      for (const o of st.pool.slice(0, 6)) {
+        const effR = baseR - st.agePen / U;
+        const pW = 1 / (1 + Math.exp(-(effR - o.r) / 1.15));
+        const cur = oppThreat.get(o.id);
+        if (!cur || pW < cur.pW) oppThreat.set(o.id, {id: o.id, pW, dt: st.dt, r: Math.round(1500 + U * o.r)});
+      }
+    }
+    const toughest = [...oppThreat.values()].sort((a, b) => a.pW - b.pW).slice(0, 4);
+    return {
+      startDt, dv, nFights, wasChamp,
+      avgW: (sumW / N_U).toFixed(1), avgL: (sumL / N_U).toFixed(1), avgDef: (sumDef / N_U).toFixed(1),
+      pChamp: cntChamp / N_U, pEndChamp: cntEndChamp / N_U, pUnb: cntUnb / N_U,
+      toughest, chronicle: sampleChronicle || []
+    };
+  }
+
   function tTm() {
-    const id = Z.t, p = S.F.get(id);
-    let h = `<p class="mu sm">${T('Flip the result of any historical fight and watch the ripple: ratings, rankings, title reigns.', 'Inverta o resultado de qualquer luta histórica e veja o efeito cascata: notas, rankings e reinados.')}</p>${slot('t', T('Fighter', 'Lutador'), 'f')}`;
+    const mode = Z.tmode || 'alt', id = Z.t, p = S.F.get(id);
+    const bt = (k, l) => `<button data-ztm="${k}" class="pk${mode === k ? ' on' : ''}">${l}</button>`;
+    let h = `<div class="acts">${bt('alt', T('Alternate Career Reality (1,000 Universes)', 'Realidade Alternativa (1.000 Universos)'))}${bt('flip', T('Flip Historical Fights', 'Inverter Lutas Históricas'))}</div>`;
+
+    if (mode === 'alt') {
+      const dv = Z.tdiv || (id ? (divOf(id, true) || 'Lightweight') : 'Lightweight');
+      const nF = Z.tn || 5;
+      h += `<p class="mu sm">${T('Simulate what would happen if a fighter kept fighting (or returned) against the real top contenders and champions of their division at each point in time, with physiological aging and dynamic WHR.', 'Simule o que aconteceria se um lutador continuasse lutando contra os adversários e campeões reais daquela divisão em cada época, com envelhecimento fisiológico e WHR dinâmico.')}</p>
+      ${slot('t', T('Choose a fighter (e.g. Khabib, GSP, Zabit, Anderson Silva…)', 'Escolha um lutador (ex.: Khabib, GSP, Zabit, Anderson Silva…)'), 'f')}`;
+      if (p) {
+        h += `<div class="ctl" style="margin-top:.6rem">
+          <label>${T('Division in Alternate Reality', 'Divisão na Realidade Alternativa')}<select data-ztd="1">${STD.map(d => `<option value="${esc(d)}"${d === dv ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
+          <label>${T('Next Fights to Simulate', 'Lutas Futuras a Simular')}<select data-ztn="1">${[3, 4, 5, 6, 8].map(n => `<option value="${n}"${n === nF ? ' selected' : ''}>${n} ${T('fights', 'lutas')}</option>`).join('')}</select></label>
+        </div>
+        <div class="acts"><button data-ztrun="1" class="pk on">${T('Simulate Another Universe', 'Simular Outro Universo')} ↻</button></div>`;
+        const sim = runAltTimeline(id, dv, nF);
+        if (sim) {
+          const roleTag = r => r === 'def' ? `<span class="tag">${T('Title Defense', 'Defesa Cinturão')}</span>` : r === 'title' ? `<span class="tag">${T('Title Shot', 'Disputa Cinturão')}</span>` : `<span class="tag ros-out">Contender</span>`;
+          h += `<div class="qpk-grid" style="grid-template-columns:repeat(auto-fit,minmax(135px,1fr))">
+            <div class="qpk-stat"><small>${T('Champion Probability', 'Chance de Cinturão')}</small><b>${pc(sim.pChamp)}</b></div>
+            <div class="qpk-stat"><small>${T('Projected Record', 'Cartel Médio')}</small><b>${sim.avgW}V – ${sim.avgL}D</b></div>
+            <div class="qpk-stat"><small>${T('Avg Title Defenses', 'Média de Defesas')}</small><b>+${sim.avgDef}</b></div>
+            <div class="qpk-stat"><small>${T('Unbeaten Run', 'Sair Invicto')}</small><b>${pc(sim.pUnb)}</b></div>
+          </div>
+          <h2>${T('Sample Alternate Timeline (Fight by Fight)', 'Crônica de 1 Universo Simulado (Luta a Luta)')}</h2>
+          <div class="card" style="padding:.7rem 1rem">${sim.chronicle.map((c, idx) => `<div class="h" style="grid-template-columns:5.2rem 1fr auto">
+            <span class="mu sm">${c.dt.slice(0, 7)}</span>
+            <span><b class="${c.won ? 'up' : 'dn'}">${c.won ? (S.pt ? 'V' : 'W') : (S.pt ? 'D' : 'L')}</b> vs <a href="#/fighter/${c.oppId}"><b>${esc(nm(c.oppId))}</b></a> ${roleTag(c.role)}<br><span class="mu sm">${esc(c.mth)} R${c.rd} · ${T('Pre-fight win %', 'Chance pré-luta')}: ${pc(c.pWin)} (WHR ${c.myR} vs ${c.oppR})</span></span>
+            <span class="mu sm" style="text-align:right">#${idx + 1}</span>
+          </div>`).join('')}</div>
+          <h2>${T('Most Dangerous Opponents in This Timeline', 'Rivais Mais Perigosos Dessa Época')}</h2>
+          <div class="card" style="padding:.6rem 1rem">${sim.toughest.map(o => `<div class="sr" style="grid-template-columns:1fr auto auto"><a href="#/fighter/${o.id}"><b>${esc(nm(o.id))}</b></a><span class="mu sm">WHR ${o.r} (${o.dt.slice(0, 4)})</span><b class="${o.pW >= .5 ? 'up' : 'dn'}">${pc(o.pW)}</b></div>`).join('')}</div>`;
+        }
+      }
+      return h;
+    }
+
+    h += `<p class="mu sm">${T('Flip the result of any historical fight and watch the ripple: ratings, rankings, title reigns.', 'Inverta o resultado de qualquer luta histórica e veja o efeito cascata: notas, rankings e reinados.')}</p>${slot('t', T('Fighter', 'Lutador'), 'f')}`;
     if (p) {
       const fs = S.fg.filter(f => (f.res === 'a' || f.res === 'b') && (mid(f.a.id) === id || mid(f.b.id) === id)).sort((a, b) => b.date < a.date ? -1 : 1);
       h += fs.map(f => { const on = Z.fl.has(f.id), ow = f.res === 'a' ? f.a : f.b, ol = f.res === 'a' ? f.b : f.a, w = on ? ol : ow, l = on ? ow : ol; return `<div class="h" style="grid-template-columns:5.5rem 1fr auto"><span class="mu">${fmt(f.date)}</span><span><b>${esc(name(w))}</b> ${T('beat', 'venceu')} ${esc(name(l))}<br><span class="mu sm">${esc(f.method)}, ${esc(f.div)}</span></span><button data-ztf="${f.id}" class="pk${on ? ' on' : ''}">${on ? T('Flipped', 'Invertida') : T('Flip', 'Inverter')}</button></div>`; }).join('');
@@ -3561,11 +3747,13 @@ function route() {
     if (Z.tab === 'cross') zres();
     const m = $('#m');
     m.onclick = e => {
-      const t = e.target.closest('[data-zt],[data-zp],[data-zc],[data-zimg],[data-ztf],[data-ztc],[data-ztrob],[data-ztsp],#ztr'); if (!t) return;
+      const t = e.target.closest('[data-zt],[data-zp],[data-zc],[data-zimg],[data-ztf],[data-ztc],[data-ztrob],[data-ztsp],[data-ztm],[data-ztrun],#ztr'); if (!t) return;
       const d = t.dataset;
       if (d.zt) { Z.tab = d.zt; draw(); }
-      else if (d.zp) { const [s, id] = d.zp.split(':'); Z[s] = id; draw(); scrollTo({top:0, behavior:'smooth'}); }
-      else if (d.zc) { Z[d.zc] = ''; draw(); }
+      else if (d.ztm) { Z.tmode = d.ztm; draw(); }
+      else if (d.ztrun) { draw(); }
+      else if (d.zp) { const [s, id] = d.zp.split(':'); Z[s] = id; if (s === 't') Z.tdiv = divOf(id, true) || 'Lightweight'; draw(); scrollTo({top:0, behavior:'smooth'}); }
+      else if (d.zc) { Z[d.zc] = ''; if (d.zc === 't') Z.tdiv = ''; draw(); }
       else if (d.zimg) cardImg(d.zimg);
       else if (d.ztf) { Z.fl.has(d.ztf) ? Z.fl.delete(d.ztf) : Z.fl.add(d.ztf); draw(); }
       else if (d.ztc) { Z.fl.clear(); draw(); }
@@ -3580,6 +3768,8 @@ function route() {
         if (r) r.innerHTML = t ? [...S.F.values()].filter(f => (only === 'c' ? Z.cards && Z.cards[f.id] : true) && (f.name + ' ' + f.nick).toLowerCase().includes(t)).slice(0, 6).map(f => `<button data-zp="${s}:${f.id}"><span>${esc(f.name)}</span><span class="mu">${esc(f.record)}</span></button>`).join('') : '';
         return;
       }
+      const td = e.target.closest('[data-ztd]'); if (td) { Z.tdiv = td.value; draw(); return; }
+      const tn = e.target.closest('[data-ztn]'); if (tn) { Z.tn = +tn.value; draw(); return; }
       const ph = e.target.closest('[data-zph]'); if (ph) { if (ph.files[0]) upPhoto(ph.dataset.zph, ph.files[0]); return; }
       const cf = e.target.closest('[data-zcf]'); if (cf) { Z[cf.dataset.zcf] = cf.dataset.zcf === 'csort' ? +cf.value : cf.value; draw(); return; }
       const f = e.target.closest('[data-zf]'); if (!f) return;
