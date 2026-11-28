@@ -23,6 +23,34 @@ jobs:
           python-version: "3.12"
       - run: pip install requests beautifulsoup4 lxml playwright
       - run: playwright install --with-deps chromium
+      - name: Restaurar eventos históricos caso ausentes
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          from pathlib import Path
+          DATA = Path("data")
+          ev_p, fg_p, mt_p = DATA / "events.json", DATA / "fights.json", DATA / "meta.json"
+          evs = {e["id"]: e for e in json.loads(ev_p.read_text("utf-8"))} if ev_p.exists() else {}
+          if "cbf69fa846c7e3ee" not in evs or "402ea3b5ee233852" not in evs or "110404b505fb562c" not in evs:
+              base = "https://raw.githubusercontent.com/joaogbbss/ufc-sumula/a6ff130/data"
+              old_evs = json.loads(urllib.request.urlopen(f"{base}/events.json", timeout=30).read().decode("utf-8"))
+              old_fgs = json.loads(urllib.request.urlopen(f"{base}/fights.json", timeout=60).read().decode("utf-8"))
+              fgs = {f["id"]: f for f in json.loads(fg_p.read_text("utf-8"))} if fg_p.exists() else {}
+              meta = json.loads(mt_p.read_text("utf-8")) if mt_p.exists() else {"done": []}
+              done = set(meta.get("done", []))
+              for e in old_evs:
+                  evs.setdefault(e["id"], e)
+                  done.add(e["id"])
+              for f in old_fgs:
+                  fgs.setdefault(f["id"], f)
+              meta["done"] = sorted(done)
+              meta["n_events"] = len(evs)
+              meta["n_fights"] = len(fgs)
+              ev_p.write_text(json.dumps(sorted(evs.values(), key=lambda x: x["date"], reverse=True), ensure_ascii=False, separators=(",", ":")), "utf-8")
+              fg_p.write_text(json.dumps(sorted(fgs.values(), key=lambda x: (x["date"], -x["ord"])), ensure_ascii=False, separators=(",", ":")), "utf-8")
+              mt_p.write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")), "utf-8")
+              print(f"Restaurados eventos de novembro: total={len(evs)} eventos, {len(fgs)} lutas.")
+          PY
       - run: python scraper.py --max-minutes 320
       - name: Gerar análises (data/analytics.json)
         run: python analytics.py
