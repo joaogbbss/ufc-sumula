@@ -21,7 +21,6 @@ from urllib.parse import quote_plus
 
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
 
 BASE = "http://ufcstats.com"
 ESPN_SEARCH_API = "https://site.web.api.espn.com/apis/common/v3/search"
@@ -54,6 +53,7 @@ _solved = 0
 
 def _start():
     global _ctx, _page
+    from playwright.sync_api import sync_playwright
     pw = sync_playwright().start()
     browser = pw.chromium.launch(
         headless=True,
@@ -124,6 +124,17 @@ def txt(el):
 
 def uid(url):
     return url.rstrip("/").split("/")[-1]
+
+
+def full_url(url):
+    u = (url or "").strip()
+    if not u:
+        return ""
+    if u.startswith("//"):
+        return "http:" + u
+    if u.startswith("/"):
+        return BASE + u
+    return u
 
 
 def norm_name(s):
@@ -202,10 +213,10 @@ def list_events():
 
 def event_fight_urls(eid):
     soup = get(f"{BASE}/event-details/{eid}")
-    urls = [r["data-link"] for r in soup.select("[data-link*='fight-details']")]
-    if not urls:
-        urls = list(dict.fromkeys(a["href"] for a in soup.select("a[href*='fight-details']")))
-    return urls
+    raw = [r["data-link"] for r in soup.select("[data-link*='fight-details']") if r.get("data-link")]
+    if not raw:
+        raw = [a["href"] for a in soup.select("a[href*='fight-details']") if a.get("href")]
+    return [full_url(u) for u in dict.fromkeys(raw) if full_url(u)]
 
 
 def parse_tables(s):
@@ -238,15 +249,29 @@ def parse_tables(s):
     }
 
 
+def _norm_status(raw):
+    s = (raw or "").strip().upper()
+    if s in ("W", "WIN"):
+        return "W"
+    if s in ("L", "LOSS"):
+        return "L"
+    if s in ("D", "DRAW"):
+        return "D"
+    if s in ("NC", "NO CONTEST"):
+        return "NC"
+    return s
+
+
 def parse_fight(url, ev, order):
-    s = get(url)
+    s = get(full_url(url))
     ppl = []
-    for p in s.select("div.b-fight-details__person")[:2]:
-        a = p.select_one("a.b-fight-details__person-link")
+    for p in s.select(".b-fight-details__person")[:2]:
+        a = p.select_one("a.b-fight-details__person-link") or p.select_one("a[href*='fighter-details']")
+        st_el = p.select_one(".b-fight-details__person-status")
         ppl.append({
             "id": uid(a["href"]) if a and a.get("href") else None,
             "name": txt(a),
-            "st": txt(p.select_one("i.b-fight-details__person-status"))
+            "st": _norm_status(txt(st_el))
         })
     if len(ppl) < 2 or not ppl[0]["id"] or not ppl[1]["id"]:
         return None
@@ -257,10 +282,10 @@ def parse_fight(url, ev, order):
     )
     if not res:
         return None
-    tl = s.select_one("i.b-fight-details__fight-title")
+    tl = s.select_one(".b-fight-details__fight-title")
     title = txt(tl)
     info = {}
-    for it in s.select("i.b-fight-details__text-item, i.b-fight-details__text-item_first"):
+    for it in s.select(".b-fight-details__text-item, .b-fight-details__text-item_first"):
         k, _, v = txt(it).partition(":")
         info[k.strip().lower()] = v.strip()
     ps = s.select("p.b-fight-details__text")
@@ -728,31 +753,47 @@ def main():
             print("Tempo esgotado; o restante continua na próxima execução.")
             break
         try:
-            urls = event_fight_urls(e["id"])
+            eid = e["id"]
+            existing_fights = {k: f for k, f in fights.items() if f["ev"] == eid}
+            was_done = eid in done and eid in events and bool(existing_fights)
+            urls = event_fight_urls(eid)
             ids = [uid(u) for u in urls]
             new = {}
             for i, u in enumerate(urls):
                 fid = ids[i]
-                if fid in fights and e["id"] not in recent:
+                if fid in fights and eid not in recent:
                     continue
                 f = parse_fight(u, e, i)
                 if f:
                     new[fid] = f
-            resolved = set(new) | {x for x in ids if x in fights and e["id"] not in recent}
+            resolved = set(new) | {x for x in ids if x in fights and eid not in recent}
+            if was_done and ids:
+                resolved |= set(ids) & set(existing_fights)
             age = (date.today() - date.fromisoformat(e["date"])).days
             complete = bool(ids) and (len(resolved) == len(ids) or (age >= 3 and resolved))
-            if complete:
+            if complete and (new or not was_done):
+                if was_done and len(new) == len(ids) and ids:
+                    for k in set(existing_fights) - set(ids):
+                        del fights[k]
                 fights.update(new)
-                events[e["id"]] = {**e, "n": len(urls)}
-                done.add(e["id"])
-                if e["id"] in recent:
+                events[eid] = {**e, "n": len(urls)}
+                done.add(eid)
+                if eid in recent:
                     touched |= {x for f in new.values() for x in (f["a"]["id"], f["b"]["id"])}
                 print(f"[{n}/{len(todo)}] {e['date']} {e['name']}: {len(new)} lutas")
+            elif was_done:
+                if new:
+                    fights.update(new)
+                done.add(eid)
+                print(
+                    f"[{n}/{len(todo)}] {e['date']} {e['name']}: refresh sem novas lutas "
+                    f"({len(new)}/{len(ids)} lidas); preservando {len(existing_fights)} lutas já salvas"
+                )
             else:
-                for k in [k for k, f in fights.items() if f["ev"] == e["id"]]:
+                for k in list(existing_fights):
                     del fights[k]
-                events.pop(e["id"], None)
-                done.discard(e["id"])
+                events.pop(eid, None)
+                done.discard(eid)
                 print(
                     f"[{n}/{len(todo)}] {e['date']} {e['name']}: ainda não terminou, ignorado por enquanto "
                     f"({len(resolved)}/{len(ids)} lutas com resultado)"
