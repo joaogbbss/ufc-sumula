@@ -6,8 +6,10 @@ scrapes/analytics never reach production.
 """
 import json
 import re
+import subprocess
 import sys
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 DATA = Path("data")
@@ -40,8 +42,8 @@ def main():
     live = load("live.json")
     overrides = load("overrides.json")
 
-    assert isinstance(events, list) and len(events) > 700, "events.json inválido"
-    assert isinstance(fights, list) and len(fights) > 8000, "fights.json inválido"
+    assert isinstance(events, list) and len(events) >= 798, f"events.json inválido ou incompleto ({len(events) if isinstance(events, list) else 'N/A'})"
+    assert isinstance(fights, list) and len(fights) >= 9000, f"fights.json inválido ou incompleto ({len(fights) if isinstance(fights, list) else 'N/A'})"
     assert isinstance(fighters, list) and len(fighters) > 2500, "fighters.json inválido"
     assert isinstance(overrides, dict), "overrides.json inválido"
 
@@ -53,6 +55,27 @@ def main():
         errors.append("IDs duplicados em fighters.json")
     if len({f["id"] for f in fights}) != len(fights):
         errors.append("IDs duplicados em fights.json")
+
+    by_ev = Counter(f["ev"] for f in fights)
+    for e in events:
+        if by_ev[e["id"]] == 0:
+            errors.append(f"Evento sem lutas em fights.json: {e['id']} ({e.get('date')} {e.get('name')})")
+
+    # Non-regression check against HEAD in git CI so completed events never vanish
+    try:
+        res = subprocess.run(
+            ["git", "show", "HEAD:data/events.json"],
+            capture_output=True, text=True, encoding="utf-8", timeout=10
+        )
+        if res.returncode == 0 and res.stdout:
+            prev_events = json.loads(res.stdout)
+            today = date.today()
+            for pe in prev_events:
+                pe_age = (today - date.fromisoformat(pe["date"])).days
+                if pe_age >= 3 and pe["id"] not in emap:
+                    errors.append(f"Regressão: evento concluído desapareceu ({pe['date']} - {pe['name']} [{pe['id']}])")
+    except Exception:
+        pass
 
     # Referential integrity + title checks
     for f in fights:
